@@ -182,7 +182,7 @@ type = "gitlab"
 # project = "group/project"
 
 # Filter fields (gitlab): author, draft, approved, approved_by_me, open_threads,
-# open_thread_by_me, ci, conflicts, labels, reviewers, assignees, branch, target, ticket, me
+# open_thread_by_me, ci, conflicts, diverged, labels, reviewers, assignees, branch, target, ticket, me
 [[view]]
 name = "review"
 provider = "gitlab"

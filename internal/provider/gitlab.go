@@ -17,7 +17,7 @@ type GitLab struct{ Project string }
 const gqlQuery = `query($p:ID!){
   currentUser{username}
   project(fullPath:$p){ mergeRequests(state:opened,first:100,sort:UPDATED_DESC){ nodes{
-    iid title webUrl draft approved sourceBranch targetBranch conflicts
+    iid title webUrl draft approved sourceBranch targetBranch conflicts divergedFromTargetBranch
     author{username}
     assignees{nodes{username}}
     reviewers{nodes{username}}
@@ -48,6 +48,7 @@ type gqlMR struct {
 	SourceBranch               string
 	TargetBranch               string
 	Conflicts                  bool
+	DivergedFromTargetBranch   bool
 	Author                     user
 	Assignees                  nodes[user]
 	Reviewers                  nodes[user]
@@ -247,6 +248,9 @@ func toItem(mr gqlMR, me string, ti *threadInfo) item.Item {
 	case "running", "pending", "created", "preparing", "waiting_for_resource":
 		badges = append(badges, item.Badge{Text: "◌ ci", Kind: "warn"})
 	}
+	if mr.DivergedFromTargetBranch {
+		badges = append(badges, item.Badge{Text: "↓ behind", Kind: "warn"})
+	}
 	if mr.Conflicts {
 		badges = append(badges, item.Badge{Text: "⚠ conflict", Kind: "bad"})
 	}
@@ -274,6 +278,7 @@ func toItem(mr gqlMR, me string, ti *threadInfo) item.Item {
 			"open_thread_by_me": openByMe,
 			"ci":                ci,
 			"conflicts":         mr.Conflicts,
+			"diverged":          mr.DivergedFromTargetBranch,
 			"reviewers":         names(mr.Reviewers.Nodes),
 			"assignees":         names(mr.Assignees.Nodes),
 			"branch":            mr.SourceBranch,

@@ -635,9 +635,17 @@ func (m *Model) list() string {
 }
 
 func (m *Model) row(it item.Item, selected bool) string {
-	mark := "  "
+	// every segment carries its own background: a nested style's reset would otherwise end the highlight
+	st := func(s lipgloss.Style) lipgloss.Style {
+		if selected {
+			return s.Background(cSelBg)
+		}
+		return s
+	}
+	plain := st(lipgloss.NewStyle())
+	mark := plain.Render("  ")
 	if m.marks[it.ID] {
-		mark = sMark.Render("● ")
+		mark = st(sMark).Render("● ")
 	}
 	var badges []string
 	all := append([]item.Badge{}, it.Badges...)
@@ -646,14 +654,19 @@ func (m *Model) row(it item.Item, selected bool) string {
 			all = append(all, ss.Badge())
 		}
 	}
+	rightW := 0
 	for _, b := range all {
-		badges = append(badges, badgeStyle(b.Kind).Render(b.Text))
+		badges = append(badges, st(badgeStyle(b.Kind)).Render(b.Text))
+		rightW += lipgloss.Width(b.Text)
 	}
-	right := strings.Join(badges, "  ")
+	if len(all) > 1 {
+		rightW += 2 * (len(all) - 1)
+	}
+	right := strings.Join(badges, plain.Render("  "))
 	const idW, authW = 7, 16
-	id := sID.Render(fmt.Sprintf("%-*s", idW, ansi.Truncate(it.ID, idW, "")))
-	auth := sDim.Render(fmt.Sprintf("%-*s", authW, ansi.Truncate(it.Author, authW, "…")))
-	fixed := 1 + 2 + idW + 1 + 1 + authW + 1 + lipgloss.Width(right) + 1
+	id := st(sID).Render(fmt.Sprintf("%-*s", idW, ansi.Truncate(it.ID, idW, "")))
+	auth := st(sDim).Render(fmt.Sprintf("%-*s", authW, ansi.Truncate(it.Author, authW, "…")))
+	fixed := 1 + 2 + idW + 1 + 1 + authW + 1 + rightW + 1
 	titleW := m.width - fixed
 	if titleW < 10 {
 		titleW = 10
@@ -662,15 +675,15 @@ func (m *Model) row(it item.Item, selected bool) string {
 	if it.Draft {
 		ts = sDim
 	}
-	title := ts.Render(fmt.Sprintf("%-*s", titleW, ansi.Truncate(it.Title, titleW, "…")))
-	cur := " "
+	title := st(ts).Render(fmt.Sprintf("%-*s", titleW, ansi.Truncate(it.Title, titleW, "…")))
+	cur := plain.Render(" ")
 	if selected {
-		cur = sMark.Render("▸")
+		cur = st(sMark).Render("▸")
 	}
-	line := cur + mark + id + " " + title + " " + auth + " " + right
+	sp := plain.Render(" ")
+	line := cur + mark + id + sp + title + sp + auth + sp + right
 	if selected {
-		// re-apply background across inner resets
-		return sSelected.Width(m.width).Render(line)
+		return plain.Width(m.width).Render(line)
 	}
 	return line
 }

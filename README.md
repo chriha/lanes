@@ -595,6 +595,11 @@ two projects never share history, views or sessions. The `$XDG_*` variables are 
 
 ## Troubleshooting
 
+Run `lanes doctor` first. Without starting the TUI or touching any tmux server, it checks `tmux` (in `PATH`,
+≥ 3.2), `glab` and `glab auth status` (only when a `gitlab` provider is configured), that the config loads, that
+every view filter compiles and every action template parses, and that the state and cache directories are
+writable. It prints one `ok` / `warn` / `fail` line per check, naming the view or action, and exits 1 on any fail.
+
 - **`glab: …` error in the list** — run `glab auth status`; `lanes` needs a logged-in `glab`. For a project that
   cannot be detected from the git remote, set `project` on the provider.
 - **`tmux not found in PATH`** — install tmux (≥ 3.2).

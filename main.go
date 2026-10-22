@@ -26,6 +26,9 @@ func main() {
 	}
 	wd, _ := os.Getwd()
 	app.Init(wd)
+	if len(os.Args) == 2 && os.Args[1] == "doctor" {
+		os.Exit(runDoctor(os.Stdout, realDoctorEnv()))
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)

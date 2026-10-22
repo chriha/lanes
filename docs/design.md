@@ -1,0 +1,135 @@
+# lanes — design notes
+
+Working name: **lanes** (each *view* is a lane of work items). Generic on purpose: no GitLab/MR/horse
+coupling in the core, so it works in any project.
+
+**Renaming:** the name lives in exactly three places — `go.mod` module path (and imports), `internal/app/app.go`
+(`const Name`), and the `Makefile` (`NAME :=`). Config dir, tmux socket, state dir and the binary all derive
+from `Name`. Change those three and `grep -ri lanes` for docs.
+
+## Goal
+
+A fast, live, vim-style TUI that shows filtered lists of items (MRs first) and runs actions on them in
+interactive tmux sessions with one keypress — single or multi-select.
+
+## Non-goals
+
+- Creating worktrees/branches itself. Commands that need a worktree (e.g. Claude commands such as
+  `work-tickets`) do that; lanes only sets `cwd` if an action says so.
+- Macros. Attention-key, headless/scriptable CLI: later.
+- Windows support.
+
+## Stack
+
+Go, Bubble Tea (`bubbletea`), Lip Gloss (`lipgloss`), Bubbles (`bubbles`), `BurntSushi/toml`,
+`expr-lang/expr` for filter expressions. tmux is a hard dependency. GitLab via `glab api graphql`
+(reuses existing auth).
+
+## Concepts
+
+- **Provider** — produces items. Built-in `gitlab`; or `command` provider: any shell command printing a JSON
+  array of items. Items are generic: `{id, title, url, fields{...}}`.
+- **View** — name + provider + filter expression + columns + optional keymap overrides. Switch views with
+  `tab`/`shift-tab`, `1-9`, or `:view <name>`.
+- **Filter** — `expr` expression evaluated client-side over item fields, e.g.
+  `"waiting-for-review" in labels && !draft && !approved_by_me && !open_thread_by_me`.
+- **Action** — config-defined, templated (`{{.id}} {{.branch}} {{.ticket}} {{.url}} {{.field.x}}`):
+  - `session`: command run in a detached tmux session (user's `$SHELL -ic`), optional `cwd`.
+  - `api`: provider mutation without a session (e.g. gitlab `ready`, `sync`).
+  - `confirm`: `none | single | always`. Multi-select always confirms.
+- **Session** — tmux session on dedicated socket (`tmux -L <Name>`), one per (action, item). Never touches the
+  user's own tmux server. `remain-on-exit` keeps exit status.
+- **Status** — session: `running | exited(0) | failed(n)`. Claude sessions additionally:
+  `working | waiting-input | question | done`, reported by hooks injected via `--settings` that write
+  `state/<session>.json`.
+- **Item history** — per-item log of actions run, when, outcome (JSON-lines in state dir), viewable in a
+  detail panel.
+- **Badges** — extra per-row status icons from provider fields: CI failed/running/passed, threads open,
+  approvals, draft, conflicts.
+
+## UI
+
+```
+ lanes   [review] mine  drafts                         ⟳ 12s ago
+ ─────────────────────────────────────────────────────────────────
+ ▸ ● !1234  ABC-901 Fix result import      alex   ✗ci  💬2   ◐ review: working
+   ○ !1229  ABC-888 Speed up search        sam    ✓ci        
+ ─────────────────────────────────────────────────────────────────
+ preview / history / sessions panel
+ : command line      / filter      ? help
+```
+
+- Vim keys: `h j k l`, `gg G`, `ctrl-d/u`, `space` mark, `V` mark all, `esc` clear.
+- `/` fuzzy filter, `:` command line, `?` help, `enter` open session/jump in, `o` open URL, `x` kill session
+  (confirm), `R` refresh, `i` item history, `q` quit.
+- Live: background poll (default 30s) diffs into the list, preserving cursor + marks. First paint from disk
+  cache (stale-while-revalidate).
+- Jump into a session: `tmux display-popup` / `switch-client` when inside tmux, `attach` otherwise.
+
+## Config (`~/.config/lanes/config.toml`, hot reloaded)
+
+```toml
+[settings]
+poll_interval = "30s"
+
+[provider.gitlab]
+type = "gitlab"
+project = "group/project"
+
+[[view]]
+name = "review"
+provider = "gitlab"
+filter = '"waiting-for-review" in labels && !draft && !approved_by_me && !open_thread_by_me && author != me'
+
+[[view]]
+name = "mine"
+provider = "gitlab"
+filter = 'author == me && "waiting-for-review" in labels && !approved && !("to-be-deployed" in labels)'
+
+[keymap]
+r = "review"
+w = "work-on-comments"
+s = "sync"
+
+[action.review]
+type = "session"
+run = 'claude "/local-code-review {{.url}}"'
+confirm = "none"
+```
+
+## Layout
+
+```
+.user/lanes/
+  PLAN.md  Makefile  go.mod  main.go
+  internal/
+    app/        Name const, paths (config/state/cache dirs)
+    config/     TOML load + validation + hot reload
+    item/       Item type, fields
+    provider/   Provider iface; gitlab (graphql), command
+    filter/     expr env + helpers (has_label, approved_by_me, …)
+    session/    tmux backend, status, claude hooks
+    history/    per-item log
+    ui/         bubbletea models: root, list, preview, cmdline, confirm, help; theme
+```
+
+## Phases
+
+1. **Core — DONE.** Skeleton, config (+hot reload), gitlab provider, filter engine, live list view, vim nav,
+   marks, `/` filter, cache. GitLab fetch is two-pass: quick (~2s, no thread authorship; `Item.Pending` fields
+   inherited from previous snapshot) then full (~9s, discussions), because GraphQL discussions are slow.
+2. **Sessions — DONE.** tmux backend on its own socket (`tmux -L lanes`, config in state dir with
+   remain-on-exit), run/jump (popup inside tmux, attach outside)/kill+confirm, status badges, Claude hooks
+   (`lanes hook <event>` via `claude --settings {{.settings}}`: working / asking / waiting).
+3. **Actions & config — DONE.** `[keymap]` + `[action.*]` (`session` and headless `run` types, `vars`,
+   `refresh`), multi-select confirm, item history (`i`), in-TUI filter editing (`F`, `:filter`, `:newview`,
+   `:delview` — stored in `<state>/views.json`, config untouched), `:edit` / `:config` / `:run`, live config reload.
+4. **Polish — DONE.** `[theme]` color overrides, preview pane (`p`), CI/thread/approval badges, header session
+   summary, desktop notifications (claude asking/waiting, session finished/failed; `no_notify` to disable).
+5. **Extract — DONE.** Own repo, per-project config (`.lanes.toml` overlays the global config) and per-project
+   state/tmux socket, MIT license, README, CI.
+
+## Later
+
+Attention key (jump to next session needing input), headless CLI (`lanes run`, `lanes ls --json`), more
+providers (Linear).

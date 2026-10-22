@@ -1,0 +1,421 @@
+package ui
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+	"sync"
+	"text/template"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/chriha/lanes/internal/app"
+	"github.com/chriha/lanes/internal/config"
+	"github.com/chriha/lanes/internal/history"
+	"github.com/chriha/lanes/internal/item"
+	"github.com/chriha/lanes/internal/session"
+)
+
+type confirmState struct {
+	prompt string
+	do     func() tea.Cmd
+}
+
+type sessionsMsg struct {
+	infos []session.Info
+	err   error
+}
+type doneMsg struct {
+	notice  string
+	refresh bool
+}
+type pollNow struct{}
+
+type job struct {
+	name, label, itemKey, cwd, cmd string
+	restart                        bool
+}
+
+func shq(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+func (m *Model) pollSessions() tea.Cmd {
+	if m.sess == nil || m.polling {
+		return nil
+	}
+	m.polling = true
+	mgr := m.sess
+	return func() tea.Msg {
+		in, err := mgr.List()
+		return sessionsMsg{in, err}
+	}
+}
+
+func (m *Model) onSessions(msg sessionsMsg) {
+	m.polling = false
+	if msg.err != nil {
+		return
+	}
+	prev := map[string]session.Info{}
+	for _, s := range m.sessions {
+		prev[s.Name] = s
+	}
+	m.sessByItem = map[string][]session.Info{}
+	for _, s := range msg.infos {
+		if p, ok := prev[s.Name]; ok && !m.cfg.Settings.NoNotify {
+			m.maybeNotify(p, s)
+		}
+		if p, ok := prev[s.Name]; ok && !p.Dead && s.Dead {
+			ev := "finished"
+			if s.Exit != 0 {
+				ev = "failed"
+			}
+			history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: ev, Exit: s.Exit})
+		}
+		m.sessByItem[s.ItemKey] = append(m.sessByItem[s.ItemKey], s)
+	}
+	m.sessions = msg.infos
+}
+
+func (m *Model) sessionsOf(it item.Item) []session.Info { return m.sessByItem[session.Key(it.ID)] }
+
+// targets are the marked items of the current view, or the item under the cursor.
+func (m *Model) targets() []item.Item {
+	var out []item.Item
+	for _, it := range m.items() {
+		if m.marks[it.ID] {
+			out = append(out, it)
+		}
+	}
+	if len(out) == 0 && m.cursor < len(m.items()) {
+		out = append(out, m.items()[m.cursor])
+	}
+	return out
+}
+
+func ids(its []item.Item) string {
+	s := make([]string, len(its))
+	for i, it := range its {
+		s[i] = it.ID
+	}
+	return strings.Join(s, ", ")
+}
+
+func (m *Model) ask(prompt string, do func() tea.Cmd) {
+	m.confirm = &confirmState{prompt, do}
+	m.mode = modeConfirm
+}
+
+func render(text string, data map[string]any) (string, error) {
+	t, err := template.New("").Funcs(template.FuncMap{"q": shq}).Option("missingkey=error").Parse(text)
+	if err != nil {
+		return "", err
+	}
+	var b bytes.Buffer
+	if err := t.Execute(&b, data); err != nil {
+		return "", err
+	}
+	return b.String(), nil
+}
+
+func (m *Model) runAction(name string, act config.Action) tea.Cmd {
+	if m.sess == nil {
+		m.notice = "tmux unavailable"
+		return nil
+	}
+	ts := m.targets()
+	if len(ts) == 0 {
+		return nil
+	}
+	var jobs []job
+	skipped := 0
+	headless := act.Type == "run"
+	vars := act.Vars
+	if vars == nil {
+		vars = map[string]any{}
+	}
+	for _, it := range ts {
+		sname := session.Name(name, it.ID)
+		restart := false
+		for _, s := range m.sessionsOf(it) {
+			if headless {
+				break
+			}
+			if s.Name != sname {
+				continue
+			}
+			if !s.Dead {
+				skipped++
+				goto next
+			}
+			restart = true
+		}
+		{
+			data := it.Env()
+			data["settings"], data["session"], data["action"], data["vars"] = m.settings, sname, name, vars
+			cmd, err := render(act.Run, data)
+			if err != nil {
+				m.notice = fmt.Sprintf("action %s: %v", name, err)
+				return nil
+			}
+			cwd, err := render(act.Cwd, data)
+			if err != nil {
+				m.notice = fmt.Sprintf("action %s cwd: %v", name, err)
+				return nil
+			}
+			jobs = append(jobs, job{sname, it.ID, session.Key(it.ID), cwd, cmd, restart})
+		}
+	next:
+	}
+	if len(jobs) == 0 {
+		m.notice = fmt.Sprintf("%s already running", name)
+		return nil
+	}
+	start := func() tea.Cmd { return m.execute(name, jobs, skipped) }
+	if headless {
+		start = func() tea.Cmd { return m.executeRun(name, jobs, act.Refresh) }
+	}
+	if len(ts) > 1 || act.Confirm == "single" {
+		what := ts[0].ID
+		if len(ts) > 1 {
+			what = fmt.Sprintf("%d items (%s)", len(ts), ids(ts))
+		}
+		m.ask(fmt.Sprintf("Run %q on %s?", name, what), start)
+		return nil
+	}
+	return start()
+}
+
+func (m *Model) execute(action string, jobs []job, skipped int) tea.Cmd {
+	m.marks = map[string]bool{}
+	mgr := m.sess
+	return func() tea.Msg {
+		var errs []string
+		started := 0
+		for _, j := range jobs {
+			if j.restart {
+				_ = mgr.Kill(j.name)
+			}
+			if err := mgr.Start(j.name, j.cwd, j.cmd); err != nil {
+				errs = append(errs, err.Error())
+				continue
+			}
+			started++
+			history.Append(history.Event{Item: j.itemKey, Action: action, Event: "started"})
+		}
+		note := fmt.Sprintf("started %s on %d item(s)", action, started)
+		if skipped > 0 {
+			note += fmt.Sprintf(", %d already running", skipped)
+		}
+		if len(errs) > 0 {
+			note += ": " + errs[0]
+		}
+		return doneMsg{notice: note}
+	}
+}
+
+// executeRun runs the jobs headless and in parallel; the footer reports the outcome.
+func (m *Model) executeRun(action string, jobs []job, refresh bool) tea.Cmd {
+	m.marks = map[string]bool{}
+	m.notice = fmt.Sprintf("running %s on %d item(s)…", action, len(jobs))
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+	return func() tea.Msg {
+		fails := make([]string, len(jobs))
+		var wg sync.WaitGroup
+		for i, j := range jobs {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				history.Append(history.Event{Item: j.itemKey, Action: action, Event: "started"})
+				cmd := exec.Command(shell, "-c", j.cmd)
+				cmd.Dir = j.cwd
+				out, err := cmd.CombinedOutput()
+				if err == nil {
+					history.Append(history.Event{Item: j.itemKey, Action: action, Event: "finished"})
+					return
+				}
+				code := -1
+				var ee *exec.ExitError
+				if errors.As(err, &ee) {
+					code = ee.ExitCode()
+				}
+				history.Append(history.Event{Item: j.itemKey, Action: action, Event: "failed", Exit: code})
+				fails[i] = j.label + ": " + lastLine(string(out), err)
+			}()
+		}
+		wg.Wait()
+		var bad []string
+		for _, f := range fails {
+			if f != "" {
+				bad = append(bad, f)
+			}
+		}
+		note := fmt.Sprintf("✓ %s done on %d item(s)", action, len(jobs))
+		if len(bad) > 0 {
+			note = fmt.Sprintf("✗ %s failed on %d/%d — %s", action, len(bad), len(jobs), bad[0])
+		}
+		return doneMsg{notice: note, refresh: refresh}
+	}
+}
+
+func lastLine(out string, err error) string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if l := strings.TrimSpace(lines[len(lines)-1]); l != "" {
+		return l
+	}
+	return err.Error()
+}
+
+func (m *Model) killTargets() tea.Cmd {
+	var infos []session.Info
+	for _, it := range m.targets() {
+		infos = append(infos, m.sessionsOf(it)...)
+	}
+	if len(infos) == 0 {
+		m.notice = "no sessions here"
+		return nil
+	}
+	alive := 0
+	for _, s := range infos {
+		if !s.Dead {
+			alive++
+		}
+	}
+	mgr := m.sess
+	kill := func() tea.Cmd {
+		return func() tea.Msg {
+			for _, s := range infos {
+				if !s.Dead {
+					history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: "killed"})
+				}
+				_ = mgr.Kill(s.Name)
+			}
+			return doneMsg{notice: fmt.Sprintf("closed %d session(s)", len(infos))}
+		}
+	}
+	if alive == 0 {
+		return kill()
+	}
+	m.ask(fmt.Sprintf("Kill %d running session(s)?", alive), kill)
+	return nil
+}
+
+// jump attaches to the newest session of the item under the cursor.
+func (m *Model) jump(it item.Item) tea.Cmd {
+	ss := m.sessionsOf(it)
+	if len(ss) == 0 {
+		return nil
+	}
+	cmd, popup := m.sess.JumpCmd(ss[0].Name)
+	if popup {
+		return func() tea.Msg {
+			_ = cmd.Run()
+			return pollNow{}
+		}
+	}
+	return tea.ExecProcess(cmd, func(error) tea.Msg { return pollNow{} })
+}
+
+func (m *Model) showHistory() {
+	it := m.items()
+	if m.cursor >= len(it) {
+		return
+	}
+	cur := it[m.cursor]
+	m.histTitle = cur.ID + "  " + cur.Title
+	m.hist = nil
+	evs := history.For(session.Key(cur.ID))
+	if len(evs) > 25 {
+		evs = evs[len(evs)-25:]
+	}
+	for _, e := range evs {
+		line := fmt.Sprintf("%s  %-9s %s", e.Time.Format("2006-01-02 15:04"), e.Event, e.Action)
+		if e.Event == "failed" {
+			line += fmt.Sprintf(" (exit %d)", e.Exit)
+		}
+		m.hist = append(m.hist, line)
+	}
+	if len(m.hist) == 0 {
+		m.hist = []string{"no history yet"}
+	}
+	m.mode = modeHistory
+}
+
+func (m *Model) keyConfirm(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	c := m.confirm
+	m.mode, m.confirm = modeNormal, nil
+	if s := k.String(); c != nil && (s == "y" || s == "enter") {
+		return m, c.do()
+	}
+	m.notice = "cancelled"
+	return m, nil
+}
+
+func (m *Model) historyView() string {
+	var b strings.Builder
+	b.WriteString(sTitle.Render(" history — "+m.histTitle) + "\n\n")
+	for _, l := range m.hist {
+		b.WriteString("  " + sText.Render(l) + "\n")
+	}
+	b.WriteString("\n" + sDim.Render("  any key to close"))
+	return b.String()
+}
+
+func (m *Model) itemLabel(key string) string {
+	for _, items := range m.data {
+		for _, it := range items {
+			if session.Key(it.ID) == key {
+				return it.ID + " " + it.Title
+			}
+		}
+	}
+	return key
+}
+
+func (m *Model) maybeNotify(prev, cur session.Info) {
+	switch {
+	case !prev.Dead && cur.Dead && cur.Exit == 0:
+		notify(app.Name+": "+cur.Action+" finished", m.itemLabel(cur.ItemKey))
+	case !prev.Dead && cur.Dead:
+		notify(fmt.Sprintf("%s: %s failed (%d)", app.Name, cur.Action, cur.Exit), m.itemLabel(cur.ItemKey))
+	case prev.Claude != cur.Claude && cur.Claude == "asking":
+		notify(app.Name+": "+cur.Action+" has a question", m.itemLabel(cur.ItemKey))
+	case prev.Claude != cur.Claude && cur.Claude == "waiting":
+		notify(app.Name+": "+cur.Action+" is waiting for you", m.itemLabel(cur.ItemKey))
+	}
+}
+
+// sessionSummary is the header's at-a-glance count of live sessions that need attention.
+func (m *Model) sessionSummary() string {
+	var run, ask, wait int
+	for _, s := range m.sessions {
+		switch {
+		case s.Dead:
+		case s.Claude == "asking":
+			ask++
+		case s.Claude == "waiting":
+			wait++
+		default:
+			run++
+		}
+	}
+	var parts []string
+	if run > 0 {
+		parts = append(parts, badgeStyle("info").Render(fmt.Sprintf("◐ %d", run)))
+	}
+	if ask > 0 {
+		parts = append(parts, badgeStyle("warn").Render(fmt.Sprintf("? %d", ask)))
+	}
+	if wait > 0 {
+		parts = append(parts, badgeStyle("warn").Render(fmt.Sprintf("● %d", wait)))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " ") + "   "
+}

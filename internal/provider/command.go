@@ -1,8 +1,10 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,6 +22,10 @@ func (c *Command) Fetch(ctx context.Context) ([]item.Item, error) {
 	}
 	out, err := exec.CommandContext(ctx, sh, "-c", c.Cmd).Output()
 	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && len(ee.Stderr) > 0 {
+			return nil, fmt.Errorf("command provider: %w: %s", err, bytes.TrimSpace(ee.Stderr))
+		}
 		return nil, fmt.Errorf("command provider: %w", err)
 	}
 	var items []item.Item

@@ -566,6 +566,30 @@ func (m *Model) View() string {
 	return b.String()
 }
 
+// attention counts the items with a warn or bad badge, on the item or on any of its sessions, and
+// reports whether any of them is bad.
+func (m *Model) attention(items []item.Item) (n int, bad bool) {
+	for _, it := range items {
+		badges := append([]item.Badge{}, it.Badges...)
+		for _, ss := range m.sessionsOf(it) {
+			badges = append(badges, ss.Badge())
+		}
+		hit := false
+		for _, b := range badges {
+			switch b.Kind {
+			case "bad":
+				hit, bad = true, true
+			case "warn":
+				hit = true
+			}
+		}
+		if hit {
+			n++
+		}
+	}
+	return n, bad
+}
+
 func (m *Model) header() string {
 	var tabs []string
 	for i, v := range m.views {
@@ -574,11 +598,24 @@ func (m *Model) header() string {
 			name += "*"
 		}
 		label := fmt.Sprintf("%s %d", name, len(v.items))
+		st := sTab
 		if i == m.cur {
-			tabs = append(tabs, sTabOn.Render(label))
-		} else {
-			tabs = append(tabs, sTab.Render(label))
+			st = sTabOn
 		}
+		if n, bad := m.attention(v.items); n > 0 {
+			kind := "warn"
+			if bad {
+				kind = "bad"
+			}
+			// the count carries its own style; the active tab's background must reach it
+			cs := badgeStyle(kind)
+			if i == m.cur {
+				cs = cs.Background(cSelBg)
+			}
+			tabs = append(tabs, st.PaddingRight(0).Render(label+" ")+cs.Render(fmt.Sprint(n))+st.PaddingLeft(0).Render(""))
+			continue
+		}
+		tabs = append(tabs, st.Render(label))
 	}
 	left := sTitle.Render(" "+app.Name) + "  " + strings.Join(tabs, "")
 	right := m.sessionSummary() + sDim.Render(m.freshness())

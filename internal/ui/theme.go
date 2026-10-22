@@ -14,7 +14,7 @@ var (
 	cWarn   = lipgloss.AdaptiveColor{Light: "#B7791F", Dark: "#FBBF24"}
 	cBad    = lipgloss.AdaptiveColor{Light: "#C53030", Dark: "#F87171"}
 	cInfo   = lipgloss.AdaptiveColor{Light: "#2B6CB0", Dark: "#60A5FA"}
-	cSelBg  = lipgloss.AdaptiveColor{Light: "#ECE7FB", Dark: "#2A2540"}
+	cSelBg  = lipgloss.AdaptiveColor{Light: "#DDD6F5", Dark: "#3A3560"}
 
 	sTitle, sTab, sTabOn, sDim, sText, sID, sMark, sErr, sRule, sKey, sSelected, sWarn lipgloss.Style
 )

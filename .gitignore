@@ -4,3 +4,6 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Local agent workspace (worktrees, reports, reviews)
+.user/

@@ -57,6 +57,8 @@ type Model struct {
 	fetchedAt map[string]time.Time
 	loading   map[string]bool
 	provErr   map[string]error
+	fails     map[string]int       // consecutive failed fetches per provider
+	retryAt   map[string]time.Time // no refetch before this
 
 	views  []*view
 	cur    int
@@ -92,6 +94,8 @@ func New(cfg *config.Config) *Model {
 		fetchedAt: map[string]time.Time{},
 		loading:   map[string]bool{},
 		provErr:   map[string]error{},
+		fails:     map[string]int{},
+		retryAt:   map[string]time.Time{},
 		marks:     map[string]bool{},
 		search:    textinput.New(),
 		cmdline:   textinput.New(),
@@ -260,9 +264,20 @@ func (m *Model) fetch(name string) tea.Cmd {
 	return tea.Sequence(quick, full)
 }
 
+// retryDelay is the wait after the nth consecutive failure: poll, doubling, capped at 5 minutes.
+func retryDelay(poll time.Duration, fails int) time.Duration {
+	d := poll
+	for i := 1; i < fails && d < 5*time.Minute; i++ {
+		d *= 2
+	}
+	return min(d, 5*time.Minute)
+}
+
 func (m *Model) refreshAll() tea.Cmd {
 	var cmds []tea.Cmd
 	for name := range m.providers {
+		delete(m.fails, name)
+		delete(m.retryAt, name)
 		cmds = append(cmds, m.fetch(name))
 	}
 	return tea.Batch(cmds...)
@@ -279,10 +294,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			if !msg.partial {
 				m.provErr[msg.name] = msg.err
+				m.fails[msg.name]++
+				m.retryAt[msg.name] = time.Now().Add(retryDelay(m.cfg.Poll(), m.fails[msg.name]))
 			}
 			return m, nil
 		}
 		delete(m.provErr, msg.name)
+		if !msg.partial {
+			delete(m.fails, msg.name)
+			delete(m.retryAt, msg.name)
+		}
 		items := inherit(m.data[msg.name], msg.items)
 		m.data[msg.name] = items
 		if !msg.partial {
@@ -339,7 +360,7 @@ func (m *Model) onTick() tea.Cmd {
 		cmds = append(cmds, m.reload())
 	}
 	for name := range m.providers {
-		if time.Since(m.fetchedAt[name]) >= m.cfg.Poll() {
+		if time.Since(m.fetchedAt[name]) >= m.cfg.Poll() && time.Now().After(m.retryAt[name]) {
 			cmds = append(cmds, m.fetch(name))
 		}
 	}
@@ -655,7 +676,11 @@ func (m *Model) list() string {
 			msg = "filter error: " + v.err.Error()
 			rows = append(rows, "", "  "+sErr.Render(msg))
 		case m.provErr[v.cfg.Provider] != nil:
-			rows = append(rows, "", "  "+sErr.Render(m.provErr[v.cfg.Provider].Error()))
+			e := m.provErr[v.cfg.Provider].Error()
+			if t := m.retryAt[v.cfg.Provider]; !t.IsZero() {
+				e += " · retry in " + time.Until(t).Round(time.Second).String()
+			}
+			rows = append(rows, "", "  "+sErr.Render(e))
 		case m.loading[v.cfg.Provider]:
 			rows = append(rows, "", "  "+sDim.Render("loading…"))
 		default:

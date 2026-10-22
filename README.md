@@ -564,7 +564,7 @@ two projects never share history, views or sessions. The `$XDG_*` variables are 
 ## How it works
 
 - **Data flow.** On start `lanes` paints the cached list, then fetches each provider in the background and
-  re-fetches every `poll_interval`. New data is diffed into the list by item `id`, so the cursor and your marks
+  re-fetches every `poll_interval`; a failing provider is retried after `poll_interval`, doubling per consecutive failure up to 5 minutes (`R` / `:refresh` retry at once). New data is diffed into the list by item `id`, so the cursor and your marks
   stay put. Every view re-applies its filter on each refresh.
 - **Filters** are compiled once per view and evaluated against each item's fields; a view with a broken filter
   shows its error instead of items.

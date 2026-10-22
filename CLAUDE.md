@@ -15,8 +15,7 @@ gofmt -l .    # must print nothing
 
 Code is organised by concern under `internal/`: `config` (TOML, project overlay, in-app overrides), `provider`
 (gitlab, command), `filter` (expr expressions), `session` (tmux, Claude hooks), `history`, `cache`, `item`, `ui`
-(Bubble Tea), `app` (name constant). `scripts/work-tickets/` is tooling for the agent workflow below, not part
-of the app.
+(Bubble Tea), `app` (name constant).
 
 ## Conventions
 
@@ -34,7 +33,7 @@ of the app.
 
 ## Agent workflow
 
-Tickets are GitHub issues (`gh`). Commands in `.claude/commands/`: `/ticket` files or refines an issue,
-`/work-tickets` works the open issues assigned to you in worktrees under `.user/` (gitignored) and opens draft
-PRs, `/local-code-review` and `/work-on-comments` review and address feedback. Shapes, labels and briefs:
-`.claude/work-tickets/`; review rules: `.claude/review-criteria.md`.
+Tickets are GitHub issues (`gh`), handled by the `harness` plugin: `/harness:ticket` files or refines an issue,
+`/harness:work` works the open issues assigned to you in worktrees under `.user/` (gitignored) and opens draft
+PRs, `/harness:review` and `/harness:work-on-comments` review and address feedback. Project config:
+`.claude/harness.md`; overrides of plugin briefs: `.claude/harness/`.

@@ -98,8 +98,8 @@ func TestJumpCmd(t *testing.T) {
 		wantArgs []string // prefix of Args
 		inAttach string   // substring of the last arg, popup only
 	}{
-		{"outside tmux", "", false, []string{"tmux", "-L", app.Socket(), "-f", "/my conf", "attach", "-t", "=fix~1"}, "", ""},
-		{"inside tmux", "/tmp/tmux-1/default,1,0", true, []string{"tmux", "display-popup", "-E"}, "env -u TMUX tmux -L " + app.Socket() + " -f '/my conf' attach -t '=fix~1'", ""},
+		{"outside tmux", "", false, []string{"tmux", "-L", app.Socket(), "-f", "/my conf", "attach", "-t", "=fix~1"}, ""},
+		{"inside tmux", "/tmp/tmux-1/default,1,0", true, []string{"tmux", "display-popup", "-E"}, "env -u TMUX tmux -L " + app.Socket() + " -f '/my conf' attach -t '=fix~1'"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

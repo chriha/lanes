@@ -191,6 +191,7 @@ GitLab:
 | `open_thread_by_me` | bool        | you started a discussion that is still unresolved                          |
 | `ci`                | string      | latest pipeline status, lowercase (`success`, `failed`, `running`, …)      |
 | `conflicts`         | bool        | MR has merge conflicts                                                     |
+| `diverged`          | bool        | source branch is behind its target branch (needs a rebase)                 |
 | `branch`, `target`  | string      | source and target branch                                                   |
 | `ticket`            | string      | first `ABC-123` style id found in the title or branch, upper-cased         |
 | `iid`               | string      | the MR number (used in the `id` as `!<iid>`)                               |
@@ -271,6 +272,7 @@ sessions.
 |----------------|---------------------------------------------------------------|
 | `draft`        | MR is a draft                                                 |
 | `✓ ci` `✗ ci` `◌ ci` | pipeline passed / failed / running or pending           |
+| `↓ behind`     | source branch is behind its target branch                     |
 | `⚠ conflict`   | merge conflicts                                               |
 | `⚑ 3`          | three unresolved discussions                                  |
 | `✔ approved`   | has approvals                                                 |

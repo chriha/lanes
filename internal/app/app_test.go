@@ -58,6 +58,12 @@ func TestDirs(t *testing.T) {
 		}
 	}
 
+}
+
+func TestDirsPerProject(t *testing.T) {
+	xdgRoot := t.TempDir()
+	old := scope
+	t.Cleanup(func() { scope = old })
 	// config is global, cache and state are per project
 	t.Setenv("XDG_CONFIG_HOME", xdgRoot)
 	t.Setenv("XDG_CACHE_HOME", xdgRoot)

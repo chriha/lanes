@@ -135,7 +135,9 @@ filters for the lists you care about and bind keys to the commands you run all t
 ### Views
 
 A *view* is a name, a provider and a filter. All views of the same provider share one fetch, so more views cost
-nothing extra. The tab bar shows each view with its current item count.
+nothing extra. The tab bar shows each view with its current item count. A second, coloured number counts the items
+that need attention: those with a `warn` or `bad` badge (a failing or running pipeline, a conflict, …) or a session
+that is asking, waiting or failed. It is red if any of them is `bad`, otherwise yellow, and hidden when zero.
 
 | Key              | Action                         |
 |------------------|--------------------------------|

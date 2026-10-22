@@ -453,7 +453,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "R":
 		m.notice = "refreshing…"
 		return m, m.refreshAll()
-	case "o", "u":
+	case "o":
 		if n > 0 {
 			openURL(m.items()[m.cursor].URL)
 		}

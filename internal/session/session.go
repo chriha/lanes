@@ -36,7 +36,12 @@ func Key(itemID string) string { return unsafe.ReplaceAllString(itemID, "_") }
 
 func Name(action, itemID string) string { return action + "~" + Key(itemID) }
 
-type Manager struct{ conf string }
+type Manager struct {
+	conf string
+	// run executes tmux with args and returns stdout; on failure the returned bytes are tmux's stderr.
+	// Tests replace it so no real tmux server is contacted.
+	run func(args ...string) ([]byte, error)
+}
 
 func NewManager() (*Manager, error) {
 	if _, err := exec.LookPath("tmux"); err != nil {
@@ -52,7 +57,16 @@ func NewManager() (*Manager, error) {
 	if err := os.WriteFile(conf, []byte(body), 0o644); err != nil {
 		return nil, err
 	}
-	return &Manager{conf: conf}, nil
+	m := &Manager{conf: conf}
+	m.run = func(args ...string) ([]byte, error) {
+		out, err := m.tmux(args...).Output()
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return ee.Stderr, err
+		}
+		return out, err
+	}
+	return m, nil
 }
 
 func (m *Manager) tmux(args ...string) *exec.Cmd {
@@ -61,8 +75,8 @@ func (m *Manager) tmux(args ...string) *exec.Cmd {
 
 func (m *Manager) List() ([]Info, error) {
 	const sep = "\t"
-	out, err := m.tmux("list-panes", "-a", "-F",
-		strings.Join([]string{"#{session_name}", "#{pane_dead}", "#{pane_dead_status}", "#{session_created}"}, sep)).Output()
+	out, err := m.run("list-panes", "-a", "-F",
+		strings.Join([]string{"#{session_name}", "#{pane_dead}", "#{pane_dead_status}", "#{session_created}"}, sep))
 	if err != nil {
 		return nil, nil // no server running = no sessions
 	}
@@ -101,7 +115,7 @@ func (m *Manager) Start(name, cwd, command string) error {
 		args = append(args, "-c", cwd)
 	}
 	args = append(args, "--", shell, "-ic", script)
-	if out, err := m.tmux(args...).CombinedOutput(); err != nil {
+	if out, err := m.run(args...); err != nil {
 		return fmt.Errorf("tmux: %s", strings.TrimSpace(string(out)))
 	}
 	return nil
@@ -109,7 +123,8 @@ func (m *Manager) Start(name, cwd, command string) error {
 
 func (m *Manager) Kill(name string) error {
 	_ = os.Remove(statePath(name))
-	return m.tmux("kill-session", "-t", "="+name).Run()
+	_, err := m.run("kill-session", "-t", "="+name)
+	return err
 }
 
 // JumpCmd returns a command that attaches to the session: in a popup when the user is inside tmux,

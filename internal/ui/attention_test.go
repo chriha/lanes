@@ -27,6 +27,7 @@ func TestHeaderAttentionCount(t *testing.T) {
 		"c": {{Dead: true, Exit: 1}},
 		"d": {{Dead: true}},
 		"e": {{Claude: "waiting"}, {Claude: "asking"}},
+		"f": {{Dead: true, Claude: "waiting"}},
 	}
 	tests := []struct {
 		name  string
@@ -34,15 +35,14 @@ func TestHeaderAttentionCount(t *testing.T) {
 		want  string // tab text after the name
 	}{
 		{"none", nil, "0"},
-		{"warn badge", []item.Item{{ID: "z", Badges: b("warn")}}, "1 1"},
-		{"bad badge", []item.Item{{ID: "z", Badges: b("bad")}}, "1 1"},
-		{"ok info dim never count", []item.Item{{ID: "z", Badges: b("ok", "info", "dim")}}, "1"},
+		{"warn badge alone", []item.Item{{ID: "z", Badges: b("warn", "bad")}}, "1"},
 		{"asking session", []item.Item{{ID: "a"}}, "1 1"},
 		{"working session", []item.Item{{ID: "b"}}, "1"},
-		{"failed session", []item.Item{{ID: "c"}}, "1 1"},
+		{"failed session", []item.Item{{ID: "c"}}, "1"},
 		{"ok session", []item.Item{{ID: "d"}}, "1"},
-		{"counted once", []item.Item{{ID: "e", Badges: b("warn", "bad")}}, "1 1"},
-		{"several items", []item.Item{{ID: "a"}, {ID: "b"}, {ID: "z", Badges: b("warn")}}, "3 2"},
+		{"dead session", []item.Item{{ID: "f"}}, "1"},
+		{"counted once", []item.Item{{ID: "e"}}, "1 1"},
+		{"several items", []item.Item{{ID: "a"}, {ID: "b"}, {ID: "e"}}, "3 2"},
 	}
 	for _, tt := range tests {
 		for _, active := range []int{0, 1} { // the count shows on the active tab too

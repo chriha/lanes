@@ -587,28 +587,17 @@ func (m *Model) View() string {
 	return b.String()
 }
 
-// attention counts the items with a warn or bad badge, on the item or on any of its sessions, and
-// reports whether any of them is bad.
-func (m *Model) attention(items []item.Item) (n int, bad bool) {
+// attention counts the items with a live session that is asking or waiting for input.
+func (m *Model) attention(items []item.Item) (n int) {
 	for _, it := range items {
-		badges := append([]item.Badge{}, it.Badges...)
 		for _, ss := range m.sessionsOf(it) {
-			badges = append(badges, ss.Badge())
-		}
-		hit := false
-		for _, b := range badges {
-			switch b.Kind {
-			case "bad":
-				hit, bad = true, true
-			case "warn":
-				hit = true
+			if !ss.Dead && (ss.Claude == "asking" || ss.Claude == "waiting") {
+				n++
+				break
 			}
 		}
-		if hit {
-			n++
-		}
 	}
-	return n, bad
+	return n
 }
 
 func (m *Model) header() string {
@@ -623,13 +612,9 @@ func (m *Model) header() string {
 		if i == m.cur {
 			st = sTabOn
 		}
-		if n, bad := m.attention(v.items); n > 0 {
-			kind := "warn"
-			if bad {
-				kind = "bad"
-			}
+		if n := m.attention(v.items); n > 0 {
 			// the count carries its own style; the active tab's background must reach it
-			cs := badgeStyle(kind)
+			cs := badgeStyle("warn")
 			if i == m.cur {
 				cs = cs.Background(cSelBg)
 			}

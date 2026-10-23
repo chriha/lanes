@@ -108,8 +108,13 @@ func (m *Model) ask(prompt string, do func() tea.Cmd) {
 	m.mode = modeConfirm
 }
 
+// ParseTemplate parses an action's run or cwd template.
+func ParseTemplate(text string) (*template.Template, error) {
+	return template.New("").Funcs(template.FuncMap{"q": shq}).Option("missingkey=error").Parse(text)
+}
+
 func render(text string, data map[string]any) (string, error) {
-	t, err := template.New("").Funcs(template.FuncMap{"q": shq}).Option("missingkey=error").Parse(text)
+	t, err := ParseTemplate(text)
 	if err != nil {
 		return "", err
 	}

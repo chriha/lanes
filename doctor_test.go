@@ -1,0 +1,154 @@
+package main
+
+import (
+	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/chriha/lanes/internal/config"
+)
+
+func TestDoctor(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "file")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := func() *config.Config {
+		return &config.Config{
+			Provider: map[string]config.Provider{"gitlab": {Type: "gitlab"}},
+			View:     []config.View{{Name: "review", Provider: "gitlab", Filter: "!draft"}},
+			Action:   map[string]config.Action{"ready": {Type: "run", Run: "glab mr update {{.iid | q}} --ready"}},
+		}
+	}
+	good := func() doctorEnv {
+		return doctorEnv{
+			lookPath: func(name string) (string, error) { return "/usr/bin/" + name, nil },
+			run: func(name string, args ...string) (string, error) {
+				if name == "tmux" {
+					return "tmux 3.4\n", nil
+				}
+				return "Logged in to gitlab.com as me\n", nil
+			},
+			load:      func() (*config.Config, error) { return cfg(), nil },
+			overrides: func() *config.Overrides { return &config.Overrides{Filters: map[string]string{}} },
+			dirs:      []namedDir{{"state dir", filepath.Join(dir, "state")}, {"cache dir", filepath.Join(dir, "cache")}},
+		}
+	}
+	notFound := func(string) (string, error) { return "", errors.New("not found") }
+
+	tests := []struct {
+		name  string
+		edit  func(e *doctorEnv)
+		code  int
+		want  []string // substrings of the output
+		avoid []string
+	}{
+		{name: "all pass", edit: func(*doctorEnv) {}, code: 0,
+			want:  []string{"ok    tmux: tmux 3.4", "ok    glab: logged in", "ok    view review", "ok    action ready", "ok    state dir", "ok    cache dir"},
+			avoid: []string{"fail", "warn"}},
+		{name: "tmux missing", code: 1, want: []string{"fail  tmux"},
+			edit: func(e *doctorEnv) {
+				e.lookPath = func(n string) (string, error) {
+					if n == "tmux" {
+						return "", errors.New("not found")
+					}
+					return "/usr/bin/" + n, nil
+				}
+			}},
+		{name: "old tmux warns", code: 0, want: []string{"warn  tmux"},
+			edit: func(e *doctorEnv) {
+				e.run = func(string, ...string) (string, error) { return "tmux 3.1c\n", nil }
+			}},
+		{name: "glab missing with gitlab provider", code: 1, want: []string{"fail  glab"},
+			edit: func(e *doctorEnv) { e.lookPath = notFound }},
+		{name: "glab not logged in", code: 1, want: []string{"fail  glab auth"},
+			edit: func(e *doctorEnv) {
+				e.run = func(name string, _ ...string) (string, error) {
+					if name == "glab" {
+						return "not logged in\n", errors.New("exit status 1")
+					}
+					return "tmux 3.4\n", nil
+				}
+			}},
+		{name: "no gitlab provider skips glab", code: 0, want: []string{"ok    glab: skipped"}, avoid: []string{"fail"},
+			edit: func(e *doctorEnv) {
+				e.lookPath = func(n string) (string, error) {
+					if n == "glab" {
+						return "", errors.New("not found")
+					}
+					return "/usr/bin/" + n, nil
+				}
+				e.load = func() (*config.Config, error) {
+					c := cfg()
+					c.Provider = map[string]config.Provider{"gitlab": {Type: "command", Command: "echo []"}}
+					return c, nil
+				}
+			}},
+		{name: "config fails", code: 1, want: []string{"fail  config: boom"},
+			edit: func(e *doctorEnv) { e.load = func() (*config.Config, error) { return nil, errors.New("boom") } }},
+		{name: "bad filter", code: 1, want: []string{"fail  view review"},
+			edit: func(e *doctorEnv) {
+				e.load = func() (*config.Config, error) {
+					c := cfg()
+					c.View[0].Filter = "draft &&"
+					return c, nil
+				}
+			}},
+		{name: "bad override filter", code: 1, want: []string{"fail  view review"},
+			edit: func(e *doctorEnv) {
+				e.overrides = func() *config.Overrides {
+					return &config.Overrides{Filters: map[string]string{"review": "(("}}
+				}
+			}},
+		{name: "bad override view", code: 1, want: []string{"fail  view extra"},
+			edit: func(e *doctorEnv) {
+				e.overrides = func() *config.Overrides {
+					return &config.Overrides{Filters: map[string]string{}, Views: []config.View{{Name: "extra", Provider: "gitlab", Filter: "(("}}}
+				}
+			}},
+		{name: "bad action template", code: 1, want: []string{"fail  action ready"},
+			edit: func(e *doctorEnv) {
+				e.load = func() (*config.Config, error) {
+					c := cfg()
+					c.Action["ready"] = config.Action{Run: "echo {{.iid"}
+					return c, nil
+				}
+			}},
+		{name: "bad action cwd template", code: 1, want: []string{"fail  action ready"},
+			edit: func(e *doctorEnv) {
+				e.load = func() (*config.Config, error) {
+					c := cfg()
+					c.Action["ready"] = config.Action{Run: "true", Cwd: "{{.nope | nofunc}}"}
+					return c, nil
+				}
+			}},
+		{name: "dir not writable", code: 1, want: []string{"fail  state dir"},
+			edit: func(e *doctorEnv) { e.dirs[0].path = filepath.Join(file, "state") }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := good()
+			tt.edit(&e)
+			var b bytes.Buffer
+			code := runDoctor(&b, e)
+			out := b.String()
+			if code != tt.code {
+				t.Errorf("exit %d, want %d\n%s", code, tt.code, out)
+			}
+			for _, w := range tt.want {
+				if !strings.Contains(out, w) {
+					t.Errorf("output lacks %q\n%s", w, out)
+				}
+			}
+			for _, a := range tt.avoid {
+				if strings.Contains(out, a) {
+					t.Errorf("output has %q\n%s", a, out)
+				}
+			}
+		})
+	}
+}

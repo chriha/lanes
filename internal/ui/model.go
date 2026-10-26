@@ -110,7 +110,7 @@ func New(cfg *config.Config) *Model {
 		m.notice = err.Error()
 	}
 	if m.sess, err = session.NewManager(); err != nil {
-		m.notice = err.Error()
+		m.notice = strings.TrimSpace(m.notice + " " + err.Error())
 	}
 	m.settings, _ = session.SettingsFile()
 	m.sessByItem = map[string][]session.Info{}

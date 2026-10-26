@@ -38,6 +38,7 @@ type View struct {
 	Name     string `toml:"name"`
 	Provider string `toml:"provider"`
 	Filter   string `toml:"filter"`
+	Sort     string `toml:"sort"` // comma-separated fields, "-" prefix = descending; empty = provider order
 }
 
 type Action struct {

@@ -31,6 +31,7 @@ const (
 	modeHelp
 	modeConfirm
 	modeHistory
+	modeSessions
 )
 
 type view struct {
@@ -82,6 +83,7 @@ type Model struct {
 	histTitle  string
 	hist       []string
 	helpOff    int
+	sessCursor int // cursor of the sessions screen
 	ov         *config.Overrides
 	preview_   bool
 
@@ -368,7 +370,7 @@ func (m *Model) onTick() tea.Cmd {
 }
 
 // builtinKeys cannot be rebound through [keymap].
-const builtinKeys = "jkgGhlVqRoixpF/:? "
+const builtinKeys = "jkgGhlVqRoixpFS/:? "
 
 // reload re-reads the config (also triggered by saving the file) and refetches, so edits apply live.
 func (m *Model) reload() tea.Cmd {
@@ -401,6 +403,8 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case modeHistory:
 		m.mode = modeNormal
 		return m, nil
+	case modeSessions:
+		return m.keySessions(k)
 	}
 	m.notice = ""
 	s := k.String()
@@ -488,6 +492,8 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "i":
 		m.showHistory()
+	case "S":
+		m.openSessions()
 	case "p":
 		m.preview_ = !m.preview_
 	case "F":
@@ -573,6 +579,12 @@ func (m *Model) View() string {
 		return m.helpView()
 	case modeHistory:
 		return m.historyView()
+	case modeSessions:
+		return m.sessionsView()
+	case modeConfirm:
+		if m.confirm != nil && m.confirm.back == modeSessions {
+			return m.sessionsView()
+		}
 	}
 	var b strings.Builder
 	b.WriteString(m.header() + "\n")
@@ -776,6 +788,7 @@ func (m *Model) helpLines() []string {
 		{"enter", "jump into the item's newest session"},
 		{"x", "close sessions of marked items / cursor item (confirms if running)"},
 		{"i", "item history"},
+		{"S", "sessions: every session, also of items no longer listed (enter jump, x close)"},
 		{"p", "toggle preview pane"},
 		{"o / u", "open item in browser"},
 		{"R / ctrl-r", "refresh data / reload config"},
@@ -814,6 +827,7 @@ func (m *Model) helpLines() []string {
 		{":newview <name> <expr>", "create a view (same provider as the current one)"},
 		{":delview <name>", "delete a view created with :newview"},
 		{":run <action>", "run an action by name"},
+		{":sessions", "list every session (same as S)"},
 		{":refresh  :reload  :edit  :config  :quit", ""},
 	} {
 		b.WriteString("  " + sKey.Render(fmt.Sprintf("%-26s", c[0])) + sText.Render(c[1]) + "\n")

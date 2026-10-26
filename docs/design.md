@@ -55,13 +55,14 @@ Go, Bubble Tea (`bubbletea`), Lip Gloss (`lipgloss`), Bubbles (`bubbles`), `Burn
  ▸ ● !1234  ABC-901 Fix result import      alex   ✗ci  💬2   ◐ review: working
    ○ !1229  ABC-888 Speed up search        sam    ✓ci        
  ─────────────────────────────────────────────────────────────────
- preview / history / sessions panel
+ preview / history / sessions panel (DONE: `p`, `i`, `S`)
  : command line      / filter      ? help
 ```
 
 - Vim keys: `h j k l`, `gg G`, `ctrl-d/u`, `space` mark, `V` mark all, `esc` clear.
 - `/` fuzzy filter, `:` command line, `?` help, `enter` open session/jump in, `o` open URL, `x` kill session
-  (confirm), `R` refresh, `i` item history, `q` quit.
+  (confirm), `R` refresh, `i` item history, `S` sessions screen (every session, also of items no longer listed;
+  jump / close), `q` quit.
 - Live: background poll (default 30s) diffs into the list, preserving cursor + marks. First paint from disk
   cache (stale-while-revalidate).
 - Jump into a session: `tmux display-popup` / `switch-client` when inside tmux, `attach` otherwise.

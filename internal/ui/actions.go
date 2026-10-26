@@ -22,6 +22,7 @@ import (
 type confirmState struct {
 	prompt string
 	do     func() tea.Cmd
+	back   mode // the screen the prompt returns to
 }
 
 type sessionsMsg struct {
@@ -76,7 +77,9 @@ func (m *Model) onSessions(msg sessionsMsg) {
 		}
 		m.sessByItem[s.ItemKey] = append(m.sessByItem[s.ItemKey], s)
 	}
+	sel := m.selectedSession()
 	m.sessions = msg.infos
+	m.restoreSessCursor(sel)
 }
 
 func (m *Model) sessionsOf(it item.Item) []session.Info { return m.sessByItem[session.Key(it.ID)] }
@@ -104,7 +107,7 @@ func ids(its []item.Item) string {
 }
 
 func (m *Model) ask(prompt string, do func() tea.Cmd) {
-	m.confirm = &confirmState{prompt, do}
+	m.confirm = &confirmState{prompt, do, m.mode}
 	m.mode = modeConfirm
 }
 
@@ -285,6 +288,11 @@ func (m *Model) killTargets() tea.Cmd {
 		m.notice = "no sessions here"
 		return nil
 	}
+	return m.killSessions(infos)
+}
+
+// killSessions closes infos: dead ones right away, after a y/n prompt when any is still running.
+func (m *Model) killSessions(infos []session.Info) tea.Cmd {
 	alive := 0
 	for _, s := range infos {
 		if !s.Dead {
@@ -316,7 +324,12 @@ func (m *Model) jump(it item.Item) tea.Cmd {
 	if len(ss) == 0 {
 		return nil
 	}
-	cmd, popup := m.sess.JumpCmd(ss[0].Name)
+	return m.jumpTo(ss[0].Name)
+}
+
+// jumpTo attaches to the session called name; sessions are re-polled on return.
+func (m *Model) jumpTo(name string) tea.Cmd {
+	cmd, popup := m.sess.JumpCmd(name)
 	if popup {
 		return func() tea.Msg {
 			_ = cmd.Run()
@@ -354,6 +367,9 @@ func (m *Model) showHistory() {
 func (m *Model) keyConfirm(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	c := m.confirm
 	m.mode, m.confirm = modeNormal, nil
+	if c != nil {
+		m.mode = c.back
+	}
 	if s := k.String(); c != nil && (s == "y" || s == "enter") {
 		return m, c.do()
 	}

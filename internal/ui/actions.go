@@ -413,18 +413,7 @@ func (m *Model) maybeNotify(prev, cur session.Info) {
 
 // sessionSummary is the header's at-a-glance count of live sessions that need attention.
 func (m *Model) sessionSummary() string {
-	var run, ask, wait int
-	for _, s := range m.sessions {
-		switch {
-		case s.Dead:
-		case s.Claude == "asking":
-			ask++
-		case s.Claude == "waiting":
-			wait++
-		default:
-			run++
-		}
-	}
+	run, ask, wait := session.Count(m.sessions)
 	var parts []string
 	if run > 0 {
 		parts = append(parts, badgeStyle("info").Render(fmt.Sprintf("◐ %d", run)))

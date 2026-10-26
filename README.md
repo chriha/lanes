@@ -621,6 +621,12 @@ two projects never share history, views or sessions. The `$XDG_*` variables are 
   (In session names, characters outside `A-Za-z0-9_-` in the item id are replaced with `_`; `!1948` becomes
   `_1948`.)
 - Detach with the private server's prefix, `ctrl-b d`.
+- `lanes status` prints the current project's sessions that need input, as `? <asking> ● <waiting>` (zero parts
+  left out, nothing at all when none do). It never prints errors, so it fits a status bar or a shell prompt:
+  ```tmux
+  # ~/.tmux.conf
+  set -g status-right '#(cd #{pane_current_path} && lanes status) %H:%M'
+  ```
 
 ## Troubleshooting
 

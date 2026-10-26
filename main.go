@@ -29,6 +29,10 @@ func main() {
 	if len(os.Args) == 2 && os.Args[1] == "doctor" {
 		os.Exit(runDoctor(os.Stdout, realDoctorEnv()))
 	}
+	if len(os.Args) == 2 && os.Args[1] == "status" {
+		runStatus()
+		return
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)
@@ -37,5 +41,21 @@ func main() {
 	if _, err := tea.NewProgram(ui.New(cfg), tea.WithAltScreen()).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)
 		os.Exit(1)
+	}
+}
+
+// runStatus prints the cwd project's sessions that need input, for tmux status bars and shell prompts.
+// Errors (tmux missing, no server, state dir not writable) print nothing: a status bar must not show them.
+func runStatus() {
+	m, err := session.NewManager()
+	if err != nil {
+		return
+	}
+	infos, err := m.List()
+	if err != nil {
+		return
+	}
+	if line := session.StatusLine(infos); line != "" {
+		fmt.Println(line)
 	}
 }

@@ -235,7 +235,7 @@ config's filter.
 | `R`                 | refresh data now                                   |
 | `ctrl-r`            | reload the config now                              |
 | `?`                 | help (scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; close with `q`) |
-| `q`                 | quit — sessions keep running                       |
+| `q`                 | quit after confirming — sessions keep running      |
 
 Any other key you bind in `[keymap]` runs its [action](#actions). Built-in keys cannot be rebound; if you try,
 the help marks the binding as shadowed and the reload message tells you.
@@ -389,7 +389,7 @@ Each item gets its own session; items that already have the action running are s
   item ID and title (or the item key when no provider returns the item any more), status badge and age.
   Sessions whose item is in no view — filtered out, or merged/closed — are marked `(not in any view)`. `enter`
   jumps in, `x` closes (running ones are confirmed first), `j`/`k`, `gg`/`G` move, `q` / `esc` / `S` go back.
-- **Quit** — `q` leaves `lanes`; sessions keep running and reappear when you start it again.
+- **Quit** — `q` asks first (`y`/`enter` quits, any other key cancels); `ctrl-c` and `:quit` leave at once. Sessions keep running and reappear when you start it again.
 - **Status** — shown as row badges and in the header summary, refreshed every second.
 
 ### Claude Code integration

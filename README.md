@@ -30,6 +30,7 @@ you what each session is doing (running, working, asking a question, waiting for
 - [Using lanes](#using-lanes)
   - [Views](#views)
   - [Filters](#filters)
+  - [Sorting](#sorting)
   - [Navigation and selection](#navigation-and-selection)
   - [Searching](#searching)
   - [The command line](#the-command-line)
@@ -214,6 +215,23 @@ runtime error (e.g. comparing a missing field) shows as a message in the list in
 `enter`. The change is saved *outside* your config (see [Where things live](#where-things-live)), so your
 hand-written TOML is never rewritten, and shows as `*` in the tab bar. `:filter reset` goes back to the
 config's filter.
+
+### Sorting
+
+A view lists items in provider order unless it sets `sort`: a comma-separated list of field names (the same
+fields as in filters), each optionally prefixed with `-` for descending. Later keys break ties of earlier ones;
+the sort is stable, so items that compare equal keep provider order. Numbers, bools (`false` first) and times
+compare by value, everything else as text. Items missing a field sort last for that key, in either direction.
+
+```toml
+[[view]]
+name = "mine"
+provider = "gitlab"
+filter = 'author == me'
+sort = "-open_threads,title"
+```
+
+An unknown field name is not an error (fields come from the provider); an empty key (`"a,,b"`) is.
 
 ### Navigation and selection
 
@@ -532,6 +550,7 @@ command = "..."             # command provider
 name     = "review"
 provider = "<name>"
 filter   = '<expression>'   # empty = everything
+sort     = "-field,field"    # "-" = descending; empty = provider order
 
 [keymap]
 <key> = "<action name>"     # single character, e.g. r

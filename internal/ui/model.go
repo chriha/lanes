@@ -39,6 +39,7 @@ type view struct {
 	filter *filter.Filter
 	err    error
 	items  []item.Item
+	sort   []item.SortKey
 	edited bool // filter overridden from inside the TUI
 }
 
@@ -156,7 +157,11 @@ func (m *Model) applyConfig(cfg *config.Config) {
 			vc.Filter, edited = f, true
 		}
 		f, err := filter.Compile(vc.Filter)
-		m.views = append(m.views, &view{cfg: vc, filter: f, err: err, edited: edited})
+		keys, serr := item.ParseSort(vc.Sort)
+		if err == nil {
+			err = serr
+		}
+		m.views = append(m.views, &view{cfg: vc, filter: f, err: err, sort: keys, edited: edited})
 		if vc.Name == prev {
 			m.cur = i
 		}
@@ -164,7 +169,7 @@ func (m *Model) applyConfig(cfg *config.Config) {
 	m.rebuild()
 }
 
-// rebuild re-filters every view; the cursor sticks to the same item ID when it survives.
+// rebuild re-filters and re-sorts every view; the cursor sticks to the same item ID when it survives.
 func (m *Model) rebuild() {
 	selected := m.selectedID()
 	q := strings.ToLower(m.query)
@@ -187,6 +192,7 @@ func (m *Model) rebuild() {
 			}
 			v.items = append(v.items, it)
 		}
+		item.Sort(v.items, v.sort)
 	}
 	m.restoreCursor(selected)
 }

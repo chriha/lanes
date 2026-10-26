@@ -286,3 +286,64 @@ func TestKillRemovesState(t *testing.T) {
 		t.Errorf("state after kill = %q", got)
 	}
 }
+
+func TestCount(t *testing.T) {
+	tests := []struct {
+		name           string
+		in             []Info
+		run, ask, wait int
+	}{
+		{"none", nil, 0, 0, 0},
+		{"dead not counted", []Info{{Dead: true}, {Dead: true, Exit: 1, Claude: "asking"}}, 0, 0, 0},
+		{"no claude status is running", []Info{{}}, 1, 0, 0},
+		{"working is running", []Info{{Claude: "working"}}, 1, 0, 0},
+		{"asking", []Info{{Claude: "asking"}, {Claude: "asking"}}, 0, 2, 0},
+		{"waiting", []Info{{Claude: "waiting"}}, 0, 0, 1},
+		{"mixed", []Info{{Claude: "working"}, {Claude: "asking"}, {Claude: "waiting"}, {Claude: "waiting"}, {Dead: true}}, 1, 1, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			run, ask, wait := Count(tt.in)
+			if run != tt.run || ask != tt.ask || wait != tt.wait {
+				t.Errorf("Count = %d %d %d, want %d %d %d", run, ask, wait, tt.run, tt.ask, tt.wait)
+			}
+		})
+	}
+}
+
+// TestStatusLine goes through List with the fake runner, so the line reflects what tmux and the hook state report.
+func TestStatusLine(t *testing.T) {
+	tests := []struct {
+		name   string
+		out    string
+		err    error
+		states map[string]string
+		want   string
+	}{
+		{"no server", "", errors.New("no server running"), nil, ""},
+		{"only running", "fix~1\t0\t0\t1\n", nil, map[string]string{"fix~1": "working"}, ""},
+		{"dead asking ignored", "fix~1\t1\t0\t1\n", nil, map[string]string{"fix~1": "asking"}, ""},
+		{"asking only", "fix~1\t0\t0\t1\n", nil, map[string]string{"fix~1": "asking"}, "? 1"},
+		{"waiting only", "fix~1\t0\t0\t1\n", nil, map[string]string{"fix~1": "waiting"}, "● 1"},
+		{"both", "fix~1\t0\t0\t1\nfix~2\t0\t0\t2\nfix~3\t0\t0\t3\nfix~4\t0\t0\t4\n", nil,
+			map[string]string{"fix~1": "asking", "fix~2": "waiting", "fix~3": "waiting", "fix~4": "working"}, "? 1 ● 2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateEnv(t)
+			for name, state := range tt.states {
+				if err := os.WriteFile(statePath(name), []byte(`{"state":"`+state+`"}`), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			m := fakeRun(nil, func([]string) ([]byte, error) { return []byte(tt.out), tt.err })
+			infos, err := m.List()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := StatusLine(infos); got != tt.want {
+				t.Errorf("StatusLine = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

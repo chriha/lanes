@@ -132,5 +132,5 @@ confirm = "none"
 
 ## Later
 
-Attention key (jump to next session needing input), headless CLI (`lanes run`, `lanes ls --json`), more
+Attention key (jump to next session needing input), headless CLI (`lanes run`, `lanes ls --json`; `lanes status` for status bars exists), more
 providers (Linear).

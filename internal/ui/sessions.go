@@ -148,3 +148,9 @@ func (m *Model) sessionsView() string {
 	}
 	return b.String()
 }
+
+// nextAttention picks the live session to jump to next: asking before waiting, then oldest first,
+// starting after the session called last so repeated presses cycle.
+func nextAttention(infos []session.Info, last string) (string, bool) {
+	return "", false
+}

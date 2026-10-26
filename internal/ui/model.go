@@ -84,7 +84,8 @@ type Model struct {
 	histTitle  string
 	hist       []string
 	helpOff    int
-	sessCursor int // cursor of the sessions screen
+	sessCursor int    // cursor of the sessions screen
+	lastAttn   string // session the n key jumped to last
 	ov         *config.Overrides
 	preview_   bool
 
@@ -378,7 +379,7 @@ func (m *Model) onTick() tea.Cmd {
 }
 
 // builtinKeys cannot be rebound through [keymap].
-const builtinKeys = "jkgGhlVqRoixpFS/:? "
+const builtinKeys = "jkgGhlVqRoixpnFS/:? "
 
 // reload re-reads the config (also triggered by saving the file) and refetches, so edits apply live.
 func (m *Model) reload() tea.Cmd {
@@ -510,6 +511,17 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showHistory()
 	case "S":
 		m.openSessions()
+	case "n":
+		if m.sess == nil {
+			break
+		}
+		name, ok := nextAttention(m.sessions, m.lastAttn)
+		if !ok {
+			m.notice = "nothing needs you"
+			break
+		}
+		m.lastAttn = name
+		return m, m.jumpTo(name)
 	case "p":
 		m.preview_ = !m.preview_
 	case "F":
@@ -804,6 +816,7 @@ func (m *Model) helpLines() []string {
 		{"enter", "jump into the item's newest session"},
 		{"x", "close sessions of marked items / cursor item (confirms if running)"},
 		{"i", "item history"},
+		{"n", "jump into the next session that is asking or waiting"},
 		{"S", "sessions: every session, also of items no longer listed (enter jump, x close)"},
 		{"p", "toggle preview pane"},
 		{"o / u", "open item in browser"},

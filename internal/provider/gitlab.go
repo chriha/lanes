@@ -87,9 +87,19 @@ func (g *GitLab) project() (string, error) {
 	if g.Project != "" {
 		return g.Project, nil
 	}
-	out, err := exec.Command("git", "remote", "get-url", "origin").Output()
+	u, err := originPath()
 	if err != nil {
 		return "", fmt.Errorf("gitlab: set provider.project (cannot detect git remote)")
+	}
+	g.Project = u
+	return u, nil
+}
+
+// originPath returns the repo path (group/project, owner/repo) of the origin remote's URL.
+func originPath() (string, error) {
+	out, err := exec.Command("git", "remote", "get-url", "origin").Output()
+	if err != nil {
+		return "", err
 	}
 	u := strings.TrimSpace(string(out))
 	u = strings.TrimSuffix(u, ".git")
@@ -99,7 +109,6 @@ func (g *GitLab) project() (string, error) {
 	} else if i := strings.Index(u, ":"); i >= 0 {
 		u = u[i+1:]
 	}
-	g.Project = u
 	return u, nil
 }
 

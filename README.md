@@ -30,6 +30,7 @@ you what each session is doing (running, working, asking a question, waiting for
 - [Using lanes](#using-lanes)
   - [Views](#views)
   - [Filters](#filters)
+  - [Sorting](#sorting)
   - [Navigation and selection](#navigation-and-selection)
   - [Searching](#searching)
   - [The command line](#the-command-line)
@@ -215,6 +216,23 @@ runtime error (e.g. comparing a missing field) shows as a message in the list in
 hand-written TOML is never rewritten, and shows as `*` in the tab bar. `:filter reset` goes back to the
 config's filter.
 
+### Sorting
+
+A view lists items in provider order unless it sets `sort`: a comma-separated list of field names (the same
+fields as in filters), each optionally prefixed with `-` for descending. Later keys break ties of earlier ones;
+the sort is stable, so items that compare equal keep provider order. Numbers, bools (`false` first) and times
+compare by value, everything else as text. Items missing a field sort last for that key, in either direction.
+
+```toml
+[[view]]
+name = "mine"
+provider = "gitlab"
+filter = 'author == me'
+sort = "-open_threads,title"
+```
+
+An unknown field name is not an error (fields come from the provider); an empty key (`"a,,b"`) is.
+
 ### Navigation and selection
 
 | Key                 | Action                                             |
@@ -229,6 +247,7 @@ config's filter.
 | `o`                 | open the item's URL in the browser                 |
 | `x`                 | close the item's sessions (asks if any is still running) |
 | `i`                 | show the item's history                            |
+| `n`                 | jump into the next session that is asking or waiting (any view) |
 | `S`                 | sessions screen: every session, also of items no longer listed |
 | `p`                 | toggle the preview pane                            |
 | `F`                 | edit the current view's filter                     |
@@ -383,6 +402,9 @@ Each item gets its own session; items that already have the action running are s
 - **Jump** — `enter` on an item attaches to its newest session. Inside tmux this opens a popup over `lanes`;
   outside tmux, `lanes` suspends and attaches. **Detach with `ctrl-b d`** to come back (the session keeps
   running). A hint is shown in the session's status bar.
+- **Next needing you** — `n` jumps into the next live session that is asking or waiting, across all views:
+  asking before waiting, oldest first. Pressing `n` again goes to the next one and wraps around; with none,
+  the footer says `nothing needs you`.
 - **Close** — `x` closes the sessions of the marked items, or of the item under the cursor. Running sessions are
   confirmed first (`Kill 2 running session(s)?`); finished ones are removed immediately.
 - **Sessions screen** — `S` (or `:sessions`) lists every session on the `lanes` tmux server, newest first:
@@ -532,6 +554,7 @@ command = "..."             # command provider
 name     = "review"
 provider = "<name>"
 filter   = '<expression>'   # empty = everything
+sort     = "-field,field"    # "-" = descending; empty = provider order
 
 [keymap]
 <key> = "<action name>"     # single character, e.g. r

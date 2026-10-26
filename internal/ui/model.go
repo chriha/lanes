@@ -106,7 +106,9 @@ func New(cfg *config.Config) *Model {
 	m.search.Prompt, m.cmdline.Prompt = "/", ":"
 	m.search.PromptStyle, m.cmdline.PromptStyle = sKey, sKey
 	var err error
-	m.ov, _ = config.LoadOverrides() // stub
+	if m.ov, err = config.LoadOverrides(); err != nil {
+		m.notice = err.Error()
+	}
 	if m.sess, err = session.NewManager(); err != nil {
 		m.notice = err.Error()
 	}

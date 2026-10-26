@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -21,13 +22,17 @@ func overridesPath() string { return filepath.Join(app.StateDir(), "views.json")
 // empty overrides and an error, so callers can report it.
 func LoadOverrides() (*Overrides, error) {
 	o := &Overrides{Filters: map[string]string{}}
-	if b, err := os.ReadFile(overridesPath()); err == nil {
-		_ = json.Unmarshal(b, o) // stub: error not reported yet
+	var err error
+	if b, rerr := os.ReadFile(overridesPath()); rerr == nil {
+		if err = json.Unmarshal(b, o); err != nil {
+			err = fmt.Errorf("%s: %w", overridesPath(), err)
+			o = &Overrides{}
+		}
 	}
 	if o.Filters == nil {
 		o.Filters = map[string]string{}
 	}
-	return o, nil
+	return o, err
 }
 
 func (o *Overrides) Save() error {

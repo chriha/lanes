@@ -75,7 +75,10 @@ func runDoctor(w io.Writer, e doctorEnv) int {
 	} else {
 		line("ok", "config", "loaded")
 		checkGlab(e, cfg, line)
-		ov, _ := e.overrides() // stub
+		ov, err := e.overrides()
+		if err != nil {
+			line("fail", "overrides", err.Error())
+		}
 		checkViews(cfg, ov, line)
 		names := make([]string, 0, len(cfg.Action))
 		for n := range cfg.Action {

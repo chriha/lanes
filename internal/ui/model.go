@@ -31,6 +31,7 @@ const (
 	modeHelp
 	modeConfirm
 	modeHistory
+	modeSessions
 )
 
 type view struct {
@@ -82,6 +83,7 @@ type Model struct {
 	histTitle  string
 	hist       []string
 	helpOff    int
+	sessCursor int // cursor of the sessions screen
 	ov         *config.Overrides
 	preview_   bool
 

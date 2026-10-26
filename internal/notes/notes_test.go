@@ -126,3 +126,23 @@ func TestCorruptFileIsReportedAndKept(t *testing.T) {
 		t.Fatalf("Load changed the corrupt file: %q", b)
 	}
 }
+
+func TestSaveOverCorruptFileKeepsBackup(t *testing.T) {
+	setup(t)
+	if err := os.MkdirAll(filepath.Dir(file()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file(), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := Load()
+	if err := s.Set("a", "x"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(file() + ".bak"); string(b) != "{not json" {
+		t.Fatalf("want the corrupt file kept as notes.json.bak, got %q", b)
+	}
+	if load(t).Get("a") != "x" {
+		t.Fatal("note not saved")
+	}
+}

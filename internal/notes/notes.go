@@ -58,10 +58,17 @@ func (s Store) Set(id, text string) error {
 func (s Store) Delete(id string) error { return s.Set(id, "") }
 
 // save writes through a temp file and a rename, so a crash never leaves a half-written notes.json.
+// A corrupt notes.json is moved to notes.json.bak first, so the first save after it is not lossy.
+// ponytail: last writer wins across lanes instances; re-read under a file lock if that ever bites.
 func (s Store) save() error {
 	dir := filepath.Dir(path())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
+	}
+	if _, err := Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := os.Rename(path(), path()+".bak"); err != nil {
+			return err
+		}
 	}
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {

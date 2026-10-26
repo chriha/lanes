@@ -101,14 +101,16 @@ func New(cfg *config.Config) *Model {
 		marks:     map[string]bool{},
 		search:    textinput.New(),
 		cmdline:   textinput.New(),
-		ov:        config.LoadOverrides(),
 		preview_:  cfg.Settings.Preview,
 	}
 	m.search.Prompt, m.cmdline.Prompt = "/", ":"
 	m.search.PromptStyle, m.cmdline.PromptStyle = sKey, sKey
 	var err error
-	if m.sess, err = session.NewManager(); err != nil {
+	if m.ov, err = config.LoadOverrides(); err != nil {
 		m.notice = err.Error()
+	}
+	if m.sess, err = session.NewManager(); err != nil {
+		m.notice = strings.TrimSpace(m.notice + " " + err.Error())
 	}
 	m.settings, _ = session.SettingsFile()
 	m.sessByItem = map[string][]session.Info{}

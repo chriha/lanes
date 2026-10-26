@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -17,15 +18,21 @@ type Overrides struct {
 
 func overridesPath() string { return filepath.Join(app.StateDir(), "views.json") }
 
-func LoadOverrides() *Overrides {
+// LoadOverrides returns the saved overrides. A missing file is empty overrides; a corrupt one yields
+// empty overrides and an error, so callers can report it.
+func LoadOverrides() (*Overrides, error) {
 	o := &Overrides{Filters: map[string]string{}}
-	if b, err := os.ReadFile(overridesPath()); err == nil {
-		_ = json.Unmarshal(b, o)
+	var err error
+	if b, rerr := os.ReadFile(overridesPath()); rerr == nil {
+		if err = json.Unmarshal(b, o); err != nil {
+			err = fmt.Errorf("%s: %w", overridesPath(), err)
+			o = &Overrides{}
+		}
 	}
 	if o.Filters == nil {
 		o.Filters = map[string]string{}
 	}
-	return o
+	return o, err
 }
 
 func (o *Overrides) Save() error {

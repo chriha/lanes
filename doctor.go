@@ -26,7 +26,7 @@ type doctorEnv struct {
 	lookPath  func(string) (string, error)
 	run       func(name string, args ...string) (string, error) // combined output
 	load      func() (*config.Config, error)
-	overrides func() *config.Overrides
+	overrides func() (*config.Overrides, error)
 	dirs      []namedDir
 }
 
@@ -75,7 +75,11 @@ func runDoctor(w io.Writer, e doctorEnv) int {
 	} else {
 		line("ok", "config", "loaded")
 		checkGlab(e, cfg, line)
-		checkViews(cfg, e.overrides(), line)
+		ov, err := e.overrides()
+		if err != nil {
+			line("fail", "overrides", err.Error())
+		}
+		checkViews(cfg, ov, line)
 		names := make([]string, 0, len(cfg.Action))
 		for n := range cfg.Action {
 			names = append(names, n)

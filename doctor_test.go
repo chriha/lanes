@@ -34,7 +34,7 @@ func TestDoctor(t *testing.T) {
 				return "Logged in to gitlab.com as me\n", nil
 			},
 			load:      func() (*config.Config, error) { return cfg(), nil },
-			overrides: func() *config.Overrides { return &config.Overrides{Filters: map[string]string{}} },
+			overrides: func() (*config.Overrides, error) { return &config.Overrides{Filters: map[string]string{}}, nil },
 			dirs:      []namedDir{{"state dir", filepath.Join(dir, "state")}, {"cache dir", filepath.Join(dir, "cache")}},
 		}
 	}
@@ -100,14 +100,20 @@ func TestDoctor(t *testing.T) {
 			}},
 		{name: "bad override filter", code: 1, want: []string{"fail  view review"},
 			edit: func(e *doctorEnv) {
-				e.overrides = func() *config.Overrides {
-					return &config.Overrides{Filters: map[string]string{"review": "(("}}
+				e.overrides = func() (*config.Overrides, error) {
+					return &config.Overrides{Filters: map[string]string{"review": "(("}}, nil
+				}
+			}},
+		{name: "corrupt overrides file", code: 1, want: []string{"fail  overrides"},
+			edit: func(e *doctorEnv) {
+				e.overrides = func() (*config.Overrides, error) {
+					return &config.Overrides{Filters: map[string]string{}}, errors.New("views.json: invalid JSON")
 				}
 			}},
 		{name: "bad override view", code: 1, want: []string{"fail  view extra"},
 			edit: func(e *doctorEnv) {
-				e.overrides = func() *config.Overrides {
-					return &config.Overrides{Filters: map[string]string{}, Views: []config.View{{Name: "extra", Provider: "gitlab", Filter: "(("}}}
+				e.overrides = func() (*config.Overrides, error) {
+					return &config.Overrides{Filters: map[string]string{}, Views: []config.View{{Name: "extra", Provider: "gitlab", Filter: "(("}}}, nil
 				}
 			}},
 		{name: "bad action template", code: 1, want: []string{"fail  action ready"},

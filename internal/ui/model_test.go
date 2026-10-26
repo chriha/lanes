@@ -90,7 +90,7 @@ func TestFetchedMsg(t *testing.T) {
 			t.Errorf("loading=%v fetchedAt=%v", m.loading["p"], m.fetchedAt["p"])
 		}
 	})
-	t.Run("partial then full inherits pending fields", func(t *testing.T) {
+	t.Run("partial result inherits pending fields from the previous full one", func(t *testing.T) {
 		m := newBackoffModel(t)
 		m.Update(fetchedMsg{name: "p", items: []item.Item{{ID: "a", Fields: map[string]any{"ci": "pass"}}}})
 		m.Update(fetchedMsg{name: "p", partial: true, items: []item.Item{{ID: "a", Fields: map[string]any{}, Pending: []string{"ci"}}}})
@@ -198,7 +198,7 @@ func TestNavigationClamps(t *testing.T) {
 		{"G goes to the end", []string{"G"}, 4},
 		{"gg goes to the start", []string{"G", "g", "g"}, 0},
 		{"single g does nothing", []string{"G", "g"}, 4},
-		{"g interrupted by j starts over", []string{"G", "g", "k", "g"}, 3},
+		{"g interrupted by k starts over", []string{"G", "g", "k", "g"}, 3},
 		{"ctrl+d clamps at the end", []string{"ctrl+d"}, 4},
 		{"ctrl+u clamps at the start", []string{"j", "ctrl+u"}, 0},
 	}

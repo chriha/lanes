@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -152,5 +153,25 @@ func (m *Model) sessionsView() string {
 // nextAttention picks the live session to jump to next: asking before waiting, then oldest first,
 // starting after the session called last so repeated presses cycle.
 func nextAttention(infos []session.Info, last string) (string, bool) {
-	return "", false
+	var q []session.Info
+	for _, s := range infos {
+		if !s.Dead && (s.Claude == "asking" || s.Claude == "waiting") {
+			q = append(q, s)
+		}
+	}
+	if len(q) == 0 {
+		return "", false
+	}
+	sort.SliceStable(q, func(i, j int) bool {
+		if q[i].Claude != q[j].Claude {
+			return q[i].Claude == "asking"
+		}
+		return q[i].Created.Before(q[j].Created)
+	})
+	for i, s := range q {
+		if s.Name == last {
+			return q[(i+1)%len(q)].Name, true
+		}
+	}
+	return q[0].Name, true
 }

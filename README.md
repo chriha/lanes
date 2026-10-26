@@ -229,6 +229,7 @@ config's filter.
 | `o`                 | open the item's URL in the browser                 |
 | `x`                 | close the item's sessions (asks if any is still running) |
 | `i`                 | show the item's history                            |
+| `S`                 | sessions screen: every session, also of items no longer listed |
 | `p`                 | toggle the preview pane                            |
 | `F`                 | edit the current view's filter                     |
 | `R`                 | refresh data now                                   |
@@ -258,6 +259,7 @@ narrows the view; it does not change its filter.
 | `:newview <name> <expr>`  | create a view on the current view's provider                          |
 | `:delview <name>`         | delete a view created with `:newview`                                 |
 | `:run <action>`           | run an action by name, even if it has no key                          |
+| `:sessions`               | open the sessions screen (same as `S`)                                |
 | `:refresh`                | refetch now                                                           |
 | `:reload`                 | re-read the config now                                                |
 | `:config`                 | print the global and project config paths                             |
@@ -383,6 +385,10 @@ Each item gets its own session; items that already have the action running are s
   running). A hint is shown in the session's status bar.
 - **Close** — `x` closes the sessions of the marked items, or of the item under the cursor. Running sessions are
   confirmed first (`Kill 2 running session(s)?`); finished ones are removed immediately.
+- **Sessions screen** — `S` (or `:sessions`) lists every session on the `lanes` tmux server, newest first:
+  item ID and title (or the item key when no provider returns the item any more), status badge and age.
+  Sessions whose item is in no view — filtered out, or merged/closed — are marked `(not in any view)`. `enter`
+  jumps in, `x` closes (running ones are confirmed first), `j`/`k`, `gg`/`G` move, `q` / `esc` / `S` go back.
 - **Quit** — `q` leaves `lanes`; sessions keep running and reappear when you start it again.
 - **Status** — shown as row badges and in the header summary, refreshed every second.
 

@@ -70,6 +70,8 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 		m.newView(arg)
 	case "delview":
 		m.delView(arg)
+	case "sessions":
+		m.openSessions()
 	case "run":
 		act, ok := m.cfg.Action[arg]
 		if !ok {

@@ -415,8 +415,16 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	n := len(m.items())
 	switch s {
-	case "ctrl+c", "q":
+	case "ctrl+c":
 		return m, tea.Quit
+	case "q":
+		running := 0
+		for _, si := range m.sessions {
+			if !si.Dead {
+				running++
+			}
+		}
+		m.ask(fmt.Sprintf("quit lanes? (%d sessions keep running) [y/N]", running), func() tea.Cmd { return tea.Quit })
 	case "j", "down":
 		m.cursor++
 	case "k", "up":
@@ -794,7 +802,7 @@ func (m *Model) helpLines() []string {
 		{"p", "toggle preview pane"},
 		{"o / u", "open item in browser"},
 		{"R / ctrl-r", "refresh data / reload config"},
-		{"q", "quit (sessions keep running)"},
+		{"q", "quit after confirming (sessions keep running)"},
 	}
 	var b strings.Builder
 	b.WriteString(sTitle.Render(" "+app.Name+" — keys") + "\n\n")

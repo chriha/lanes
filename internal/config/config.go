@@ -11,6 +11,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/chriha/lanes/internal/app"
+	"github.com/chriha/lanes/internal/item"
 )
 
 type Settings struct {
@@ -155,6 +156,9 @@ func Load() (*Config, error) {
 	for _, v := range c.View {
 		if _, ok := c.Provider[v.Provider]; !ok {
 			return nil, fmt.Errorf("%s: view %q uses unknown provider %q", p, v.Name, v.Provider)
+		}
+		if _, err := item.ParseSort(v.Sort); err != nil {
+			return nil, fmt.Errorf("%s: view %q: %w", p, v.Name, err)
 		}
 	}
 	for name, a := range c.Action {

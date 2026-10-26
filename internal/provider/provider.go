@@ -22,6 +22,8 @@ func New(c config.Provider) (Provider, error) {
 	switch c.Type {
 	case "gitlab":
 		return &GitLab{Project: c.Project}, nil
+	case "github":
+		return &GitHub{Project: c.Project}, nil
 	case "command":
 		return &Command{Cmd: c.Command}, nil
 	}

@@ -155,3 +155,34 @@ func (i Info) Badge() item.Badge {
 	}
 	return item.Badge{Text: "▶ " + i.Action, Kind: "info"}
 }
+
+// Count tallies the live sessions: running (no Claude status, or working), asking and waiting.
+// Dead sessions are not counted.
+func Count(infos []Info) (run, ask, wait int) {
+	for _, s := range infos {
+		switch {
+		case s.Dead:
+		case s.Claude == "asking":
+			ask++
+		case s.Claude == "waiting":
+			wait++
+		default:
+			run++
+		}
+	}
+	return run, ask, wait
+}
+
+// StatusLine is the `lanes status` output: "? <asking> ● <waiting>", zero parts omitted, empty when
+// nothing needs input. No colour, so it fits tmux status bars and shell prompts.
+func StatusLine(infos []Info) string {
+	_, ask, wait := Count(infos)
+	var parts []string
+	if ask > 0 {
+		parts = append(parts, fmt.Sprintf("? %d", ask))
+	}
+	if wait > 0 {
+		parts = append(parts, fmt.Sprintf("● %d", wait))
+	}
+	return strings.Join(parts, " ")
+}

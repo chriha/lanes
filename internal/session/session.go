@@ -131,7 +131,25 @@ func (m *Manager) Kill(name string) error {
 // never touches running ones. A failing kill does not stop the others: it returns the number of sessions
 // killed and the first error.
 func (m *Manager) Prune(failedOnly bool) (int, error) {
-	return 0, nil
+	infos, err := m.List()
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	var first error
+	for _, s := range infos {
+		if !s.Dead || (failedOnly && s.Exit == 0) {
+			continue
+		}
+		if err := m.Kill(s.Name); err != nil {
+			if first == nil {
+				first = fmt.Errorf("killing %s: %w", s.Name, err)
+			}
+			continue
+		}
+		n++
+	}
+	return n, first
 }
 
 // JumpCmd returns a command that attaches to the session: in a popup when the user is inside tmux,

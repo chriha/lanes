@@ -347,3 +347,52 @@ func TestStatusLine(t *testing.T) {
 		})
 	}
 }
+
+func TestPrune(t *testing.T) {
+	// fix~1 running, fix~2 dead ok, fix~3 dead failed, review~4 dead failed.
+	const panes = "fix~1\t0\t0\t1\nfix~2\t1\t0\t2\nfix~3\t1\t2\t3\nreview~4\t1\t1\t4\n"
+	tests := []struct {
+		name       string
+		out        string
+		listErr    error
+		failedOnly bool
+		failKill   string // session whose kill-session fails
+		wantKills  []string
+		wantN      int
+		wantErr    bool
+	}{
+		{"all dead, no running", panes, nil, false, "", []string{"review~4", "fix~3", "fix~2"}, 3, false},
+		{"failed only", panes, nil, true, "", []string{"review~4", "fix~3"}, 2, false},
+		{"failing kill does not stop the others", panes, nil, false, "fix~3", []string{"review~4", "fix~3", "fix~2"}, 2, true},
+		{"only running", "fix~1\t0\t0\t1\n", nil, false, "", nil, 0, false},
+		{"no server", "", errors.New("no server running"), false, "", nil, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateEnv(t)
+			var kills []string
+			m := fakeRun(nil, func(args []string) ([]byte, error) {
+				switch args[0] {
+				case "list-panes":
+					return []byte(tt.out), tt.listErr
+				case "kill-session":
+					name := strings.TrimPrefix(args[2], "=")
+					kills = append(kills, name)
+					if name == tt.failKill {
+						return []byte("can't kill"), errors.New("exit status 1")
+					}
+					return nil, nil
+				}
+				t.Fatalf("unexpected tmux call %q", args)
+				return nil, nil
+			})
+			n, err := m.Prune(tt.failedOnly)
+			if n != tt.wantN || (err != nil) != tt.wantErr {
+				t.Errorf("Prune = %d, %v; want %d, error %v", n, err, tt.wantN, tt.wantErr)
+			}
+			if !slices.Equal(kills, tt.wantKills) {
+				t.Errorf("killed %q, want %q", kills, tt.wantKills)
+			}
+		})
+	}
+}

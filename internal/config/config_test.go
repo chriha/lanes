@@ -132,3 +132,26 @@ sort = "`+tt.sort+`"
 		})
 	}
 }
+
+func TestFirstRunDefaultUsesAutoForge(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+	t.Setenv("HOME", tmp)
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Provider["forge"].Type; got != "auto" {
+		t.Errorf("provider forge type = %q, want auto (providers: %v)", got, c.Provider)
+	}
+	for _, v := range c.View {
+		if v.Provider != "forge" {
+			t.Errorf("view %q uses provider %q, want forge", v.Name, v.Provider)
+		}
+	}
+}

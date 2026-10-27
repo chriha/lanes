@@ -110,14 +110,8 @@ func originPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	u = strings.TrimSuffix(u, ".git")
-	if i := strings.Index(u, "://"); i >= 0 {
-		u = u[i+3:]
-		u = u[strings.Index(u, "/")+1:]
-	} else if i := strings.Index(u, ":"); i >= 0 {
-		u = u[i+1:]
-	}
-	return u, nil
+	_, path := splitRemote(u)
+	return path, nil
 }
 
 func (g *GitLab) graphql(ctx context.Context, query, proj string, into any) error {

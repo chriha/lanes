@@ -16,12 +16,13 @@ import (
 	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/filter"
+	"github.com/chriha/lanes/internal/provider"
 	"github.com/chriha/lanes/internal/ui"
 )
 
 type namedDir struct{ name, path string }
 
-// doctorEnv holds the lookups `lanes doctor` makes, so tests never need tmux, glab or the real dirs.
+// doctorEnv holds the lookups `lanes doctor` makes, so tests never need tmux, glab, gh, git or the real dirs.
 type doctorEnv struct {
 	lookPath  func(string) (string, error)
 	run       func(name string, args ...string) (string, error) // combined output
@@ -74,7 +75,7 @@ func runDoctor(w io.Writer, e doctorEnv) int {
 		line("fail", "config", err.Error())
 	} else {
 		line("ok", "config", "loaded")
-		checkGlab(e, cfg, line)
+		checkForgeCLIs(e, cfg, line)
 		ov, err := e.overrides()
 		if err != nil {
 			line("fail", "overrides", err.Error())
@@ -107,24 +108,45 @@ func runDoctor(w io.Writer, e doctorEnv) int {
 	return code
 }
 
-func checkGlab(e doctorEnv, cfg *config.Config, line func(status, name, msg string)) {
-	gitlab := false
-	for _, p := range cfg.Provider {
-		gitlab = gitlab || p.Type == "gitlab"
+// checkForgeCLIs checks the CLI (glab, gh) of each forge a provider uses; an auto provider resolves its forge
+// from the current directory's origin remote, as the TUI would.
+func checkForgeCLIs(e doctorEnv, cfg *config.Config, line func(status, name, msg string)) {
+	names := make([]string, 0, len(cfg.Provider))
+	for n := range cfg.Provider {
+		names = append(names, n)
 	}
-	if !gitlab {
-		line("ok", "glab", "skipped, no gitlab provider configured")
+	sort.Strings(names)
+	used := map[string]bool{}
+	for _, n := range names {
+		typ := cfg.Provider[n].Type
+		if typ == "auto" {
+			out, err := e.run("git", "remote", "get-url", "origin")
+			if err != nil {
+				line("warn", "provider "+n, "auto: no git remote origin here, cannot tell github from gitlab")
+				continue
+			}
+			typ, _ = provider.Forge(out)
+		}
+		used[typ] = true
+	}
+	checkCLI(e, used["gitlab"], "glab", "gitlab", line)
+	checkCLI(e, used["github"], "gh", "github", line)
+}
+
+func checkCLI(e doctorEnv, needed bool, cli, typ string, line func(status, name, msg string)) {
+	if !needed {
+		line("ok", cli, "skipped, no "+typ+" provider configured")
 		return
 	}
-	if _, err := e.lookPath("glab"); err != nil {
-		line("fail", "glab", "not found in PATH (needed by the gitlab provider)")
+	if _, err := e.lookPath(cli); err != nil {
+		line("fail", cli, "not found in PATH (needed by the "+typ+" provider)")
 		return
 	}
-	if out, err := e.run("glab", "auth", "status"); err != nil {
-		line("fail", "glab auth", firstLine(out, err)+" (run glab auth login)")
+	if out, err := e.run(cli, "auth", "status"); err != nil {
+		line("fail", cli+" auth", firstLine(out, err)+" (run "+cli+" auth login)")
 		return
 	}
-	line("ok", "glab", "logged in")
+	line("ok", cli, "logged in")
 }
 
 // checkViews compiles the filters the TUI would use: config views with their :filter overrides,

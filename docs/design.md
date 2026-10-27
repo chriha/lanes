@@ -22,13 +22,15 @@ interactive tmux sessions with one keypress — single or multi-select.
 ## Stack
 
 Go, Bubble Tea (`bubbletea`), Lip Gloss (`lipgloss`), Bubbles (`bubbles`), `BurntSushi/toml`,
-`expr-lang/expr` for filter expressions. tmux is a hard dependency. GitLab via `glab api graphql`
-(reuses existing auth).
+`expr-lang/expr` for filter expressions. tmux is a hard dependency. GitLab via `glab api graphql`,
+GitHub via `gh api graphql` (both reuse existing auth).
 
 ## Concepts
 
-- **Provider** — produces items. Built-in `gitlab`; or `command` provider: any shell command printing a JSON
-  array of items. Items are generic: `{id, title, url, fields{...}}`.
+- **Provider** — produces items. Built-in `gitlab` and `github` (GitHub PRs mapped onto the GitLab MR fields,
+  so filters and badges carry over); `auto`, resolved when the provider is built (start, config reload): `github`
+  for a `github.com` origin, `gitlab` for any other host, so the global default config works in both kinds of
+  repo; or `command` provider: any shell command printing a JSON array of items. Items are generic: `{id, title, url, fields{...}}`.
 - **View** — name + provider + filter expression + columns + optional keymap overrides. Switch views with
   `tab`/`shift-tab`, `1-9`, or `:view <name>`.
 - **Filter** — `expr` expression evaluated client-side over item fields, e.g.
@@ -73,18 +75,17 @@ Go, Bubble Tea (`bubbletea`), Lip Gloss (`lipgloss`), Bubbles (`bubbles`), `Burn
 [settings]
 poll_interval = "30s"
 
-[provider.gitlab]
-type = "gitlab"
-project = "group/project"
+[provider.forge]
+type = "auto"   # github for a github.com origin, else gitlab; or type = "gitlab" / "github"
 
 [[view]]
 name = "review"
-provider = "gitlab"
+provider = "forge"
 filter = '"waiting-for-review" in labels && !draft && !approved_by_me && !open_thread_by_me && author != me'
 
 [[view]]
 name = "mine"
-provider = "gitlab"
+provider = "forge"
 filter = 'author == me && "waiting-for-review" in labels && !approved && !("to-be-deployed" in labels)'
 
 [keymap]
@@ -107,7 +108,7 @@ confirm = "none"
     app/        Name const, paths (config/state/cache dirs)
     config/     TOML load + validation + hot reload
     item/       Item type, fields
-    provider/   Provider iface; gitlab (graphql), command
+    provider/   Provider iface; gitlab, github (graphql), auto (forge from origin), command
     filter/     expr env + helpers (has_label, approved_by_me, …)
     session/    tmux backend, status, claude hooks
     history/    per-item log

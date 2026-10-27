@@ -20,6 +20,9 @@ func TestToItemAndFilter(t *testing.T) {
 	if it.Title != "ABC-12 thing" || it.Fields["ticket"] != "ABC-12" || it.Fields["open_thread_by_me"] != true {
 		t.Fatalf("bad item: %+v", it)
 	}
+	if it.Fields["kind"] != "pr" {
+		t.Errorf("kind = %#v, want \"pr\"", it.Fields["kind"])
+	}
 	for src, want := range map[string]bool{
 		`"waiting-for-review" in labels && author != me`: true,
 		`!open_thread_by_me`:                             false,

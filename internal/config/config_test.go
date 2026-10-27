@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -153,5 +154,53 @@ func TestFirstRunDefaultUsesAutoForge(t *testing.T) {
 		if v.Provider != "forge" {
 			t.Errorf("view %q uses provider %q, want forge", v.Name, v.Provider)
 		}
+	}
+}
+
+func TestActionWhenValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		when    string // TOML line for the action, empty = no when key
+		wantErr bool
+	}{
+		{"absent", "", false},
+		{"valid", `when = 'kind == "ticket" && !blocked'`, false},
+		{"invalid", `when = 'kind ==='`, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+			t.Setenv("HOME", tmp)
+			old, _ := os.Getwd()
+			defer os.Chdir(old)
+			if err := os.Chdir(tmp); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[action.work]
+run = "echo work"
+`+tt.when+`
+`)
+			c, err := Load()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil {
+				if !strings.Contains(err.Error(), `action "work"`) {
+					t.Errorf("error %q does not name the action", err)
+				}
+				return
+			}
+			want := strings.TrimSuffix(strings.TrimPrefix(tt.when, "when = '"), "'")
+			if got := c.Action["work"].When; got != want {
+				t.Errorf("when = %q, want %q", got, want)
+			}
+		})
 	}
 }

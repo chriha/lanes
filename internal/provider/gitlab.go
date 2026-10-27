@@ -280,6 +280,7 @@ func toItem(mr gqlMR, me string, ti *threadInfo) item.Item {
 		Draft:  mr.Draft,
 		Badges: badges,
 		Fields: map[string]any{
+			"kind":              "pr",
 			"me":                me,
 			"labels":            labels,
 			"approved":          mr.Approved || len(approvedBy) > 0,

@@ -11,6 +11,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/chriha/lanes/internal/app"
+	"github.com/chriha/lanes/internal/filter"
 	"github.com/chriha/lanes/internal/item"
 )
 
@@ -50,6 +51,7 @@ type Action struct {
 	Confirm string         `toml:"confirm"` // none (default) | single; multi-item runs always confirm
 	Vars    map[string]any `toml:"vars"`    // available in templates as {{.vars.name}}
 	Refresh bool           `toml:"refresh"` // run type: refetch providers when finished
+	When    string         `toml:"when"`    // expr against the item's fields; the action only runs on matching items (empty = all)
 }
 
 type Config struct {
@@ -165,6 +167,9 @@ func Load() (*Config, error) {
 	for name, a := range c.Action {
 		if strings.Contains(name, "~") || a.Run == "" || (a.Type != "" && a.Type != "session" && a.Type != "run") {
 			return nil, fmt.Errorf("%s: action %q needs a run command, type session|run, and no ~ in its name", p, name)
+		}
+		if _, err := filter.Compile(a.When); err != nil {
+			return nil, fmt.Errorf("%s: action %q: when: %w", p, name, err)
 		}
 	}
 	for key, name := range c.Keymap {

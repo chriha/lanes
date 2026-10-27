@@ -957,12 +957,18 @@ func (m *Model) helpLines() []string {
 	for _, r := range rows {
 		b.WriteString("  " + sKey.Render(fmt.Sprintf("%-18s", r[0])) + sText.Render(r[1]) + "\n")
 	}
-	if len(m.cfg.Keymap) > 0 {
-		b.WriteString("\n" + sTitle.Render(" actions") + sDim.Render("  (run on marked items, or the cursor item)") + "\n\n")
-		keys := make([]string, 0, len(m.cfg.Keymap))
-		for k := range m.cfg.Keymap {
-			keys = append(keys, k)
+	// only the actions whose when matches the cursor item; all of them when the list is empty
+	keys := make([]string, 0, len(m.cfg.Keymap))
+	for k, name := range m.cfg.Keymap {
+		if its := m.items(); m.cursor < len(its) {
+			if match, _, _ := matchWhen(m.cfg.Action[name], its[m.cursor:m.cursor+1]); len(match) == 0 {
+				continue
+			}
 		}
+		keys = append(keys, k)
+	}
+	if len(keys) > 0 {
+		b.WriteString("\n" + sTitle.Render(" actions") + sDim.Render("  (run on marked items, or the cursor item)") + "\n\n")
 		sort.Strings(keys)
 		for _, k := range keys {
 			name := m.cfg.Keymap[k]

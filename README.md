@@ -41,6 +41,7 @@ you what each session is doing (running, working, asking a question, waiting for
   - [Run actions](#run-actions)
   - [Templates](#templates)
   - [Running on many items](#running-on-many-items)
+  - [Restricting actions (`when`)](#restricting-actions-when)
   - [Sessions: jump, close, status](#sessions-jump-close-status)
   - [Claude Code integration](#claude-code-integration)
   - [Notifications](#notifications)
@@ -186,6 +187,7 @@ Useful building blocks:
 
 | Field               | Type        | Meaning                                                                    |
 |---------------------|-------------|----------------------------------------------------------------------------|
+| `kind`              | string      | `pr` for every MR/PR                                                       |
 | `me`                | string      | your GitLab username                                                       |
 | `author`            | string      | MR author                                                                  |
 | `draft`             | bool        | MR is a draft                                                              |
@@ -362,6 +364,7 @@ Every action accepts:
 | `confirm` | `none`    | `single` asks before running even on one item (multi-item runs always ask)          |
 | `vars`    | none      | your own values, available as `{{.vars.name}}`                                       |
 | `refresh` | `false`   | `run` type only: refetch the lists when the command finishes                         |
+| `when`    | none      | [filter expression](#filters); the action runs only on items it matches (see [below](#restricting-actions-when)) |
 
 ### Session actions
 
@@ -428,6 +431,31 @@ Run "review" on 3 items (!1948, !1957, !1961)?  y/enter yes · n/esc no
 ```
 
 Each item gets its own session; items that already have the action running are skipped.
+
+### Restricting actions (`when`)
+
+Every action can run on every item unless you restrict it. `when` takes a [filter expression](#filters),
+evaluated per item against the same fields; the action only runs on items it matches:
+
+```toml
+[action.review]
+run  = 'claude --settings {{.settings}} "/local-code-review {{.url}}"'
+when = 'kind == "pr"'
+
+[action.work]
+run  = 'claude --settings {{.settings}} "/harness:work {{.number}}"'
+when = 'kind == "ticket"'
+```
+
+`kind` is `pr` for items from `gitlab` and `github` (a `command` provider sets it in its fields, if at all).
+
+- A run on marked items starts the action on the matching ones and reports `<action>: skipped N item(s) (when)`.
+  Skipped items stay marked, so you can see what did not run. If no item matches, nothing runs.
+- The multi-item confirm prompt counts only the matching items.
+- `:run <action>` honours `when` like a key does. Built-in keys (`o`, `x`, `enter`, …) work on every item.
+- The help screen (`?`) lists only the actions that match the item under the cursor.
+- An invalid expression fails config load, naming the action. An expression that fails on one item (for example
+  a type mismatch) counts as no match; the error is shown in the footer.
 
 ### Sessions: jump, close, status
 
@@ -645,6 +673,7 @@ cwd     = '<templated dir>'
 confirm = "none"            # or "single"
 vars    = { key = "value" }
 refresh = false
+when    = '<expression>'    # only run on items it matches; empty = every item
 
 [theme]
 accent = "#A78BFA"          # also: ok, warn, bad, info

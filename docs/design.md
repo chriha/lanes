@@ -23,13 +23,15 @@ interactive tmux sessions with one keypress — single or multi-select.
 
 Go, Bubble Tea (`bubbletea`), Lip Gloss (`lipgloss`), Bubbles (`bubbles`), `BurntSushi/toml`,
 `expr-lang/expr` for filter expressions. tmux is a hard dependency. GitLab via `glab api graphql`,
-GitHub via `gh api graphql` (both reuse existing auth).
+GitHub via `gh api graphql` (both reuse existing auth), Linear via its GraphQL API over `net/http` (API key from
+an env var).
 
 ## Concepts
 
 - **Provider** — produces items. Built-in `gitlab` and `github` (GitHub PRs mapped onto the GitLab MR fields,
   so filters and badges carry over); `github-issues` (a repo's open issues as tickets: `kind = "ticket"`,
-  `assignees`, `labels`, `blocked`/`blocked_by` from issue dependencies, `status`, `priority`); `auto`, resolved
+  `assignees`, `labels`, `blocked`/`blocked_by` from issue dependencies, `status`, `priority`); `linear` (a team's
+  open Linear issues with the same ticket fields, `key` instead of `number`); `auto`, resolved
   when the provider is built (start, config reload): `github` for a `github.com` origin, `gitlab` for any other host, so the global default config works in both kinds of
   repo; or `command` provider: any shell command printing a JSON array of items. Items are generic: `{id, title, url, fields{...}}`.
 - **View** — name + provider + filter expression + columns + optional keymap overrides. Switch views with
@@ -42,7 +44,7 @@ GitHub via `gh api graphql` (both reuse existing auth).
   - `confirm`: `none | single | always`. Multi-select always confirms.
   - `when`: optional filter expression evaluated per item (compiled at config load); items that don't match are
     skipped with a notice, and the help screen lists only actions matching the cursor item. Items carry a `kind`
-    field (`pr` from gitlab/github, `ticket` from github-issues) to scope actions by item type.
+    field (`pr` from gitlab/github, `ticket` from github-issues/linear) to scope actions by item type.
 - **Session** — tmux session on dedicated socket (`tmux -L <Name>`), one per (action, item). Never touches the
   user's own tmux server. `remain-on-exit` keeps exit status.
 - **Status** — session: `running | exited(0) | failed(n)`. Claude sessions additionally:
@@ -112,7 +114,7 @@ confirm = "none"
     app/        Name const, paths (config/state/cache dirs)
     config/     TOML load + validation + hot reload
     item/       Item type, fields
-    provider/   Provider iface; gitlab, github + github-issues (graphql), auto (forge from origin), command
+    provider/   Provider iface; gitlab, github + github-issues (graphql), linear (http), auto (forge from origin), command
     filter/     expr env + helpers (has_label, approved_by_me, …)
     session/    tmux backend, status, claude hooks
     history/    per-item log
@@ -144,9 +146,11 @@ confirm = "none"
    verbatim, with its age after 10 minutes).
 9. **Scoped actions and tickets — DONE.** `[action.<name>] when = '<expr>'` restricts an action to the items it
    matches (key, `:run`, help screen); gitlab/github items get `kind = "pr"`, and the `github-issues` provider
-   lists a repo's open issues as `kind = "ticket"` items (ticket field set shared with a future Linear provider).
+   lists a repo's open issues as `kind = "ticket"` items (ticket field set shared with the Linear provider).
+10. **Linear — DONE.** A `linear` provider lists a team's open issues with the same ticket fields, via the Linear
+    GraphQL API over `net/http` (API key from `token_env`, default `LINEAR_API_KEY`; `lanes doctor` checks it is set).
 
 ## Later
 
 Attention key (jump to next session needing input), headless CLI (`lanes run`, `lanes ls --json`; `lanes status` for status bars exists), more
-providers (Linear).
+providers.

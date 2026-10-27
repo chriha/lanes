@@ -33,6 +33,7 @@ func TestDoctor(t *testing.T) {
 				}
 				return "Logged in to gitlab.com as me\n", nil
 			},
+			getenv:    func(string) string { return "" },
 			load:      func() (*config.Config, error) { return cfg(), nil },
 			overrides: func() (*config.Overrides, error) { return &config.Overrides{Filters: map[string]string{}}, nil },
 			dirs:      []namedDir{{"state dir", filepath.Join(dir, "state")}, {"cache dir", filepath.Join(dir, "cache")}},
@@ -129,6 +130,29 @@ func TestDoctor(t *testing.T) {
 			edit: func(e *doctorEnv) {
 				e.lookPath = missing("glab")
 				e.load = withProvider(config.Provider{Type: "github-issues"})
+			}},
+		{name: "linear provider with the token set", code: 0, want: []string{"ok    provider gitlab: LINEAR_API_KEY is set"},
+			avoid: []string{"fail", "warn", "lin_api_secret"},
+			edit: func(e *doctorEnv) {
+				e.load = withProvider(config.Provider{Type: "linear", Team: "ENG"})
+				e.getenv = func(k string) string {
+					if k == "LINEAR_API_KEY" {
+						return "lin_api_secret"
+					}
+					return ""
+				}
+			}},
+		{name: "linear provider without the token", code: 1, want: []string{"fail  provider gitlab: LINEAR_API_KEY is not set"},
+			edit: func(e *doctorEnv) { e.load = withProvider(config.Provider{Type: "linear", Team: "ENG"}) }},
+		{name: "linear provider with a custom token_env", code: 1, want: []string{"fail  provider gitlab: MY_KEY is not set"},
+			edit: func(e *doctorEnv) {
+				e.load = withProvider(config.Provider{Type: "linear", Team: "ENG", TokenEnv: "MY_KEY"})
+				e.getenv = func(k string) string {
+					if k == "LINEAR_API_KEY" {
+						return "lin_api_secret"
+					}
+					return ""
+				}
 			}},
 		{name: "auto on a github origin checks gh", code: 0, want: []string{"ok    gh: logged in", "ok    glab: skipped"},
 			avoid: []string{"fail", "warn"},

@@ -18,6 +18,7 @@ import (
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/filter"
 	"github.com/chriha/lanes/internal/item"
+	"github.com/chriha/lanes/internal/notes"
 	"github.com/chriha/lanes/internal/provider"
 	"github.com/chriha/lanes/internal/session"
 )
@@ -87,6 +88,7 @@ type Model struct {
 	sessCursor int    // cursor of the sessions screen
 	lastAttn   string // session the n key jumped to last
 	ov         *config.Overrides
+	notes      notes.Store
 	preview_   bool
 
 	width, height int
@@ -113,6 +115,9 @@ func New(cfg *config.Config) *Model {
 	}
 	if m.sess, err = session.NewManager(); err != nil {
 		m.notice = strings.TrimSpace(m.notice + " " + err.Error())
+	}
+	if m.notes, err = notes.Load(); err != nil {
+		m.notice = strings.TrimSpace(m.notice + " notes: " + err.Error())
 	}
 	m.settings, _ = session.SettingsFile()
 	m.sessByItem = map[string][]session.Info{}
@@ -180,6 +185,7 @@ func (m *Model) rebuild() {
 			continue
 		}
 		for _, it := range m.data[v.cfg.Provider] {
+			it = m.withNote(it)
 			ok, err := v.filter.Match(it.Env())
 			if err != nil {
 				v.err = err
@@ -337,6 +343,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.pollSessions()
 	case editorDone:
 		return m, m.reload()
+	case noteEdited:
+		if msg.err != nil {
+			m.notice = "note: " + msg.err.Error()
+			return m, nil
+		}
+		m.setNote(msg.id, msg.text)
 	case pollNow:
 		return m, m.pollSessions()
 	case tea.KeyMsg:
@@ -379,7 +391,7 @@ func (m *Model) onTick() tea.Cmd {
 }
 
 // builtinKeys cannot be rebound through [keymap].
-const builtinKeys = "jkgGhlVqRoixpnFS/:? "
+const builtinKeys = "jkgGhlVqRoixpnNFS/:? "
 
 // reload re-reads the config (also triggered by saving the file) and refetches, so edits apply live.
 func (m *Model) reload() tea.Cmd {
@@ -509,6 +521,10 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "i":
 		m.showHistory()
+	case "N":
+		if n > 0 {
+			return m, m.editNote(m.items()[m.cursor].ID)
+		}
 	case "S":
 		m.openSessions()
 	case "n":
@@ -735,7 +751,11 @@ func (m *Model) row(it item.Item, selected bool) string {
 		mark = st(sMark).Render("● ")
 	}
 	var badges []string
-	all := append([]item.Badge{}, it.Badges...)
+	var all []item.Badge
+	if m.notes.Get(it.ID) != "" {
+		all = append(all, item.Badge{Text: "✎", Kind: "dim"})
+	}
+	all = append(all, it.Badges...)
 	for i, ss := range m.sessionsOf(it) {
 		if i < 3 {
 			all = append(all, ss.Badge())
@@ -816,6 +836,7 @@ func (m *Model) helpLines() []string {
 		{"enter", "jump into the item's newest session"},
 		{"x", "close sessions of marked items / cursor item (confirms if running)"},
 		{"i", "item history"},
+		{"N", "edit the item's note in $EDITOR (save empty to delete)"},
 		{"n", "jump into the next session that is asking or waiting"},
 		{"S", "sessions: every session, also of items no longer listed (enter jump, x close)"},
 		{"p", "toggle preview pane"},
@@ -855,6 +876,7 @@ func (m *Model) helpLines() []string {
 		{":filter [expr|reset]", "set / reset this view's filter"},
 		{":newview <name> <expr>", "create a view (same provider as the current one)"},
 		{":delview <name>", "delete a view created with :newview"},
+		{":note [text]", "set the item's note to a line of text / clear it"},
 		{":run <action>", "run an action by name"},
 		{":sessions", "list every session (same as S)"},
 		{":refresh  :reload  :edit  :config  :quit", ""},
@@ -867,7 +889,7 @@ func (m *Model) helpLines() []string {
 	} else {
 		b.WriteString(sDim.Render("  project config  none (create "+config.ProjectFile+" in the project, :edit project)") + "\n")
 	}
-	b.WriteString(sDim.Render("  state           "+app.StateDir()+"  (history, views, sessions)") + "\n")
+	b.WriteString(sDim.Render("  state           "+app.StateDir()+"  (history, views, notes, sessions)") + "\n")
 	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 }
 

@@ -86,6 +86,7 @@ look at a list, press a key, and the work starts in the background in a session 
   shown in the footer.
 - **In-app filter editing** — change a view's filter, or create/delete views, without leaving the UI.
 - **Item history** — per-item log of which actions ran, when and how they ended.
+- **Notes** — your own note per item (`N`), shown in every view, usable in filters and templates.
 - **Preview pane** — details of the selected item, its sessions and last run.
 - **Notifications** — desktop notification when a session needs you or ends.
 - **Global + project config** — one config for you, optional `.lanes.toml` per project that overrides only what
@@ -176,8 +177,8 @@ Useful building blocks:
 | `len(reviewers) >= 2`          | list length                                |
 | `open_threads > 0`             | numbers                                    |
 
-**Fields** are the item's own (`id`, `title`, `url`, `author`, `draft`) plus whatever the provider adds. For
-GitLab:
+**Fields** are the item's own (`id`, `title`, `url`, `author`, `draft`), your [note](#preview-pane-and-item-history)
+(`note`, empty when there is none, e.g. `note != ""`) plus whatever the provider adds. For GitLab:
 
 | Field               | Type        | Meaning                                                                    |
 |---------------------|-------------|----------------------------------------------------------------------------|
@@ -247,6 +248,7 @@ An unknown field name is not an error (fields come from the provider); an empty 
 | `o`                 | open the item's URL in the browser                 |
 | `x`                 | close the item's sessions (asks if any is still running) |
 | `i`                 | show the item's history                            |
+| `N`                 | edit the item's note in `$VISUAL` / `$EDITOR` (save it empty to delete it) |
 | `n`                 | jump into the next session that is asking or waiting (any view) |
 | `S`                 | sessions screen: every session, also of items no longer listed |
 | `p`                 | toggle the preview pane                            |
@@ -277,6 +279,8 @@ narrows the view; it does not change its filter.
 | `:filter reset`           | drop the in-app override and use the config's filter again            |
 | `:newview <name> <expr>`  | create a view on the current view's provider                          |
 | `:delview <name>`         | delete a view created with `:newview`                                 |
+| `:note <text>`            | set the selected item's note to one line of text                      |
+| `:note`                   | delete the selected item's note                                       |
 | `:run <action>`           | run an action by name, even if it has no key                          |
 | `:sessions`               | open the sessions screen (same as `S`)                                |
 | `:refresh`                | refetch now                                                           |
@@ -293,6 +297,7 @@ sessions.
 
 | Badge          | Meaning                                                       |
 |----------------|---------------------------------------------------------------|
+| `✎`            | you left a [note](#preview-pane-and-item-history) on the item |
 | `draft`        | MR is a draft                                                 |
 | `✓ ci` `✗ ci` `◌ ci` | pipeline passed / failed / running or pending           |
 | `↓ behind`     | source branch is behind its target branch                     |
@@ -310,12 +315,21 @@ The top right of the screen summarizes live sessions (`◐ 2  ? 1  ● 1`) and w
 
 ### Preview pane and item history
 
-`p` toggles a pane under the list with the selected item's title, URL, author, the provider's fields (branch,
-labels, reviewers, CI, …), its sessions and its last run. Set `preview = true` under `[settings]` to start with
+`p` toggles a pane under the list with the selected item's title, URL, author, your note, the provider's fields
+(branch, labels, reviewers, CI, …), its sessions and its last run. Set `preview = true` under `[settings]` to start with
 it open.
 
 `i` shows the item's **history**: every action started on it, and how it ended (`finished`, `failed (exit n)`,
 `killed`). History is stored per project and survives restarts.
+
+`N` opens the item's **note** in `$VISUAL` / `$EDITOR` (as `:edit` does): keep your own context there, e.g.
+"waiting on backend". Saving stores it, saving an empty file deletes it, quitting the editor with an error (vim's
+`:cq`) leaves it unchanged; `:note <text>` sets a one-line note without the editor. A note belongs to the item, not
+to a view: every view that lists the item shows `✎` on its row, and the preview shows the full text. Filters and
+action templates see it as `note` (`note != ""`, `{{.note}}`); a provider field called `note` takes precedence
+(the preview then labels yours `my note`).
+Notes are stored per project and kept when the item leaves the list. A corrupt notes file is reported in the
+footer and left alone until you save a note, which moves it to `notes.json.bak`.
 
 ## Actions
 
@@ -379,6 +393,7 @@ afterwards, so the MR moves out of your `drafts` view.
 |---------------------------------|-----------------------------------------------------------------|
 | `{{.id}}` `{{.title}}` `{{.url}}` `{{.author}}` | the item's own fields                           |
 | `{{.iid}}` `{{.branch}}` `{{.ticket}}` `{{.me}}` … | provider fields (see [Filters](#filters))   |
+| `{{.note}}`                     | your note on the item (empty when there is none)                |
 | `{{.vars.name}}`                | the action's `vars`                                             |
 | `{{.settings}}`                 | path to a Claude settings file that reports session status      |
 | `{{.session}}` `{{.action}}`    | the session / action name                                       |
@@ -584,6 +599,7 @@ color under `[theme]`. Changes apply live.
 | Project config                         | `.lanes.toml` in the project (or a parent)              |
 | In-app views and filter edits          | `~/.local/state/lanes/<project>/views.json`             |
 | Item history                           | `~/.local/state/lanes/<project>/history.jsonl`          |
+| Item notes                             | `~/.local/state/lanes/<project>/notes.json`             |
 | Session status files, tmux config      | `~/.local/state/lanes/<project>/`                       |
 | Cached lists                           | `~/.cache/lanes/<project>/`                             |
 

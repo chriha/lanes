@@ -49,7 +49,21 @@ func (m *Model) preview() string {
 			sort.Strings(keys)
 		}
 		lines = append(lines, " "+sDim.Render(fmt.Sprintf("%-12s", "author"))+sText.Render(cur.Author))
+		note := m.notes.Get(cur.ID)
+		if note != "" {
+			label := "note"
+			if v, ok := cur.Fields["note"]; ok && v != any(note) {
+				label = "my note" // the provider's note field is listed below under "note"
+			}
+			for _, l := range strings.Split(note, "\n") {
+				lines = append(lines, " "+sDim.Render(fmt.Sprintf("%-12s", label))+sText.Render(l))
+				label = ""
+			}
+		}
 		for _, k := range keys {
+			if k == "note" && cur.Fields[k] == any(note) {
+				continue // shown above
+			}
 			if v := fmtVal(cur.Fields[k]); v != "" && v != "[]" && v != "0" {
 				lines = append(lines, " "+sDim.Render(fmt.Sprintf("%-12s", k))+sText.Render(v))
 			}

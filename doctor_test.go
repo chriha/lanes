@@ -144,6 +144,11 @@ func TestDoctor(t *testing.T) {
 			}},
 		{name: "linear provider without the token", code: 1, want: []string{"fail  provider gitlab: LINEAR_API_KEY is not set"},
 			edit: func(e *doctorEnv) { e.load = withProvider(config.Provider{Type: "linear", Team: "ENG"}) }},
+		{name: "linear provider without a team", code: 1, want: []string{"fail  provider gitlab: team is not set"},
+			edit: func(e *doctorEnv) {
+				e.load = withProvider(config.Provider{Type: "linear"})
+				e.getenv = func(string) string { return "lin_api_secret" }
+			}},
 		{name: "linear provider with a custom token_env", code: 1, want: []string{"fail  provider gitlab: MY_KEY is not set"},
 			edit: func(e *doctorEnv) {
 				e.load = withProvider(config.Provider{Type: "linear", Team: "ENG", TokenEnv: "MY_KEY"})

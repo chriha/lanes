@@ -136,7 +136,7 @@ func checkForgeCLIs(e doctorEnv, cfg *config.Config, line func(status, name, msg
 	checkCLI(e, used["github"] || used["github-issues"], "gh", "github", line)
 }
 
-// checkTokens reports whether the API key env var of each linear provider is set; it never prints the key.
+// checkTokens reports whether each linear provider has a team and its API key env var is set; it never prints the key.
 func checkTokens(e doctorEnv, cfg *config.Config, line func(status, name, msg string)) {
 	names := make([]string, 0, len(cfg.Provider))
 	for n := range cfg.Provider {
@@ -149,7 +149,9 @@ func checkTokens(e doctorEnv, cfg *config.Config, line func(status, name, msg st
 			continue
 		}
 		env := (&provider.Linear{TokenEnv: p.TokenEnv}).TokenVar()
-		if e.getenv(env) == "" {
+		if p.Team == "" {
+			line("fail", "provider "+n, "team is not set (provider.team, e.g. \"ENG\")")
+		} else if e.getenv(env) == "" {
 			line("fail", "provider "+n, env+" is not set (a Linear API key)")
 		} else {
 			line("ok", "provider "+n, env+" is set")

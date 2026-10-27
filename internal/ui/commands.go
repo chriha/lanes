@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/filter"
+	"github.com/chriha/lanes/internal/provider"
 )
 
 type editorDone struct{}
@@ -37,9 +37,16 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 		path := config.Path()
 		if arg == "project" {
 			if path = config.ProjectPath(); path == "" {
+				detect := m.originForge
+				if detect == nil {
+					detect = provider.OriginForge
+				}
+				typ, repo, _ := detect() // no origin: the template comments the provider out
 				wd, _ := os.Getwd()
-				path = filepath.Join(wd, config.ProjectFile)
-				_ = os.WriteFile(path, []byte("# project config: overlays the global config (README: Project config)\n"), 0o644)
+				var err error
+				if path, err = config.InitProject(wd, typ, repo); err != nil {
+					m.notice = err.Error()
+				}
 			}
 		}
 		cmd := exec.Command("/bin/sh", "-c", editor()+" "+shq(path))

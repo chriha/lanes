@@ -140,6 +140,15 @@ Press `?` at any time for the built-in help (scroll with `j`/`k`, close with `q`
 Then make it yours: press `:edit` (or edit the file in your editor — changes apply immediately), define the
 filters for the lists you care about and bind keys to the commands you run all the time.
 
+Besides the TUI, `lanes` has these commands:
+
+| Command          | Does                                                                                      |
+|------------------|-------------------------------------------------------------------------------------------|
+| `lanes init`     | write a commented `.lanes.toml` to the current directory (see [Global and project config](#global-and-project-config)) |
+| `lanes doctor`   | check tmux, the forge CLIs, the config and the state dirs (see [Troubleshooting](#troubleshooting)) |
+| `lanes status`   | print the current project's sessions that need input (see [tmux and lanes](#tmux-and-lanes)) |
+| `lanes --version`| print the version                                                                         |
+
 ## Using lanes
 
 ### Views
@@ -683,7 +692,11 @@ and templates.
   start. Put *your* views, actions and keys here.
 - **Project** config: `.lanes.toml` in the project directory — `lanes` uses the nearest one in the working
   directory or any parent (the search stops at your home directory). Use it for project-specific settings such
-  as the GitLab project, an extra view, or a project-specific action. Create it with `:edit project`.
+  as the GitLab project, an extra view, or a project-specific action. Create it with `lanes init` or
+  `:edit project` (which also opens it in your editor). Both write the same file to the current directory:
+  every option, explained and commented out, except a `[provider.forge]` whose `type` and `project` are taken
+  from the git `origin` (it replaces the global `forge` provider the default views use; with no `origin` it is
+  commented out too). `lanes init` refuses to overwrite an existing `.lanes.toml`.
 
 The project config **overlays** the global one — it does not replace it. You only write what differs:
 

@@ -396,3 +396,44 @@ func TestPrune(t *testing.T) {
 		})
 	}
 }
+
+func TestUsage(t *testing.T) {
+	tests := []struct {
+		name, dir, file, want string
+		wantAt                int64
+	}{
+		{"no dir configured", "", `{"text":"5h 23%","at":100}`, "", 0},
+		{"reads text and time", "DIR", `{"text":"5h 23% · wk 30%","at":100}`, "5h 23% · wk 30%", 100},
+		{"tilde is the home dir", "~/.claude-personal", `{"text":"5h 1%","at":5}`, "5h 1%", 5},
+		{"missing file", "DIR", "", "", 0},
+		{"empty text", "DIR", `{"text":null,"at":100}`, "", 0},
+		{"broken json", "DIR", `{`, "", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			dir, real := tt.dir, filepath.Join(home, ".claude")
+			if dir == "DIR" {
+				dir = real
+			} else if rest, ok := strings.CutPrefix(dir, "~"); ok {
+				real = home + rest
+			}
+			if tt.file != "" {
+				if err := os.MkdirAll(real, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(real, UsageFile), []byte(tt.file), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			text, at := Usage(dir)
+			if text != tt.want {
+				t.Errorf("text = %q, want %q", text, tt.want)
+			}
+			if tt.want != "" && at.Unix() != tt.wantAt {
+				t.Errorf("at = %d, want %d", at.Unix(), tt.wantAt)
+			}
+		})
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/chriha/lanes/internal/app"
@@ -79,4 +80,31 @@ func SettingsFile() (string, error) {
 		return "", err
 	}
 	return p, os.WriteFile(p, b, 0o644)
+}
+
+// UsageFile is what a Claude Code mod writes into a Claude config dir: the statusline's usage text and when.
+const UsageFile = "usage-line.json"
+
+// Usage reads the usage text written into the Claude config dir (a leading ~ is the home dir). It returns ""
+// when dir is empty or the file is missing or unreadable.
+func Usage(dir string) (string, time.Time) {
+	if dir == "" {
+		return "", time.Time{}
+	}
+	if rest, ok := strings.CutPrefix(dir, "~"); ok {
+		home, _ := os.UserHomeDir()
+		dir = home + rest
+	}
+	b, err := os.ReadFile(filepath.Join(dir, UsageFile))
+	if err != nil {
+		return "", time.Time{}
+	}
+	var u struct {
+		Text string `json:"text"`
+		At   int64  `json:"at"`
+	}
+	if json.Unmarshal(b, &u) != nil || u.Text == "" {
+		return "", time.Time{}
+	}
+	return u.Text, time.Unix(u.At, 0)
 }

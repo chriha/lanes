@@ -3,9 +3,12 @@ package ui
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chriha/lanes/internal/item"
 )
@@ -232,4 +235,48 @@ func TestNavigationClamps(t *testing.T) {
 			t.Errorf("cursor = %d, want 0", m.cursor)
 		}
 	})
+}
+
+func TestUsageText(t *testing.T) {
+	now := time.Unix(10_000, 0)
+	tests := []struct {
+		name string
+		u    usageMsg
+		want string
+	}{
+		{"nothing configured", usageMsg{}, ""},
+		{"fresh is shown as is", usageMsg{"5h 23%", now.Add(-time.Minute)}, "claude usage: 5h 23%"},
+		{"stale carries its age", usageMsg{"5h 23%", now.Add(-12 * time.Minute)}, "claude usage: 5h 23% (12m ago)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &Model{usage: tt.u}
+			if got := m.usageText(now); got != tt.want {
+				t.Errorf("usageText = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFooterUsage(t *testing.T) {
+	tests := []struct {
+		name   string
+		notice string
+		want   bool
+	}{
+		{"shown at the left of the footer", "", true},
+		{"a notice takes its place", "config reloaded", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newBackoffModel(t)
+			m.width = 160
+			m.notice = tt.notice
+			m.Update(usageMsg{"5h 23% · wk 30%", time.Now()})
+			f := ansi.Strip(m.footer())
+			if got := strings.HasPrefix(f, " claude usage: 5h 23% · wk 30%"); got != tt.want {
+				t.Errorf("footer = %q, usage at start = %v, want %v", f, got, tt.want)
+			}
+		})
+	}
 }

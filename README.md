@@ -454,6 +454,22 @@ state for the session:
 The settings are merged with your own Claude settings (via `--settings`), they don't replace them. Commands
 without the flag simply show `▶` while running.
 
+#### Usage in the footer
+
+With `claude_dir` under `[settings]`, the left of the footer shows that Claude profile's usage, e.g.
+`claude usage: 5h 23% · wk 30% · budget +4% · reset 15:00` (a notice, the mark count or an active search take its
+place while shown). lanes reads it from `<claude_dir>/usage-line.json`, which a Claude
+Code mod writes whenever Claude measures usage:
+
+```json
+{ "text": "5h 23% · wk 30% · budget +4% · reset 15:00", "at": 1761561600 }
+```
+
+lanes shows `text` as is, so it matches your Claude statusline. The file only changes while a Claude
+session of that profile runs; after 10 minutes the text shows its age. Each profile has its own
+dir (e.g. `~/.claude` and `~/.claude-personal` for `CLAUDE_CONFIG_DIR=~/.claude-personal claude`), and a
+project's `.lanes.toml` can point at a different one than the global config. Unset, or no file: nothing is shown.
+
 ### Notifications
 
 `lanes` raises a desktop notification (macOS: `osascript`, Linux: `notify-send` if installed) when a session
@@ -561,6 +577,7 @@ footer shows the error.
 poll_interval = "30s"   # how often lists refresh (minimum 5s)
 preview       = false   # open the preview pane at startup
 no_notify     = false   # disable desktop notifications
+claude_dir    = "~/.claude"   # show this Claude profile's usage in the footer (see Claude Code integration)
 
 [provider.<name>]
 type    = "gitlab"      # or "command"

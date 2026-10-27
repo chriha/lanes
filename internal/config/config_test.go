@@ -25,6 +25,7 @@ func TestProjectOverlay(t *testing.T) {
 [settings]
 poll_interval = "45s"
 preview = true
+claude_dir = "~/.claude"
 [provider.gl]
 type = "gitlab"
 [[view]]
@@ -47,6 +48,7 @@ ok = "#222222"
 	write(t, filepath.Join(tmp, "proj", ProjectFile), `
 [settings]
 preview = false
+claude_dir = "~/.claude-personal"
 [[view]]
 name = "b"
 provider = "gl"
@@ -74,7 +76,7 @@ ok = "#333333"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Settings.PollInterval != "45s" || c.Settings.Preview {
+	if c.Settings.PollInterval != "45s" || c.Settings.Preview || c.Settings.ClaudeDir != "~/.claude-personal" {
 		t.Errorf("settings should merge per field: %+v", c.Settings)
 	}
 	if got := len(c.View); got != 3 || c.View[1].Filter != "draft" || c.View[2].Name != "c" {

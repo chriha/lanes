@@ -51,6 +51,13 @@ type fetchedMsg struct {
 	partial bool // quick result; a full one follows
 }
 type tickMsg time.Time
+type usageMsg struct {
+	text string
+	at   time.Time
+}
+
+// usageStale is the age after which the Claude usage shows how old it is.
+const usageStale = 10 * time.Minute
 
 type Model struct {
 	cfg       *config.Config
@@ -90,6 +97,7 @@ type Model struct {
 	ov         *config.Overrides
 	notes      notes.Store
 	preview_   bool
+	usage      usageMsg // Claude usage from [settings] claude_dir, shown at the left of the footer
 
 	width, height int
 }
@@ -332,7 +340,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.rebuild()
 	case tickMsg:
-		return m, tea.Batch(tick(), m.onTick(), m.pollSessions())
+		return m, tea.Batch(tick(), m.onTick(), m.pollSessions(), m.pollUsage())
+	case usageMsg:
+		m.usage = msg
 	case sessionsMsg:
 		m.onSessions(msg)
 	case doneMsg:
@@ -688,6 +698,26 @@ func (m *Model) header() string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
+func (m *Model) pollUsage() tea.Cmd {
+	dir := m.cfg.Settings.ClaudeDir
+	return func() tea.Msg {
+		text, at := session.Usage(dir)
+		return usageMsg{text, at}
+	}
+}
+
+// usageText is the Claude usage for the footer; once stale it carries its age.
+func (m *Model) usageText(now time.Time) string {
+	if m.usage.text == "" {
+		return ""
+	}
+	text := "claude usage: " + m.usage.text
+	if d := now.Sub(m.usage.at); d > usageStale {
+		text += " (" + age(d) + " ago)"
+	}
+	return text
+}
+
 func (m *Model) freshness() string {
 	name := m.views[m.cur].cfg.Provider
 	switch {
@@ -812,6 +842,8 @@ func (m *Model) footer() string {
 		left = sMark.Render(fmt.Sprintf(" %d marked", len(m.marks)))
 	case m.query != "":
 		left = sDim.Render(" filter: ") + sText.Render(m.query)
+	case m.usage.text != "":
+		left = sDim.Render(" " + m.usageText(time.Now()))
 	}
 	hint := sDim.Render("j/k move · h/l view · space mark · enter jump · x close · p preview · ? help")
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(hint) - 1

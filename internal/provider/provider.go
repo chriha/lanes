@@ -1,4 +1,4 @@
-// Package provider produces items from a source (GitLab, GitHub, arbitrary command).
+// Package provider produces items from a source (GitLab, GitHub, Linear, arbitrary command).
 package provider
 
 import (
@@ -43,6 +43,8 @@ func newProvider(c config.Provider, origin func() (string, error)) (Provider, er
 		return &GitHub{Project: c.Project}, nil
 	case "github-issues":
 		return &GitHubIssues{Project: c.Project}, nil
+	case "linear":
+		return &Linear{Team: c.Team, TokenEnv: c.TokenEnv}, nil
 	case "command":
 		return &Command{Cmd: c.Command}, nil
 	}

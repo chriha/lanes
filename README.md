@@ -49,6 +49,7 @@ you what each session is doing (running, working, asking a question, waiting for
   - [gitlab](#gitlab)
   - [github](#github)
   - [github-issues](#github-issues)
+  - [linear](#linear)
   - [auto](#auto)
   - [command](#command)
 - [Configuration](#configuration)
@@ -104,7 +105,8 @@ look at a list, press a key, and the work starts in the background in a session 
 - [tmux](https://github.com/tmux/tmux) ≥ 3.2 (sessions run in tmux; `lanes` never touches your own tmux server)
 - For the built-in GitLab provider: the [`glab`](https://gitlab.com/gitlab-org/cli) CLI, authenticated
   (`glab auth login`); for the GitHub providers: the [`gh`](https://cli.github.com) CLI, authenticated
-  (`gh auth login`). `lanes` reuses their credentials — it never asks for a token.
+  (`gh auth login`). `lanes` reuses their credentials — it never asks for a token. For the Linear provider: a
+  Linear personal API key in an environment variable.
 - Go ≥ 1.23 only if you build from source
 
 ## Install
@@ -448,7 +450,7 @@ run  = 'claude --settings {{.settings}} "/harness:work {{.number}}"'
 when = 'kind == "ticket"'
 ```
 
-`kind` is `pr` for items from `gitlab` and `github` and `ticket` for items from `github-issues` (a `command`
+`kind` is `pr` for items from `gitlab` and `github` and `ticket` for items from `github-issues` and `linear` (a `command`
 provider sets it in its fields, if at all).
 
 - A run on marked items starts the action on the matching ones and reports `<action>: skipped N item(s) (when)`.
@@ -598,6 +600,35 @@ run  = 'claude --settings {{.settings}} "/harness:work {{.number}}"'
 when = 'kind == "ticket"'
 ```
 
+### linear
+
+```toml
+[provider.linear]
+type = "linear"
+team = "ENG"                    # required: the team key (the prefix of its issue identifiers)
+# token_env = "LINEAR_API_KEY"  # env var holding your Linear API key (default LINEAR_API_KEY)
+```
+
+Lists the team's **open issues** (state not completed or canceled) via the Linear GraphQL API, the 100 most
+recently updated. The API key is read from the environment on every fetch and never written anywhere;
+`lanes doctor` reports whether the variable is set. The ID is the identifier (`ENG-12`), `author` is the
+creator, and badges show `blocked` and the workflow state.
+
+Items carry the same [ticket fields](#github-issues) as `github-issues`, so views and actions work with either
+tracker. The differences:
+
+| Field        | Type     | Meaning on Linear                                                    |
+|--------------|----------|----------------------------------------------------------------------|
+| `key`        | string   | identifier, e.g. `ENG-12` (instead of `number`)                      |
+| `status`     | string   | workflow state name, lower-cased, e.g. `todo`, `in progress`         |
+| `assignees`  | []string | the assignee's display name, or empty                                |
+| `blocked`    | bool     | an issue that blocks it is not completed or canceled                 |
+| `blocked_by` | []string | those blocking issues, e.g. `["ENG-7"]`                              |
+| `priority`   | number   | `0` none, `1` urgent, `2` high, `3` medium, `4` low                  |
+| `me`         | string   | your display name                                                    |
+
+For a `work` action, pass `{{.key}}` instead of `{{.number}}`.
+
 ### auto
 
 ```toml
@@ -697,9 +728,11 @@ no_notify     = false   # disable desktop notifications
 claude_dir    = "~/.claude"   # show this Claude profile's usage in the footer (see Claude Code integration)
 
 [provider.<name>]
-type    = "gitlab"      # or "github", "github-issues", "auto" (github for a github.com origin, else gitlab), "command"
+type    = "gitlab"      # or "github", "github-issues", "linear", "auto" (github for a github.com origin, else gitlab), "command"
 project = "group/project"   # gitlab/github/github-issues (owner/repo); default: detected from git origin
 command = "..."             # command provider
+team      = "ENG"             # linear: team key (required)
+token_env = "LINEAR_API_KEY"  # linear: env var holding the API key
 
 [[view]]
 name     = "review"

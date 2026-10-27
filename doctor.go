@@ -26,6 +26,7 @@ type namedDir struct{ name, path string }
 type doctorEnv struct {
 	lookPath  func(string) (string, error)
 	run       func(name string, args ...string) (string, error) // combined output
+	getenv    func(string) string
 	load      func() (*config.Config, error)
 	overrides func() (*config.Overrides, error)
 	dirs      []namedDir
@@ -34,6 +35,7 @@ type doctorEnv struct {
 func realDoctorEnv() doctorEnv {
 	return doctorEnv{
 		lookPath: exec.LookPath,
+		getenv:   os.Getenv,
 		run: func(name string, args ...string) (string, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
@@ -76,6 +78,7 @@ func runDoctor(w io.Writer, e doctorEnv) int {
 	} else {
 		line("ok", "config", "loaded")
 		checkForgeCLIs(e, cfg, line)
+		checkTokens(e, cfg, line)
 		ov, err := e.overrides()
 		if err != nil {
 			line("fail", "overrides", err.Error())
@@ -131,6 +134,29 @@ func checkForgeCLIs(e doctorEnv, cfg *config.Config, line func(status, name, msg
 	}
 	checkCLI(e, used["gitlab"], "glab", "gitlab", line)
 	checkCLI(e, used["github"] || used["github-issues"], "gh", "github", line)
+}
+
+// checkTokens reports whether each linear provider has a team and its API key env var is set; it never prints the key.
+func checkTokens(e doctorEnv, cfg *config.Config, line func(status, name, msg string)) {
+	names := make([]string, 0, len(cfg.Provider))
+	for n := range cfg.Provider {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		p := cfg.Provider[n]
+		if p.Type != "linear" {
+			continue
+		}
+		env := (&provider.Linear{TokenEnv: p.TokenEnv}).TokenVar()
+		if p.Team == "" {
+			line("fail", "provider "+n, "team is not set (provider.team, e.g. \"ENG\")")
+		} else if e.getenv(env) == "" {
+			line("fail", "provider "+n, env+" is not set (a Linear API key)")
+		} else {
+			line("ok", "provider "+n, env+" is set")
+		}
+	}
 }
 
 func checkCLI(e doctorEnv, needed bool, cli, typ string, line func(status, name, msg string)) {

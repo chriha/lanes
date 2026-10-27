@@ -32,9 +32,11 @@ type Theme struct {
 }
 
 type Provider struct {
-	Type    string `toml:"type"`    // gitlab | github | github-issues | auto (github for a github.com origin, else gitlab) | command
-	Project string `toml:"project"` // gitlab: group/project, github: owner/repo; empty = detect from git remote
-	Command string `toml:"command"` // command: shell command printing a JSON array of items
+	Type     string `toml:"type"`      // gitlab | github | github-issues | linear | auto (github for a github.com origin, else gitlab) | command
+	Project  string `toml:"project"`   // gitlab: group/project, github: owner/repo; empty = detect from git remote
+	Command  string `toml:"command"`   // command: shell command printing a JSON array of items
+	Team     string `toml:"team"`      // linear: team key, e.g. ENG (required)
+	TokenEnv string `toml:"token_env"` // linear: env var holding the API key; empty = LINEAR_API_KEY
 }
 
 type View struct {

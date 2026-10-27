@@ -450,6 +450,7 @@ state for the session:
 | notification (permission, question)  | `? asking`        |
 | turn finished                        | `● waiting`       |
 | idle reminder                        | `● waiting`       |
+| Claude exited (`SessionEnd`)         | `▶` running       |
 
 The settings are merged with your own Claude settings (via `--settings`), they don't replace them. Commands
 without the flag simply show `▶` while running.
@@ -637,7 +638,8 @@ two projects never share history, views or sessions. The `$XDG_*` variables are 
   list of sessions is simply asked from tmux once per second. This also means sessions survive quitting or
   crashing `lanes`.
 - **Claude status** is written by hooks to a small file per session in the state directory; `lanes` reads those
-  files together with the tmux pane state.
+  files together with the tmux pane state. The state is ignored once only a shell is left in the pane (Claude
+  quit or crashed), so the session counts as running again.
 - **Config reload** compares the modification time of the global and project files every second.
 
 ## tmux and lanes

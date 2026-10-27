@@ -69,6 +69,9 @@ type Model struct {
 	provErr   map[string]error
 	fails     map[string]int       // consecutive failed fetches per provider
 	retryAt   map[string]time.Time // no refetch before this
+	// refetchAfter marks providers whose in-flight fetch started before a refresh run ended: when it lands, fetch again
+	refetchAfter map[string]bool
+	busy         map[string]busyState // by session.Key of the item
 
 	views  []*view
 	cur    int
@@ -104,16 +107,18 @@ type Model struct {
 
 func New(cfg *config.Config) *Model {
 	m := &Model{
-		data:      map[string][]item.Item{},
-		fetchedAt: map[string]time.Time{},
-		loading:   map[string]bool{},
-		provErr:   map[string]error{},
-		fails:     map[string]int{},
-		retryAt:   map[string]time.Time{},
-		marks:     map[string]bool{},
-		search:    textinput.New(),
-		cmdline:   textinput.New(),
-		preview_:  cfg.Settings.Preview,
+		data:         map[string][]item.Item{},
+		fetchedAt:    map[string]time.Time{},
+		loading:      map[string]bool{},
+		provErr:      map[string]error{},
+		fails:        map[string]int{},
+		retryAt:      map[string]time.Time{},
+		busy:         map[string]busyState{},
+		refetchAfter: map[string]bool{},
+		marks:        map[string]bool{},
+		search:       textinput.New(),
+		cmdline:      textinput.New(),
+		preview_:     cfg.Settings.Preview,
 	}
 	m.search.Prompt, m.cmdline.Prompt = "/", ":"
 	m.search.PromptStyle, m.cmdline.PromptStyle = sKey, sKey

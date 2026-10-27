@@ -32,6 +32,15 @@ type sessionsMsg struct {
 type doneMsg struct {
 	notice  string
 	refresh bool
+	keys    []string // items the action ran on; their busy lock ends here (or after the refetch)
+	ok      bool     // every job succeeded
+}
+
+// busyState locks an item while an action on it starts or runs, and after a successful refresh run
+// until every provider in refetch has landed a fetch that started after the run.
+type busyState struct {
+	action  string
+	refetch map[string]bool
 }
 type pollNow struct{}
 

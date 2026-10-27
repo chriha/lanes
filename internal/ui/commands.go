@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"sort"
@@ -44,8 +46,9 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 				typ, repo, _ := detect() // no origin: the template comments the provider out
 				wd, _ := os.Getwd()
 				var err error
-				if path, err = config.InitProject(wd, typ, repo); err != nil {
-					m.notice = err.Error()
+				if path, err = config.InitProject(wd, typ, repo); err != nil && !errors.Is(err, fs.ErrExist) {
+					m.notice = err.Error() // nothing to open
+					return m, nil
 				}
 			}
 		}

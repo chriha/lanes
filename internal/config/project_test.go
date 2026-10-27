@@ -99,7 +99,10 @@ func TestProjectTemplateDocumentsEveryField(t *testing.T) {
 	for _, s := range []any{Settings{}, Provider{}, View{}, Action{}, Theme{}} {
 		typ := reflect.TypeOf(s)
 		for i := 0; i < typ.NumField(); i++ {
-			tag := typ.Field(i).Tag.Get("toml")
+			tag, _, _ := strings.Cut(typ.Field(i).Tag.Get("toml"), ",")
+			if tag == "" || tag == "-" {
+				continue
+			}
 			if !regexp.MustCompile(`(?m)^#? ?` + regexp.QuoteMeta(tag) + ` +=`).MatchString(tmpl) {
 				t.Errorf("%s.%s (toml %q) is not in the project template", typ.Name(), typ.Field(i).Name, tag)
 			}

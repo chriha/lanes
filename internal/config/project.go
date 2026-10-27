@@ -17,8 +17,8 @@ func ProjectTemplate(forgeType, repo string) string {
 	var b strings.Builder
 	b.WriteString(projectHead)
 	if forgeType == "" {
-		b.WriteString(`# The git origin could not be detected (no "origin" remote), so this block is commented out and the
-# global "forge" provider stays in use. Uncomment it and set type and project by hand:
+		b.WriteString(`# The git origin could not be detected (not a git repository, or no "origin" remote), so this block is
+# commented out and the global "forge" provider stays in use. Uncomment it and set type and project:
 # [provider.forge]
 # type = "github"
 # project = "owner/repo"

@@ -119,6 +119,17 @@ func TestDoctor(t *testing.T) {
 				e.lookPath = missing("gh")
 				e.load = withProvider(config.Provider{Type: "github"})
 			}},
+		{name: "github-issues provider checks gh, not glab", code: 1, want: []string{"fail  gh", "ok    glab: skipped"},
+			edit: func(e *doctorEnv) {
+				e.lookPath = missing("gh")
+				e.load = withProvider(config.Provider{Type: "github-issues"})
+			}},
+		{name: "github-issues provider with gh logged in", code: 0, want: []string{"ok    gh: logged in"},
+			avoid: []string{"fail", "warn"},
+			edit: func(e *doctorEnv) {
+				e.lookPath = missing("glab")
+				e.load = withProvider(config.Provider{Type: "github-issues"})
+			}},
 		{name: "auto on a github origin checks gh", code: 0, want: []string{"ok    gh: logged in", "ok    glab: skipped"},
 			avoid: []string{"fail", "warn"},
 			edit: func(e *doctorEnv) {

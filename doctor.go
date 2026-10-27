@@ -130,7 +130,7 @@ func checkForgeCLIs(e doctorEnv, cfg *config.Config, line func(status, name, msg
 		used[typ] = true
 	}
 	checkCLI(e, used["gitlab"], "glab", "gitlab", line)
-	checkCLI(e, used["github"], "gh", "github", line)
+	checkCLI(e, used["github"] || used["github-issues"], "gh", "github", line)
 }
 
 func checkCLI(e doctorEnv, needed bool, cli, typ string, line func(status, name, msg string)) {

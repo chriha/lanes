@@ -28,8 +28,9 @@ GitHub via `gh api graphql` (both reuse existing auth).
 ## Concepts
 
 - **Provider** — produces items. Built-in `gitlab` and `github` (GitHub PRs mapped onto the GitLab MR fields,
-  so filters and badges carry over); `auto`, resolved when the provider is built (start, config reload): `github`
-  for a `github.com` origin, `gitlab` for any other host, so the global default config works in both kinds of
+  so filters and badges carry over); `github-issues` (a repo's open issues as tickets: `kind = "ticket"`,
+  `assignees`, `labels`, `blocked`/`blocked_by` from issue dependencies, `status`, `priority`); `auto`, resolved
+  when the provider is built (start, config reload): `github` for a `github.com` origin, `gitlab` for any other host, so the global default config works in both kinds of
   repo; or `command` provider: any shell command printing a JSON array of items. Items are generic: `{id, title, url, fields{...}}`.
 - **View** — name + provider + filter expression + columns + optional keymap overrides. Switch views with
   `tab`/`shift-tab`, `1-9`, or `:view <name>`.
@@ -41,7 +42,7 @@ GitHub via `gh api graphql` (both reuse existing auth).
   - `confirm`: `none | single | always`. Multi-select always confirms.
   - `when`: optional filter expression evaluated per item (compiled at config load); items that don't match are
     skipped with a notice, and the help screen lists only actions matching the cursor item. Items carry a `kind`
-    field (`pr` from gitlab/github) to scope actions by item type.
+    field (`pr` from gitlab/github, `ticket` from github-issues) to scope actions by item type.
 - **Session** — tmux session on dedicated socket (`tmux -L <Name>`), one per (action, item). Never touches the
   user's own tmux server. `remain-on-exit` keeps exit status.
 - **Status** — session: `running | exited(0) | failed(n)`. Claude sessions additionally:
@@ -111,7 +112,7 @@ confirm = "none"
     app/        Name const, paths (config/state/cache dirs)
     config/     TOML load + validation + hot reload
     item/       Item type, fields
-    provider/   Provider iface; gitlab, github (graphql), auto (forge from origin), command
+    provider/   Provider iface; gitlab, github + github-issues (graphql), auto (forge from origin), command
     filter/     expr env + helpers (has_label, approved_by_me, …)
     session/    tmux backend, status, claude hooks
     history/    per-item log
@@ -141,9 +142,9 @@ confirm = "none"
 8. **Claude usage — DONE.** `[settings] claude_dir` shows that profile's usage at the left of the footer
    (`claude usage: …`), read from `<claude_dir>/usage-line.json` (written by a Claude Code mod; text shown
    verbatim, with its age after 10 minutes).
-9. **Scoped actions — IN PROGRESS.** `[action.<name>] when = '<expr>'` restricts an action to the items it
-   matches (key, `:run`, help screen); gitlab/github items get `kind = "pr"`. Next: a `github-issues` provider
-   with `kind = "ticket"` items.
+9. **Scoped actions and tickets — DONE.** `[action.<name>] when = '<expr>'` restricts an action to the items it
+   matches (key, `:run`, help screen); gitlab/github items get `kind = "pr"`, and the `github-issues` provider
+   lists a repo's open issues as `kind = "ticket"` items (ticket field set shared with a future Linear provider).
 
 ## Later
 

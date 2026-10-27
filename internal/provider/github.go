@@ -71,26 +71,9 @@ type ghResp struct {
 }
 
 func (g *GitHub) Fetch(ctx context.Context) ([]item.Item, error) {
-	if g.Project == "" {
-		u, err := originPath()
-		if err != nil {
-			return nil, fmt.Errorf("github: set provider.project (cannot detect git remote)")
-		}
-		g.Project = u
-	}
-	owner, name, ok := strings.Cut(g.Project, "/")
-	if !ok || owner == "" || name == "" || strings.Contains(name, "/") {
-		return nil, fmt.Errorf("github: project %q is not owner/repo", g.Project)
-	}
-	run := g.Run
-	if run == nil {
-		run = func(ctx context.Context, args ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, "gh", args...).Output()
-		}
-	}
-	out, err := run(ctx, "api", "graphql", "-f", "query="+ghQuery, "-f", "owner="+owner, "-f", "name="+name)
+	out, err := ghGraphQL(ctx, "github", &g.Project, g.Run, ghQuery)
 	if err != nil {
-		return nil, fmt.Errorf("gh: %w", err)
+		return nil, err
 	}
 	var r ghResp
 	if err := json.Unmarshal(out, &r); err != nil {
@@ -109,6 +92,32 @@ func (g *GitHub) Fetch(ctx context.Context) ([]item.Item, error) {
 		items = append(items, ghToItem(pr, me))
 	}
 	return items, nil
+}
+
+// ghGraphQL runs query through gh for the owner/repo in *project, which is detected from the origin remote
+// (and stored) when empty; typ prefixes the errors. run nil runs the real gh binary.
+func ghGraphQL(ctx context.Context, typ string, project *string, run func(context.Context, ...string) ([]byte, error), query string) ([]byte, error) {
+	if *project == "" {
+		u, err := originPath()
+		if err != nil {
+			return nil, fmt.Errorf("%s: set provider.project (cannot detect git remote)", typ)
+		}
+		*project = u
+	}
+	owner, name, ok := strings.Cut(*project, "/")
+	if !ok || owner == "" || name == "" || strings.Contains(name, "/") {
+		return nil, fmt.Errorf("%s: project %q is not owner/repo", typ, *project)
+	}
+	if run == nil {
+		run = func(ctx context.Context, args ...string) ([]byte, error) {
+			return exec.CommandContext(ctx, "gh", args...).Output()
+		}
+	}
+	out, err := run(ctx, "api", "graphql", "-f", "query="+query, "-f", "owner="+owner, "-f", "name="+name)
+	if err != nil {
+		return nil, fmt.Errorf("gh: %w", err)
+	}
+	return out, nil
 }
 
 // ghToItem maps a PR onto gitlab's MR shape so both providers share fields and badges.

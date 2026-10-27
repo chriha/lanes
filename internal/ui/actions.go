@@ -14,6 +14,7 @@ import (
 
 	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/config"
+	"github.com/chriha/lanes/internal/filter"
 	"github.com/chriha/lanes/internal/history"
 	"github.com/chriha/lanes/internal/item"
 	"github.com/chriha/lanes/internal/session"
@@ -107,6 +108,38 @@ func (m *Model) targets() []item.Item {
 	return out
 }
 
+// matchWhen splits its into the items the action's when expression matches and the ones it skips.
+// An expression that fails on an item counts as no match; the first such error is returned.
+func matchWhen(act config.Action, its []item.Item) (match, skip []item.Item, err error) {
+	f, err := filter.Compile(act.When) // validated at config load; an error here skips everything
+	if err != nil {
+		return nil, its, err
+	}
+	for _, it := range its {
+		ok, merr := f.Match(it.Env())
+		if merr != nil && err == nil {
+			err = merr
+		}
+		if ok && merr == nil {
+			match = append(match, it)
+		} else {
+			skip = append(skip, it)
+		}
+	}
+	return match, skip, err
+}
+
+// whenNotice reports items an action skipped because its when expression did not match them.
+func whenNotice(skipped int, err error) string {
+	if skipped == 0 {
+		return ""
+	}
+	if err != nil {
+		return fmt.Sprintf("skipped %d item(s) (when: %v)", skipped, err)
+	}
+	return fmt.Sprintf("skipped %d item(s) (when)", skipped)
+}
+
 func ids(its []item.Item) string {
 	s := make([]string, len(its))
 	for i, it := range its {
@@ -142,8 +175,12 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 		m.notice = "tmux unavailable"
 		return nil
 	}
-	all := m.targets()
+	all, unmatched, werr := matchWhen(act, m.targets())
+	skippedWhen := whenNotice(len(unmatched), werr)
 	if len(all) == 0 {
+		if skippedWhen != "" {
+			m.notice = name + ": " + skippedWhen
+		}
 		return nil
 	}
 	// a busy item is starting or running an action: skip it, whatever the action
@@ -157,7 +194,7 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 		ts = append(ts, it)
 	}
 	if len(ts) == 0 {
-		m.notice = strings.Join(busy, ", ")
+		m.notice = withNote(strings.Join(busy, ", "), skippedWhen)
 		return nil
 	}
 	var jobs []job
@@ -205,14 +242,21 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 		if len(busy) > 0 {
 			m.notice += ", " + strings.Join(busy, ", ")
 		}
+		m.notice = withNote(m.notice, skippedWhen)
 		return nil
 	}
 	start := func() tea.Cmd {
 		m.lock(name, jobs)
+		var cmd tea.Cmd
 		if headless {
-			return m.executeRun(name, jobs, act.Refresh, len(busy))
+			cmd = m.executeRun(name, jobs, act.Refresh, len(busy), skippedWhen)
+		} else {
+			cmd = m.execute(name, jobs, skipped, len(busy), skippedWhen)
 		}
-		return m.execute(name, jobs, skipped, len(busy))
+		for _, it := range unmatched {
+			m.marks[it.ID] = true // skipped items stay marked, so it shows what did not run
+		}
+		return cmd
 	}
 	if len(all) > 1 || act.Confirm == "single" {
 		what := ts[0].ID
@@ -243,7 +287,18 @@ func jobKeys(jobs []job) []string {
 	return keys
 }
 
-func (m *Model) execute(action string, jobs []job, skipped, busy int) tea.Cmd {
+// withNote appends note to s, comma-separated, when note is set.
+func withNote(s, note string) string {
+	if note == "" {
+		return s
+	}
+	if s == "" {
+		return note
+	}
+	return s + ", " + note
+}
+
+func (m *Model) execute(action string, jobs []job, skipped, busy int, skippedWhen string) tea.Cmd {
 	m.marks = map[string]bool{}
 	mgr := m.sess
 	keys := jobKeys(jobs)
@@ -268,6 +323,7 @@ func (m *Model) execute(action string, jobs []job, skipped, busy int) tea.Cmd {
 		if busy > 0 {
 			note += fmt.Sprintf(", %d busy", busy)
 		}
+		note = withNote(note, skippedWhen)
 		if len(errs) > 0 {
 			note += ": " + errs[0]
 		}
@@ -276,7 +332,7 @@ func (m *Model) execute(action string, jobs []job, skipped, busy int) tea.Cmd {
 }
 
 // executeRun runs the jobs headless and in parallel; the footer reports the outcome.
-func (m *Model) executeRun(action string, jobs []job, refresh bool, busy int) tea.Cmd {
+func (m *Model) executeRun(action string, jobs []job, refresh bool, busy int, skippedWhen string) tea.Cmd {
 	m.marks = map[string]bool{}
 	keys := jobKeys(jobs)
 	shell := os.Getenv("SHELL")
@@ -318,6 +374,7 @@ func (m *Model) executeRun(action string, jobs []job, refresh bool, busy int) te
 		if busy > 0 {
 			note += fmt.Sprintf(", %d busy", busy)
 		}
+		note = withNote(note, skippedWhen)
 		if len(bad) > 0 {
 			note = fmt.Sprintf("✗ %s failed on %d/%d — %s", action, len(bad), len(jobs), bad[0])
 		}

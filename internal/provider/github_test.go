@@ -66,7 +66,7 @@ func TestGitHubFetch(t *testing.T) {
 		"me": "me", "labels": []string{"waiting-for-review"}, "approved": true, "approved_by": []string{"me"},
 		"approved_by_me": true, "open_threads": 1, "open_thread_by_me": true, "ci": "failed", "conflicts": false,
 		"diverged": false, "reviewers": []string{"sam", "me", "kim"}, "assignees": []string{"alex"},
-		"branch": "feature/abc-7", "target": "main", "ticket": "ABC-7", "number": 12,
+		"branch": "feature/abc-7", "target": "main", "ticket": "ABC-7", "number": 12, "kind": "pr",
 	}
 	if !reflect.DeepEqual(a.Fields, wantFields) {
 		t.Errorf("item 0 fields:\n got %#v\nwant %#v", a.Fields, wantFields)

@@ -11,6 +11,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/chriha/lanes/internal/app"
+	"github.com/chriha/lanes/internal/filter"
 	"github.com/chriha/lanes/internal/item"
 )
 
@@ -166,6 +167,9 @@ func Load() (*Config, error) {
 	for name, a := range c.Action {
 		if strings.Contains(name, "~") || a.Run == "" || (a.Type != "" && a.Type != "session" && a.Type != "run") {
 			return nil, fmt.Errorf("%s: action %q needs a run command, type session|run, and no ~ in its name", p, name)
+		}
+		if _, err := filter.Compile(a.When); err != nil {
+			return nil, fmt.Errorf("%s: action %q: when: %w", p, name, err)
 		}
 	}
 	for key, name := range c.Keymap {

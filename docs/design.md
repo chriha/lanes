@@ -39,6 +39,9 @@ GitHub via `gh api graphql` (both reuse existing auth).
   - `session`: command run in a detached tmux session (user's `$SHELL -ic`), optional `cwd`.
   - `api`: provider mutation without a session (e.g. gitlab `ready`, `sync`).
   - `confirm`: `none | single | always`. Multi-select always confirms.
+  - `when`: optional filter expression evaluated per item (compiled at config load); items that don't match are
+    skipped with a notice, and the help screen lists only actions matching the cursor item. Items carry a `kind`
+    field (`pr` from gitlab/github) to scope actions by item type.
 - **Session** — tmux session on dedicated socket (`tmux -L <Name>`), one per (action, item). Never touches the
   user's own tmux server. `remain-on-exit` keeps exit status.
 - **Status** — session: `running | exited(0) | failed(n)`. Claude sessions additionally:
@@ -138,6 +141,9 @@ confirm = "none"
 8. **Claude usage — DONE.** `[settings] claude_dir` shows that profile's usage at the left of the footer
    (`claude usage: …`), read from `<claude_dir>/usage-line.json` (written by a Claude Code mod; text shown
    verbatim, with its age after 10 minutes).
+9. **Scoped actions — IN PROGRESS.** `[action.<name>] when = '<expr>'` restricts an action to the items it
+   matches (key, `:run`, help screen); gitlab/github items get `kind = "pr"`. Next: a `github-issues` provider
+   with `kind = "ticket"` items.
 
 ## Later
 

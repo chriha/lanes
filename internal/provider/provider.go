@@ -78,3 +78,14 @@ func splitRemote(u string) (host, path string) {
 	}
 	return host, path
 }
+
+// OriginForge returns the provider type and repo path of the current directory's origin remote
+// (see Forge), or an error when there is no origin.
+func OriginForge() (typ, repo string, err error) {
+	u, err := originURL()
+	if err != nil {
+		return "", "", err
+	}
+	typ, repo = Forge(u)
+	return typ, repo, nil
+}

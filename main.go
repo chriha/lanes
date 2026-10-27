@@ -8,6 +8,7 @@ import (
 
 	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/config"
+	"github.com/chriha/lanes/internal/provider"
 	"github.com/chriha/lanes/internal/session"
 	"github.com/chriha/lanes/internal/ui"
 )
@@ -28,6 +29,9 @@ func main() {
 	app.Init(wd)
 	if len(os.Args) == 2 && os.Args[1] == "doctor" {
 		os.Exit(runDoctor(os.Stdout, realDoctorEnv()))
+	}
+	if len(os.Args) == 2 && os.Args[1] == "init" {
+		os.Exit(runInit(os.Stdout, os.Stderr, wd, provider.OriginForge))
 	}
 	if len(os.Args) == 2 && os.Args[1] == "status" {
 		runStatus()

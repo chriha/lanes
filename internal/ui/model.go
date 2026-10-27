@@ -154,6 +154,16 @@ func (m *Model) applyConfig(cfg *config.Config) {
 			m.data[name] = cache.Load(name)
 		}
 	}
+	for k, b := range m.busy {
+		for name := range b.refetch {
+			if _, known := m.providers[name]; !known {
+				delete(b.refetch, name) // a provider gone from the config never lands a fetch
+			}
+		}
+		if b.refetch != nil && len(b.refetch) == 0 {
+			delete(m.busy, k)
+		}
+	}
 	prev := ""
 	if m.cur < len(m.views) {
 		prev = m.views[m.cur].cfg.Name
@@ -318,8 +328,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case fetchedMsg:
+		var again tea.Cmd
 		if !msg.partial {
 			m.loading[msg.name] = false
+			again = m.fetchLanded(msg.name)
 		}
 		if msg.err != nil {
 			if !msg.partial {
@@ -327,7 +339,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.fails[msg.name]++
 				m.retryAt[msg.name] = time.Now().Add(retryDelay(m.cfg.Poll(), m.fails[msg.name]))
 			}
-			return m, nil
+			return m, again
 		}
 		delete(m.provErr, msg.name)
 		if !msg.partial {
@@ -344,6 +356,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			v.err = nil // filter errors may have been transient (stale data shape)
 		}
 		m.rebuild()
+		return m, again
 	case tickMsg:
 		return m, tea.Batch(tick(), m.onTick(), m.pollSessions(), m.pollUsage())
 	case usageMsg:
@@ -353,8 +366,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case doneMsg:
 		m.notice = msg.notice
 		if msg.refresh {
+			m.holdUntilRefetched(msg.keys, msg.ok)
 			return m, tea.Batch(m.pollSessions(), m.refreshAll())
 		}
+		m.unlock(msg.keys)
 		return m, m.pollSessions()
 	case editorDone:
 		return m, m.reload()
@@ -370,6 +385,58 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.key(msg)
 	}
 	return m, nil
+}
+
+func (m *Model) unlock(keys []string) {
+	for _, k := range keys {
+		delete(m.busy, k)
+	}
+}
+
+// holdUntilRefetched keeps the items of a successful refresh run locked until every provider has landed a
+// fetch that started after the run; a failed run unlocks them at once. Call it before refreshAll.
+func (m *Model) holdUntilRefetched(keys []string, ok bool) {
+	if !ok || len(m.providers) == 0 {
+		m.unlock(keys)
+		return
+	}
+	for name := range m.providers {
+		if m.loading[name] {
+			m.refetchAfter[name] = true // its result predates the run
+		}
+	}
+	for _, k := range keys {
+		b, held := m.busy[k]
+		if !held {
+			continue
+		}
+		b.refetch = map[string]bool{}
+		for name := range m.providers {
+			b.refetch[name] = true
+		}
+		m.busy[k] = b
+	}
+}
+
+// fetchLanded runs when provider name delivered a full result or an error. A fetch that started before a
+// refresh run ended is followed by a fresh one; any other releases the items that waited on it.
+func (m *Model) fetchLanded(name string) tea.Cmd {
+	if m.refetchAfter[name] {
+		delete(m.refetchAfter, name)
+		if _, known := m.providers[name]; known {
+			return m.fetch(name)
+		}
+	}
+	for k, b := range m.busy {
+		if !b.refetch[name] {
+			continue
+		}
+		delete(b.refetch, name)
+		if len(b.refetch) == 0 {
+			delete(m.busy, k)
+		}
+	}
+	return nil
 }
 
 // inherit fills fields a partial result marks as pending from the previous snapshot of the same item.
@@ -796,6 +863,10 @@ func (m *Model) row(it item.Item, selected bool) string {
 			all = append(all, ss.Badge())
 		}
 	}
+	b, busy := m.busy[session.Key(it.ID)]
+	if busy {
+		all = append(all, item.Badge{Text: "⋯ " + b.action, Kind: "info"})
+	}
 	rightW := 0
 	for _, b := range all {
 		badges = append(badges, st(badgeStyle(b.Kind)).Render(b.Text))
@@ -814,8 +885,8 @@ func (m *Model) row(it item.Item, selected bool) string {
 		titleW = 10
 	}
 	ts := sText
-	if it.Draft {
-		ts = sDim
+	if it.Draft || len(b.refetch) > 0 {
+		ts = sDim // drafts, and items whose refresh run's result is not fetched yet
 	}
 	title := st(ts).Render(fmt.Sprintf("%-*s", titleW, ansi.Truncate(it.Title, titleW, "…")))
 	cur := plain.Render(" ")

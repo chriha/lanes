@@ -50,6 +50,7 @@ type Action struct {
 	Confirm string         `toml:"confirm"` // none (default) | single; multi-item runs always confirm
 	Vars    map[string]any `toml:"vars"`    // available in templates as {{.vars.name}}
 	Refresh bool           `toml:"refresh"` // run type: refetch providers when finished
+	When    string         `toml:"when"`    // expr against the item's fields; the action only runs on matching items (empty = all)
 }
 
 type Config struct {

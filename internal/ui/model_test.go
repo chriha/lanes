@@ -3,9 +3,12 @@ package ui
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chriha/lanes/internal/item"
 )
@@ -232,4 +235,47 @@ func TestNavigationClamps(t *testing.T) {
 			t.Errorf("cursor = %d, want 0", m.cursor)
 		}
 	})
+}
+
+func TestUsageText(t *testing.T) {
+	now := time.Unix(10_000, 0)
+	tests := []struct {
+		name string
+		u    usageMsg
+		want string
+	}{
+		{"nothing configured", usageMsg{}, ""},
+		{"fresh is shown as is", usageMsg{"5h 23%", now.Add(-time.Minute)}, "5h 23%"},
+		{"stale carries its age", usageMsg{"5h 23%", now.Add(-12 * time.Minute)}, "5h 23% (12m ago)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &Model{usage: tt.u}
+			if got := ansi.Strip(m.usageText(now)); got != tt.want {
+				t.Errorf("usageText = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHeaderUsage(t *testing.T) {
+	tests := []struct {
+		name  string
+		width int
+		want  bool
+	}{
+		{"shown at the right end when it fits", 120, true},
+		{"dropped when the header has no room", 30, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newBackoffModel(t)
+			m.width = tt.width
+			m.Update(usageMsg{"5h 23% · wk 30%", time.Now()})
+			h := ansi.Strip(m.header())
+			if got := strings.HasSuffix(h, "5h 23% · wk 30%"); got != tt.want {
+				t.Errorf("header = %q, usage at end = %v, want %v", h, got, tt.want)
+			}
+		})
+	}
 }

@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -204,6 +206,86 @@ func TestSessionsClose(t *testing.T) {
 			}
 			if m.mode != modeSessions {
 				t.Errorf("mode = %d, want back on the sessions screen", m.mode)
+			}
+		})
+	}
+}
+
+func TestNextAttention(t *testing.T) {
+	at := func(name, claude string, created int64, dead bool) session.Info {
+		return session.Info{Name: name, Claude: claude, Created: time.Unix(created, 0), Dead: dead}
+	}
+	// newest first, as session.List returns them
+	mixed := []session.Info{
+		at("w-new", "waiting", 40, false),
+		at("a-new", "asking", 30, false),
+		at("busy", "working", 25, false),
+		at("dead", "asking", 15, true),
+		at("w-old", "waiting", 20, false),
+		at("a-old", "asking", 10, false),
+	}
+	tests := []struct {
+		name  string
+		infos []session.Info
+		last  string
+		want  string
+		ok    bool
+	}{
+		{"empty", nil, "", "", false},
+		{"none qualifying", []session.Info{at("busy", "working", 1, false), at("dead", "waiting", 2, true)}, "", "", false},
+		{"oldest asking first", mixed, "", "a-old", true},
+		{"after the last jumped", mixed, "a-old", "a-new", true},
+		{"asking before waiting", mixed, "a-new", "w-old", true},
+		{"waiting oldest first", mixed, "w-old", "w-new", true},
+		{"wraps around", mixed, "w-new", "a-old", true},
+		{"last no longer qualifying", mixed, "busy", "a-old", true},
+		{"only the last qualifies", []session.Info{at("a", "asking", 1, false)}, "a", "a", true},
+	}
+	for _, tt := range tests {
+		got, ok := nextAttention(tt.infos, tt.last)
+		if got != tt.want || ok != tt.ok {
+			t.Errorf("%s: got (%q, %v), want (%q, %v)", tt.name, got, ok, tt.want, tt.ok)
+		}
+	}
+}
+
+func TestPruneNotice(t *testing.T) {
+	tests := []struct {
+		name string
+		n    int
+		err  error
+		want string
+	}{
+		{"none", 0, nil, "pruned 0 sessions"},
+		{"one", 1, nil, "pruned 1 session"},
+		{"several", 2, nil, "pruned 2 sessions"},
+		{"error appended", 1, errors.New("exit status 1"), "pruned 1 session; exit status 1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := pruneNotice(tt.n, tt.err); got != tt.want {
+				t.Errorf("pruneNotice(%d, %v) = %q, want %q", tt.n, tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPruneCommand(t *testing.T) {
+	tests := []struct {
+		line    string
+		wantCmd bool
+		notice  string
+	}{
+		{"prune", true, ""},
+		{"prune failed", true, ""},
+		{"prune bogus", false, "usage: :prune [failed]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.line, func(t *testing.T) {
+			m := sessModel(t)
+			_, cmd := m.runCommand(tt.line)
+			if (cmd != nil) != tt.wantCmd || m.notice != tt.notice {
+				t.Errorf("cmd %v, notice %q; want cmd %v, notice %q", cmd != nil, m.notice, tt.wantCmd, tt.notice)
 			}
 		})
 	}

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -128,13 +129,13 @@ func TestList(t *testing.T) {
 	}{
 		{"no server", "", errors.New("exit status 1"), nil},
 		{"empty output", "", nil, nil},
-		{"malformed lines skipped", "garbage\nfix~1\t0\t0\n\nnotab\t0\t0\t5\nfix~2\t0\t0\t5\n", nil,
+		{"malformed lines skipped", "garbage\nfix~1\t0\t0\n\nnotab\t0\t0\t5\nfix~2\t0\t0\t5\tclaude\n", nil,
 			[]Info{{Name: "fix~2", Action: "fix", ItemKey: "2", Created: time.Unix(5, 0)}}},
 		{"dead with exit status, newest first",
-			"fix~1\t1\t3\t100\nreview~2\t0\t0\t200\n", nil,
+			"fix~1\t1\t3\t100\tzsh\nreview~2\t0\t0\t200\tclaude\n", nil,
 			[]Info{{Name: "review~2", Action: "review", ItemKey: "2", Created: time.Unix(200, 0)},
 				{Name: "fix~1", Action: "fix", ItemKey: "1", Dead: true, Exit: 3, Created: time.Unix(100, 0)}}},
-		{"item key keeps later tildes", "fix~a~b\t0\t0\t1\n", nil,
+		{"item key keeps later tildes", "fix~a~b\t0\t0\t1\tclaude\n", nil,
 			[]Info{{Name: "fix~a~b", Action: "fix", ItemKey: "a~b", Created: time.Unix(1, 0)}}},
 	}
 	for _, tt := range tests {
@@ -222,6 +223,7 @@ func TestHookRoundTrip(t *testing.T) {
 		{"notification asks", "Notification", `{"notification_type":"permission_prompt"}`, "asking", "? fix: asking"},
 		{"idle notification waits", "Notification", `{"notification_type":"idle_prompt"}`, "waiting", "● fix: waiting"},
 		{"unknown event ignored", "SessionStart", "{}", "", "▶ fix"},
+		{"session end clears", "SessionEnd", "{}", "", "▶ fix"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -231,7 +233,7 @@ func TestHookRoundTrip(t *testing.T) {
 			RunHook(tt.event)
 
 			m := fakeRun(nil, func([]string) ([]byte, error) {
-				return []byte("fix~1\t0\t0\t10\n"), nil
+				return []byte("fix~1\t0\t0\t10\tclaude\n"), nil
 			})
 			got, err := m.List()
 			if err != nil || len(got) != 1 {
@@ -263,10 +265,104 @@ func TestListIgnoresStateOfDeadSession(t *testing.T) {
 	t.Setenv("LANES_SESSION", "fix~1")
 	feedStdin(t, "{}")
 	RunHook("Stop")
-	m := fakeRun(nil, func([]string) ([]byte, error) { return []byte("fix~1\t1\t0\t10\n"), nil })
+	m := fakeRun(nil, func([]string) ([]byte, error) { return []byte("fix~1\t1\t0\t10\tzsh\n"), nil })
 	got, _ := m.List()
 	if len(got) != 1 || got[0].Claude != "" {
 		t.Errorf("got %+v", got)
+	}
+}
+
+func TestListIgnoresStateWhileShell(t *testing.T) {
+	tests := []struct {
+		name, shellEnv, command, wantClaude string
+	}{
+		{"zsh", "/bin/zsh", "zsh", ""},
+		{"bash", "", "bash", ""},
+		{"sh", "", "sh", ""},
+		{"fish", "", "fish", ""},
+		{"login shell from SHELL", "/opt/homebrew/bin/nu", "nu", ""},
+		{"claude", "/bin/zsh", "claude", "asking"},
+		{"node", "/bin/zsh", "node", "asking"},
+		{"other program", "/bin/zsh", "python3", "asking"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateEnv(t)
+			t.Setenv("SHELL", tt.shellEnv)
+			t.Setenv("LANES_SESSION", "fix~1")
+			feedStdin(t, `{"notification_type":"permission_prompt"}`)
+			RunHook("Notification")
+			m := fakeRun(nil, func([]string) ([]byte, error) { return []byte("fix~1\t0\t0\t10\t" + tt.command + "\n"), nil })
+			got, err := m.List()
+			if err != nil || len(got) != 1 {
+				t.Fatalf("List = %+v, %v", got, err)
+			}
+			if got[0].Claude != tt.wantClaude {
+				t.Errorf("Claude = %q, want %q", got[0].Claude, tt.wantClaude)
+			}
+			run, ask, wait := Count(got)
+			wantRun, wantAsk := 1, 0
+			if tt.wantClaude == "asking" {
+				wantRun, wantAsk = 0, 1
+			}
+			if run != wantRun || ask != wantAsk || wait != 0 {
+				t.Errorf("Count = %d,%d,%d", run, ask, wait)
+			}
+		})
+	}
+}
+
+func TestSessionEndRemovesState(t *testing.T) {
+	tests := []struct {
+		name, stdin string
+		wantGone    bool
+	}{
+		{"no reason", "{}", true},
+		{"exit", `{"reason":"prompt_input_exit"}`, true},
+		{"logout", `{"reason":"logout"}`, true},
+		{"clear keeps state", `{"reason":"clear"}`, false},
+		{"resume keeps state", `{"reason":"resume"}`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateEnv(t)
+			t.Setenv("LANES_SESSION", "fix~1")
+			feedStdin(t, "{}")
+			RunHook("Stop")
+			if _, err := os.Stat(statePath("fix~1")); err != nil {
+				t.Fatalf("state not written: %v", err)
+			}
+			feedStdin(t, tt.stdin)
+			RunHook("SessionEnd")
+			_, err := os.Stat(statePath("fix~1"))
+			if gone := os.IsNotExist(err); gone != tt.wantGone {
+				t.Errorf("state removed = %v, want %v (err %v)", gone, tt.wantGone, err)
+			}
+		})
+	}
+}
+
+func TestSettingsFileRegistersSessionEnd(t *testing.T) {
+	stateEnv(t)
+	p, err := SettingsFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s struct {
+		Hooks map[string][]struct {
+			Hooks []struct{ Command string }
+		}
+	}
+	if err := json.Unmarshal(b, &s); err != nil {
+		t.Fatal(err)
+	}
+	h := s.Hooks["SessionEnd"]
+	if len(h) != 1 || len(h[0].Hooks) != 1 || !strings.HasSuffix(h[0].Hooks[0].Command, " hook SessionEnd") {
+		t.Errorf("SessionEnd hook = %+v", h)
 	}
 }
 
@@ -284,5 +380,156 @@ func TestKillRemovesState(t *testing.T) {
 	}
 	if got := readState("fix~1"); got != "" {
 		t.Errorf("state after kill = %q", got)
+	}
+}
+
+func TestCount(t *testing.T) {
+	tests := []struct {
+		name           string
+		in             []Info
+		run, ask, wait int
+	}{
+		{"none", nil, 0, 0, 0},
+		{"dead not counted", []Info{{Dead: true}, {Dead: true, Exit: 1, Claude: "asking"}}, 0, 0, 0},
+		{"no claude status is running", []Info{{}}, 1, 0, 0},
+		{"working is running", []Info{{Claude: "working"}}, 1, 0, 0},
+		{"asking", []Info{{Claude: "asking"}, {Claude: "asking"}}, 0, 2, 0},
+		{"waiting", []Info{{Claude: "waiting"}}, 0, 0, 1},
+		{"mixed", []Info{{Claude: "working"}, {Claude: "asking"}, {Claude: "waiting"}, {Claude: "waiting"}, {Dead: true}}, 1, 1, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			run, ask, wait := Count(tt.in)
+			if run != tt.run || ask != tt.ask || wait != tt.wait {
+				t.Errorf("Count = %d %d %d, want %d %d %d", run, ask, wait, tt.run, tt.ask, tt.wait)
+			}
+		})
+	}
+}
+
+// TestStatusLine goes through List with the fake runner, so the line reflects what tmux and the hook state report.
+func TestStatusLine(t *testing.T) {
+	tests := []struct {
+		name   string
+		out    string
+		err    error
+		states map[string]string
+		want   string
+	}{
+		{"no server", "", errors.New("no server running"), nil, ""},
+		{"only running", "fix~1\t0\t0\t1\tclaude\n", nil, map[string]string{"fix~1": "working"}, ""},
+		{"dead asking ignored", "fix~1\t1\t0\t1\tclaude\n", nil, map[string]string{"fix~1": "asking"}, ""},
+		{"asking only", "fix~1\t0\t0\t1\tclaude\n", nil, map[string]string{"fix~1": "asking"}, "? 1"},
+		{"waiting only", "fix~1\t0\t0\t1\tclaude\n", nil, map[string]string{"fix~1": "waiting"}, "● 1"},
+		{"both", "fix~1\t0\t0\t1\tclaude\nfix~2\t0\t0\t2\tclaude\nfix~3\t0\t0\t3\tclaude\nfix~4\t0\t0\t4\tclaude\n", nil,
+			map[string]string{"fix~1": "asking", "fix~2": "waiting", "fix~3": "waiting", "fix~4": "working"}, "? 1 ● 2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateEnv(t)
+			for name, state := range tt.states {
+				if err := os.WriteFile(statePath(name), []byte(`{"state":"`+state+`"}`), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			m := fakeRun(nil, func([]string) ([]byte, error) { return []byte(tt.out), tt.err })
+			infos, err := m.List()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := StatusLine(infos); got != tt.want {
+				t.Errorf("StatusLine = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPrune(t *testing.T) {
+	// fix~1 running, fix~2 dead ok, fix~3 dead failed, review~4 dead failed.
+	const panes = "fix~1\t0\t0\t1\tclaude\nfix~2\t1\t0\t2\tclaude\nfix~3\t1\t2\t3\tclaude\nreview~4\t1\t1\t4\tclaude\n"
+	tests := []struct {
+		name       string
+		out        string
+		listErr    error
+		failedOnly bool
+		failKill   string // session whose kill-session fails
+		wantKills  []string
+		wantN      int
+		wantErr    bool
+	}{
+		{"all dead, no running", panes, nil, false, "", []string{"review~4", "fix~3", "fix~2"}, 3, false},
+		{"failed only", panes, nil, true, "", []string{"review~4", "fix~3"}, 2, false},
+		{"failing kill does not stop the others", panes, nil, false, "fix~3", []string{"review~4", "fix~3", "fix~2"}, 2, true},
+		{"only running", "fix~1\t0\t0\t1\tclaude\n", nil, false, "", nil, 0, false},
+		{"no server", "", errors.New("no server running"), false, "", nil, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateEnv(t)
+			var kills []string
+			m := fakeRun(nil, func(args []string) ([]byte, error) {
+				switch args[0] {
+				case "list-panes":
+					return []byte(tt.out), tt.listErr
+				case "kill-session":
+					name := strings.TrimPrefix(args[2], "=")
+					kills = append(kills, name)
+					if name == tt.failKill {
+						return []byte("can't kill"), errors.New("exit status 1")
+					}
+					return nil, nil
+				}
+				t.Fatalf("unexpected tmux call %q", args)
+				return nil, nil
+			})
+			n, err := m.Prune(tt.failedOnly)
+			if n != tt.wantN || (err != nil) != tt.wantErr {
+				t.Errorf("Prune = %d, %v; want %d, error %v", n, err, tt.wantN, tt.wantErr)
+			}
+			if !slices.Equal(kills, tt.wantKills) {
+				t.Errorf("killed %q, want %q", kills, tt.wantKills)
+			}
+		})
+	}
+}
+
+func TestUsage(t *testing.T) {
+	tests := []struct {
+		name, dir, file, want string
+		wantAt                int64
+	}{
+		{"no dir configured", "", `{"text":"5h 23%","at":100}`, "", 0},
+		{"reads text and time", "DIR", `{"text":"5h 23% · wk 30%","at":100}`, "5h 23% · wk 30%", 100},
+		{"tilde is the home dir", "~/.claude-personal", `{"text":"5h 1%","at":5}`, "5h 1%", 5},
+		{"missing file", "DIR", "", "", 0},
+		{"empty text", "DIR", `{"text":null,"at":100}`, "", 0},
+		{"broken json", "DIR", `{`, "", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			dir, real := tt.dir, filepath.Join(home, ".claude")
+			if dir == "DIR" {
+				dir = real
+			} else if rest, ok := strings.CutPrefix(dir, "~"); ok {
+				real = home + rest
+			}
+			if tt.file != "" {
+				if err := os.MkdirAll(real, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(real, UsageFile), []byte(tt.file), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			text, at := Usage(dir)
+			if text != tt.want {
+				t.Errorf("text = %q, want %q", text, tt.want)
+			}
+			if tt.want != "" && at.Unix() != tt.wantAt {
+				t.Errorf("at = %d, want %d", at.Unix(), tt.wantAt)
+			}
+		})
 	}
 }

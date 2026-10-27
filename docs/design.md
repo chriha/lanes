@@ -61,8 +61,8 @@ Go, Bubble Tea (`bubbletea`), Lip Gloss (`lipgloss`), Bubbles (`bubbles`), `Burn
 
 - Vim keys: `h j k l`, `gg G`, `ctrl-d/u`, `space` mark, `V` mark all, `esc` clear.
 - `/` fuzzy filter, `:` command line, `?` help, `enter` open session/jump in, `o` open URL, `x` kill session
-  (confirm), `R` refresh, `i` item history, `S` sessions screen (every session, also of items no longer listed;
-  jump / close), `q` quit.
+  (confirm), `R` refresh, `i` item history, `n` jump to the next session asking/waiting (asking first, oldest
+  first, cycles), `S` sessions screen (every session, also of items no longer listed; jump / close), `q` quit.
 - Live: background poll (default 30s) diffs into the list, preserving cursor + marks. First paint from disk
   cache (stale-while-revalidate).
 - Jump into a session: `tmux display-popup` / `switch-client` when inside tmux, `attach` otherwise.
@@ -111,6 +111,7 @@ confirm = "none"
     filter/     expr env + helpers (has_label, approved_by_me, …)
     session/    tmux backend, status, claude hooks
     history/    per-item log
+    notes/      per-item notes (<state>/notes.json)
     ui/         bubbletea models: root, list, preview, cmdline, confirm, help; theme
 ```
 
@@ -129,8 +130,15 @@ confirm = "none"
    summary, desktop notifications (claude asking/waiting, session finished/failed; `no_notify` to disable).
 5. **Extract — DONE.** Own repo, per-project config (`.lanes.toml` overlays the global config) and per-project
    state/tmux socket, MIT license, README, CI.
+6. **Attention key — DONE.** `n` jumps to the next session that is asking or waiting.
+7. **Notes — DONE.** Per-item notes (`N` in `$EDITOR`, `:note`), stored in `<state>/notes.json` keyed by item ID.
+   The UI copies `note` into an item's fields when it builds the views (never into the provider data or its
+   cache), so filters and templates see it; rows get a `✎` badge, the preview shows the text.
+8. **Claude usage — DONE.** `[settings] claude_dir` shows that profile's usage at the left of the footer
+   (`claude usage: …`), read from `<claude_dir>/usage-line.json` (written by a Claude Code mod; text shown
+   verbatim, with its age after 10 minutes).
 
 ## Later
 
-Attention key (jump to next session needing input), headless CLI (`lanes run`, `lanes ls --json`), more
+Attention key (jump to next session needing input), headless CLI (`lanes run`, `lanes ls --json`; `lanes status` for status bars exists), more
 providers (Linear).

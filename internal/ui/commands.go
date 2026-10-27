@@ -34,13 +34,6 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 			m.notice += " · project: " + pp
 		}
 	case "edit":
-		editor := os.Getenv("VISUAL")
-		if editor == "" {
-			editor = os.Getenv("EDITOR")
-		}
-		if editor == "" {
-			editor = "vi"
-		}
 		path := config.Path()
 		if arg == "project" {
 			if path = config.ProjectPath(); path == "" {
@@ -49,7 +42,7 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 				_ = os.WriteFile(path, []byte("# project config: overlays the global config (README: Project config)\n"), 0o644)
 			}
 		}
-		cmd := exec.Command("/bin/sh", "-c", editor+" "+shq(path))
+		cmd := exec.Command("/bin/sh", "-c", editor()+" "+shq(path))
 		return m, tea.ExecProcess(cmd, func(error) tea.Msg { return editorDone{} })
 	case "view", "v":
 		for i, v := range m.views {
@@ -72,6 +65,26 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 		m.delView(arg)
 	case "sessions":
 		m.openSessions()
+	case "prune":
+		if arg != "" && arg != "failed" {
+			m.notice = "usage: :prune [failed]"
+			return m, nil
+		}
+		if m.sess == nil {
+			m.notice = "tmux unavailable"
+			return m, nil
+		}
+		mgr, failedOnly := m.sess, arg == "failed"
+		return m, func() tea.Msg {
+			n, err := mgr.Prune(failedOnly)
+			return doneMsg{notice: pruneNotice(n, err)}
+		}
+	case "note":
+		if it := m.items(); m.cursor < len(it) {
+			m.setNote(it[m.cursor].ID, arg)
+		} else {
+			m.notice = "no item to note"
+		}
 	case "run":
 		act, ok := m.cfg.Action[arg]
 		if !ok {
@@ -83,6 +96,30 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 		m.notice = "unknown command: " + name
 	}
 	return m, nil
+}
+
+// pruneNotice is the footer after :prune: "pruned N sessions" ("pruned 1 session" for one), with the first
+// failed kill appended.
+func pruneNotice(n int, err error) string {
+	s := fmt.Sprintf("pruned %d sessions", n)
+	if n == 1 {
+		s = "pruned 1 session"
+	}
+	if err != nil {
+		s += "; " + err.Error()
+	}
+	return s
+}
+
+// editor is the user's editor command: $VISUAL, then $EDITOR, then vi.
+func editor() string {
+	if e := os.Getenv("VISUAL"); e != "" {
+		return e
+	}
+	if e := os.Getenv("EDITOR"); e != "" {
+		return e
+	}
+	return "vi"
 }
 
 func (m *Model) inConfig(name string) bool {

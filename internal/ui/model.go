@@ -18,6 +18,7 @@ import (
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/filter"
 	"github.com/chriha/lanes/internal/item"
+	"github.com/chriha/lanes/internal/notes"
 	"github.com/chriha/lanes/internal/provider"
 	"github.com/chriha/lanes/internal/session"
 )
@@ -39,6 +40,7 @@ type view struct {
 	filter *filter.Filter
 	err    error
 	items  []item.Item
+	sort   []item.SortKey
 	edited bool // filter overridden from inside the TUI
 }
 
@@ -49,6 +51,13 @@ type fetchedMsg struct {
 	partial bool // quick result; a full one follows
 }
 type tickMsg time.Time
+type usageMsg struct {
+	text string
+	at   time.Time
+}
+
+// usageStale is the age after which the Claude usage shows how old it is.
+const usageStale = 10 * time.Minute
 
 type Model struct {
 	cfg       *config.Config
@@ -60,6 +69,9 @@ type Model struct {
 	provErr   map[string]error
 	fails     map[string]int       // consecutive failed fetches per provider
 	retryAt   map[string]time.Time // no refetch before this
+	// refetchAfter marks providers whose in-flight fetch started before a refresh run ended: when it lands, fetch again
+	refetchAfter map[string]bool
+	busy         map[string]busyState // by session.Key of the item
 
 	views  []*view
 	cur    int
@@ -83,25 +95,30 @@ type Model struct {
 	histTitle  string
 	hist       []string
 	helpOff    int
-	sessCursor int // cursor of the sessions screen
+	sessCursor int    // cursor of the sessions screen
+	lastAttn   string // session the n key jumped to last
 	ov         *config.Overrides
+	notes      notes.Store
 	preview_   bool
+	usage      usageMsg // Claude usage from [settings] claude_dir, shown at the left of the footer
 
 	width, height int
 }
 
 func New(cfg *config.Config) *Model {
 	m := &Model{
-		data:      map[string][]item.Item{},
-		fetchedAt: map[string]time.Time{},
-		loading:   map[string]bool{},
-		provErr:   map[string]error{},
-		fails:     map[string]int{},
-		retryAt:   map[string]time.Time{},
-		marks:     map[string]bool{},
-		search:    textinput.New(),
-		cmdline:   textinput.New(),
-		preview_:  cfg.Settings.Preview,
+		data:         map[string][]item.Item{},
+		fetchedAt:    map[string]time.Time{},
+		loading:      map[string]bool{},
+		provErr:      map[string]error{},
+		fails:        map[string]int{},
+		retryAt:      map[string]time.Time{},
+		busy:         map[string]busyState{},
+		refetchAfter: map[string]bool{},
+		marks:        map[string]bool{},
+		search:       textinput.New(),
+		cmdline:      textinput.New(),
+		preview_:     cfg.Settings.Preview,
 	}
 	m.search.Prompt, m.cmdline.Prompt = "/", ":"
 	m.search.PromptStyle, m.cmdline.PromptStyle = sKey, sKey
@@ -111,6 +128,9 @@ func New(cfg *config.Config) *Model {
 	}
 	if m.sess, err = session.NewManager(); err != nil {
 		m.notice = strings.TrimSpace(m.notice + " " + err.Error())
+	}
+	if m.notes, err = notes.Load(); err != nil {
+		m.notice = strings.TrimSpace(m.notice + " notes: " + err.Error())
 	}
 	m.settings, _ = session.SettingsFile()
 	m.sessByItem = map[string][]session.Info{}
@@ -132,6 +152,16 @@ func (m *Model) applyConfig(cfg *config.Config) {
 		m.providers[name] = p
 		if _, ok := m.data[name]; !ok {
 			m.data[name] = cache.Load(name)
+		}
+	}
+	for k, b := range m.busy {
+		for name := range b.refetch {
+			if _, known := m.providers[name]; !known {
+				delete(b.refetch, name) // a provider gone from the config never lands a fetch
+			}
+		}
+		if b.refetch != nil && len(b.refetch) == 0 {
+			delete(m.busy, k)
 		}
 	}
 	prev := ""
@@ -156,7 +186,11 @@ func (m *Model) applyConfig(cfg *config.Config) {
 			vc.Filter, edited = f, true
 		}
 		f, err := filter.Compile(vc.Filter)
-		m.views = append(m.views, &view{cfg: vc, filter: f, err: err, edited: edited})
+		keys, serr := item.ParseSort(vc.Sort)
+		if err == nil {
+			err = serr
+		}
+		m.views = append(m.views, &view{cfg: vc, filter: f, err: err, sort: keys, edited: edited})
 		if vc.Name == prev {
 			m.cur = i
 		}
@@ -164,7 +198,7 @@ func (m *Model) applyConfig(cfg *config.Config) {
 	m.rebuild()
 }
 
-// rebuild re-filters every view; the cursor sticks to the same item ID when it survives.
+// rebuild re-filters and re-sorts every view; the cursor sticks to the same item ID when it survives.
 func (m *Model) rebuild() {
 	selected := m.selectedID()
 	q := strings.ToLower(m.query)
@@ -174,6 +208,7 @@ func (m *Model) rebuild() {
 			continue
 		}
 		for _, it := range m.data[v.cfg.Provider] {
+			it = m.withNote(it)
 			ok, err := v.filter.Match(it.Env())
 			if err != nil {
 				v.err = err
@@ -187,6 +222,7 @@ func (m *Model) rebuild() {
 			}
 			v.items = append(v.items, it)
 		}
+		item.Sort(v.items, v.sort)
 	}
 	m.restoreCursor(selected)
 }
@@ -292,8 +328,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case fetchedMsg:
+		var again tea.Cmd
 		if !msg.partial {
 			m.loading[msg.name] = false
+			again = m.fetchLanded(msg.name)
 		}
 		if msg.err != nil {
 			if !msg.partial {
@@ -301,7 +339,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.fails[msg.name]++
 				m.retryAt[msg.name] = time.Now().Add(retryDelay(m.cfg.Poll(), m.fails[msg.name]))
 			}
-			return m, nil
+			return m, again
 		}
 		delete(m.provErr, msg.name)
 		if !msg.partial {
@@ -318,24 +356,87 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			v.err = nil // filter errors may have been transient (stale data shape)
 		}
 		m.rebuild()
+		return m, again
 	case tickMsg:
-		return m, tea.Batch(tick(), m.onTick(), m.pollSessions())
+		return m, tea.Batch(tick(), m.onTick(), m.pollSessions(), m.pollUsage())
+	case usageMsg:
+		m.usage = msg
 	case sessionsMsg:
 		m.onSessions(msg)
 	case doneMsg:
 		m.notice = msg.notice
 		if msg.refresh {
+			m.holdUntilRefetched(msg.keys, msg.ok)
 			return m, tea.Batch(m.pollSessions(), m.refreshAll())
 		}
+		m.unlock(msg.keys)
 		return m, m.pollSessions()
 	case editorDone:
 		return m, m.reload()
+	case noteEdited:
+		if msg.err != nil {
+			m.notice = "note: " + msg.err.Error()
+			return m, nil
+		}
+		m.setNote(msg.id, msg.text)
 	case pollNow:
 		return m, m.pollSessions()
 	case tea.KeyMsg:
 		return m.key(msg)
 	}
 	return m, nil
+}
+
+func (m *Model) unlock(keys []string) {
+	for _, k := range keys {
+		delete(m.busy, k)
+	}
+}
+
+// holdUntilRefetched keeps the items of a successful refresh run locked until every provider has landed a
+// fetch that started after the run; a failed run unlocks them at once. Call it before refreshAll.
+func (m *Model) holdUntilRefetched(keys []string, ok bool) {
+	if !ok || len(m.providers) == 0 {
+		m.unlock(keys)
+		return
+	}
+	for name := range m.providers {
+		if m.loading[name] {
+			m.refetchAfter[name] = true // its result predates the run
+		}
+	}
+	for _, k := range keys {
+		b, held := m.busy[k]
+		if !held {
+			continue
+		}
+		b.refetch = map[string]bool{}
+		for name := range m.providers {
+			b.refetch[name] = true
+		}
+		m.busy[k] = b
+	}
+}
+
+// fetchLanded runs when provider name delivered a full result or an error. A fetch that started before a
+// refresh run ended is followed by a fresh one; any other releases the items that waited on it.
+func (m *Model) fetchLanded(name string) tea.Cmd {
+	if m.refetchAfter[name] {
+		delete(m.refetchAfter, name)
+		if _, known := m.providers[name]; known {
+			return m.fetch(name)
+		}
+	}
+	for k, b := range m.busy {
+		if !b.refetch[name] {
+			continue
+		}
+		delete(b.refetch, name)
+		if len(b.refetch) == 0 {
+			delete(m.busy, k)
+		}
+	}
+	return nil
 }
 
 // inherit fills fields a partial result marks as pending from the previous snapshot of the same item.
@@ -372,7 +473,7 @@ func (m *Model) onTick() tea.Cmd {
 }
 
 // builtinKeys cannot be rebound through [keymap].
-const builtinKeys = "jkgGhlVqRoixpFS/:? "
+const builtinKeys = "jkgGhlVqRoixpnNFS/:? "
 
 // reload re-reads the config (also triggered by saving the file) and refetches, so edits apply live.
 func (m *Model) reload() tea.Cmd {
@@ -502,8 +603,23 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "i":
 		m.showHistory()
+	case "N":
+		if n > 0 {
+			return m, m.editNote(m.items()[m.cursor].ID)
+		}
 	case "S":
 		m.openSessions()
+	case "n":
+		if m.sess == nil {
+			break
+		}
+		name, ok := nextAttention(m.sessions, m.lastAttn)
+		if !ok {
+			m.notice = "nothing needs you"
+			break
+		}
+		m.lastAttn = name
+		return m, m.jumpTo(name)
 	case "p":
 		m.preview_ = !m.preview_
 	case "F":
@@ -654,6 +770,26 @@ func (m *Model) header() string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
+func (m *Model) pollUsage() tea.Cmd {
+	dir := m.cfg.Settings.ClaudeDir
+	return func() tea.Msg {
+		text, at := session.Usage(dir)
+		return usageMsg{text, at}
+	}
+}
+
+// usageText is the Claude usage for the footer; once stale it carries its age.
+func (m *Model) usageText(now time.Time) string {
+	if m.usage.text == "" {
+		return ""
+	}
+	text := "claude usage: " + m.usage.text
+	if d := now.Sub(m.usage.at); d > usageStale {
+		text += " (" + age(d) + " ago)"
+	}
+	return text
+}
+
 func (m *Model) freshness() string {
 	name := m.views[m.cur].cfg.Provider
 	switch {
@@ -717,11 +853,19 @@ func (m *Model) row(it item.Item, selected bool) string {
 		mark = st(sMark).Render("● ")
 	}
 	var badges []string
-	all := append([]item.Badge{}, it.Badges...)
+	var all []item.Badge
+	if m.notes.Get(it.ID) != "" {
+		all = append(all, item.Badge{Text: "✎", Kind: "dim"})
+	}
+	all = append(all, it.Badges...)
 	for i, ss := range m.sessionsOf(it) {
 		if i < 3 {
 			all = append(all, ss.Badge())
 		}
+	}
+	b, busy := m.busy[session.Key(it.ID)]
+	if busy {
+		all = append(all, item.Badge{Text: "⋯ " + b.action, Kind: "info"})
 	}
 	rightW := 0
 	for _, b := range all {
@@ -741,8 +885,8 @@ func (m *Model) row(it item.Item, selected bool) string {
 		titleW = 10
 	}
 	ts := sText
-	if it.Draft {
-		ts = sDim
+	if it.Draft || len(b.refetch) > 0 {
+		ts = sDim // drafts, and items whose refresh run's result is not fetched yet
 	}
 	title := st(ts).Render(fmt.Sprintf("%-*s", titleW, ansi.Truncate(it.Title, titleW, "…")))
 	cur := plain.Render(" ")
@@ -774,6 +918,8 @@ func (m *Model) footer() string {
 		left = sMark.Render(fmt.Sprintf(" %d marked", len(m.marks)))
 	case m.query != "":
 		left = sDim.Render(" filter: ") + sText.Render(m.query)
+	case m.usage.text != "":
+		left = sDim.Render(" " + m.usageText(time.Now()))
 	}
 	hint := sDim.Render("j/k move · h/l view · space mark · enter jump · x close · p preview · ? help")
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(hint) - 1
@@ -798,6 +944,8 @@ func (m *Model) helpLines() []string {
 		{"enter", "jump into the item's newest session"},
 		{"x", "close sessions of marked items / cursor item (confirms if running)"},
 		{"i", "item history"},
+		{"N", "edit the item's note in $EDITOR (save empty to delete)"},
+		{"n", "jump into the next session that is asking or waiting"},
 		{"S", "sessions: every session, also of items no longer listed (enter jump, x close)"},
 		{"p", "toggle preview pane"},
 		{"o / u", "open item in browser"},
@@ -836,8 +984,10 @@ func (m *Model) helpLines() []string {
 		{":filter [expr|reset]", "set / reset this view's filter"},
 		{":newview <name> <expr>", "create a view (same provider as the current one)"},
 		{":delview <name>", "delete a view created with :newview"},
+		{":note [text]", "set the item's note to a line of text / clear it"},
 		{":run <action>", "run an action by name"},
 		{":sessions", "list every session (same as S)"},
+		{":prune [failed]", "kill every finished session (only failed ones)"},
 		{":refresh  :reload  :edit  :config  :quit", ""},
 	} {
 		b.WriteString("  " + sKey.Render(fmt.Sprintf("%-26s", c[0])) + sText.Render(c[1]) + "\n")
@@ -848,7 +998,7 @@ func (m *Model) helpLines() []string {
 	} else {
 		b.WriteString(sDim.Render("  project config  none (create "+config.ProjectFile+" in the project, :edit project)") + "\n")
 	}
-	b.WriteString(sDim.Render("  state           "+app.StateDir()+"  (history, views, sessions)") + "\n")
+	b.WriteString(sDim.Render("  state           "+app.StateDir()+"  (history, views, notes, sessions)") + "\n")
 	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 }
 

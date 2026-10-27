@@ -11,12 +11,14 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/chriha/lanes/internal/app"
+	"github.com/chriha/lanes/internal/item"
 )
 
 type Settings struct {
 	PollInterval string `toml:"poll_interval"`
 	Preview      bool   `toml:"preview"` // show the detail pane at startup (toggle with p)
 	NoNotify     bool   `toml:"no_notify"`
+	ClaudeDir    string `toml:"claude_dir"` // Claude config dir whose usage the footer shows, e.g. ~/.claude
 }
 
 // Theme overrides the default adaptive palette; values are hex colors like "#A78BFA".
@@ -38,6 +40,7 @@ type View struct {
 	Name     string `toml:"name"`
 	Provider string `toml:"provider"`
 	Filter   string `toml:"filter"`
+	Sort     string `toml:"sort"` // comma-separated fields, "-" prefix = descending; empty = provider order
 }
 
 type Action struct {
@@ -155,6 +158,9 @@ func Load() (*Config, error) {
 		if _, ok := c.Provider[v.Provider]; !ok {
 			return nil, fmt.Errorf("%s: view %q uses unknown provider %q", p, v.Name, v.Provider)
 		}
+		if _, err := item.ParseSort(v.Sort); err != nil {
+			return nil, fmt.Errorf("%s: view %q: %w", p, v.Name, err)
+		}
 	}
 	for name, a := range c.Action {
 		if strings.Contains(name, "~") || a.Run == "" || (a.Type != "" && a.Type != "session" && a.Type != "run") {
@@ -175,6 +181,7 @@ const Default = `# lanes — global config. A ".lanes.toml" in a project overlay
 poll_interval = "30s"
 # preview = true      # show the detail pane at startup (toggle with p)
 # no_notify = true    # disable desktop notifications
+# claude_dir = "~/.claude"  # show this Claude profile's usage in the footer (written by a Claude Code mod)
 
 # project is detected from the git remote of the current directory when empty
 [provider.gitlab]

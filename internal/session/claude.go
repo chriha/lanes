@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/chriha/lanes/internal/app"
@@ -30,7 +31,7 @@ func readState(name string) string {
 }
 
 // RunHook is the `<app> hook <event>` entry point called by Claude Code hooks. It maps the event to a
-// state and writes it for the session named in $LANES_SESSION. Never fails loudly: it must not disturb claude.
+// state and writes it (SessionEnd removes it) for the session named in $LANES_SESSION. Never fails loudly: it must not disturb claude.
 func RunHook(event string) {
 	name := os.Getenv("LANES_SESSION")
 	if name == "" {
@@ -38,9 +39,17 @@ func RunHook(event string) {
 	}
 	var in struct {
 		NotificationType string `json:"notification_type"`
+		Reason           string `json:"reason"`
 	}
 	if b, err := io.ReadAll(os.Stdin); err == nil {
 		_ = json.Unmarshal(b, &in)
+	}
+	if event == "SessionEnd" {
+		// /clear and resume end a session but Claude keeps running: keep the state then.
+		if in.Reason != "clear" && in.Reason != "resume" {
+			_ = os.Remove(hookStatePath(name))
+		}
+		return
 	}
 	state := map[string]string{
 		"UserPromptSubmit": "working",
@@ -72,6 +81,7 @@ func SettingsFile() (string, error) {
 		"PreToolUse":       hook("PreToolUse"),
 		"Stop":             hook("Stop"),
 		"Notification":     hook("Notification"),
+		"SessionEnd":       hook("SessionEnd"),
 	}}
 	b, _ := json.MarshalIndent(settings, "", "  ")
 	p := filepath.Join(app.StateDir(), "claude-settings.json")
@@ -79,4 +89,31 @@ func SettingsFile() (string, error) {
 		return "", err
 	}
 	return p, os.WriteFile(p, b, 0o644)
+}
+
+// UsageFile is what a Claude Code mod writes into a Claude config dir: the statusline's usage text and when.
+const UsageFile = "usage-line.json"
+
+// Usage reads the usage text written into the Claude config dir (a leading ~ is the home dir). It returns ""
+// when dir is empty or the file is missing or unreadable.
+func Usage(dir string) (string, time.Time) {
+	if dir == "" {
+		return "", time.Time{}
+	}
+	if rest, ok := strings.CutPrefix(dir, "~"); ok {
+		home, _ := os.UserHomeDir()
+		dir = home + rest
+	}
+	b, err := os.ReadFile(filepath.Join(dir, UsageFile))
+	if err != nil {
+		return "", time.Time{}
+	}
+	var u struct {
+		Text string `json:"text"`
+		At   int64  `json:"at"`
+	}
+	if json.Unmarshal(b, &u) != nil || u.Text == "" {
+		return "", time.Time{}
+	}
+	return u.Text, time.Unix(u.At, 0)
 }

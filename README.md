@@ -30,6 +30,7 @@ you what each session is doing (running, working, asking a question, waiting for
 - [Using lanes](#using-lanes)
   - [Views](#views)
   - [Filters](#filters)
+  - [Sorting](#sorting)
   - [Navigation and selection](#navigation-and-selection)
   - [Searching](#searching)
   - [The command line](#the-command-line)
@@ -85,6 +86,7 @@ look at a list, press a key, and the work starts in the background in a session 
   shown in the footer.
 - **In-app filter editing** — change a view's filter, or create/delete views, without leaving the UI.
 - **Item history** — per-item log of which actions ran, when and how they ended.
+- **Notes** — your own note per item (`N`), shown in every view, usable in filters and templates.
 - **Preview pane** — details of the selected item, its sessions and last run.
 - **Notifications** — desktop notification when a session needs you or ends.
 - **Global + project config** — one config for you, optional `.lanes.toml` per project that overrides only what
@@ -175,8 +177,8 @@ Useful building blocks:
 | `len(reviewers) >= 2`          | list length                                |
 | `open_threads > 0`             | numbers                                    |
 
-**Fields** are the item's own (`id`, `title`, `url`, `author`, `draft`) plus whatever the provider adds. For
-GitLab:
+**Fields** are the item's own (`id`, `title`, `url`, `author`, `draft`), your [note](#preview-pane-and-item-history)
+(`note`, empty when there is none, e.g. `note != ""`) plus whatever the provider adds. For GitLab:
 
 | Field               | Type        | Meaning                                                                    |
 |---------------------|-------------|----------------------------------------------------------------------------|
@@ -215,6 +217,23 @@ runtime error (e.g. comparing a missing field) shows as a message in the list in
 hand-written TOML is never rewritten, and shows as `*` in the tab bar. `:filter reset` goes back to the
 config's filter.
 
+### Sorting
+
+A view lists items in provider order unless it sets `sort`: a comma-separated list of field names (the same
+fields as in filters), each optionally prefixed with `-` for descending. Later keys break ties of earlier ones;
+the sort is stable, so items that compare equal keep provider order. Numbers, bools (`false` first) and times
+compare by value, everything else as text. Items missing a field sort last for that key, in either direction.
+
+```toml
+[[view]]
+name = "mine"
+provider = "gitlab"
+filter = 'author == me'
+sort = "-open_threads,title"
+```
+
+An unknown field name is not an error (fields come from the provider); an empty key (`"a,,b"`) is.
+
 ### Navigation and selection
 
 | Key                 | Action                                             |
@@ -229,6 +248,8 @@ config's filter.
 | `o`                 | open the item's URL in the browser                 |
 | `x`                 | close the item's sessions (asks if any is still running) |
 | `i`                 | show the item's history                            |
+| `N`                 | edit the item's note in `$VISUAL` / `$EDITOR` (save it empty to delete it) |
+| `n`                 | jump into the next session that is asking or waiting (any view) |
 | `S`                 | sessions screen: every session, also of items no longer listed |
 | `p`                 | toggle the preview pane                            |
 | `F`                 | edit the current view's filter                     |
@@ -258,8 +279,12 @@ narrows the view; it does not change its filter.
 | `:filter reset`           | drop the in-app override and use the config's filter again            |
 | `:newview <name> <expr>`  | create a view on the current view's provider                          |
 | `:delview <name>`         | delete a view created with `:newview`                                 |
+| `:note <text>`            | set the selected item's note to one line of text                      |
+| `:note`                   | delete the selected item's note                                       |
 | `:run <action>`           | run an action by name, even if it has no key                          |
 | `:sessions`               | open the sessions screen (same as `S`)                                |
+| `:prune`                  | kill every finished session; running ones are never touched           |
+| `:prune failed`           | kill only finished sessions that exited non-zero                      |
 | `:refresh`                | refetch now                                                           |
 | `:reload`                 | re-read the config now                                                |
 | `:config`                 | print the global and project config paths                             |
@@ -274,6 +299,7 @@ sessions.
 
 | Badge          | Meaning                                                       |
 |----------------|---------------------------------------------------------------|
+| `✎`            | you left a [note](#preview-pane-and-item-history) on the item |
 | `draft`        | MR is a draft                                                 |
 | `✓ ci` `✗ ci` `◌ ci` | pipeline passed / failed / running or pending           |
 | `↓ behind`     | source branch is behind its target branch                     |
@@ -291,12 +317,21 @@ The top right of the screen summarizes live sessions (`◐ 2  ? 1  ● 1`) and w
 
 ### Preview pane and item history
 
-`p` toggles a pane under the list with the selected item's title, URL, author, the provider's fields (branch,
-labels, reviewers, CI, …), its sessions and its last run. Set `preview = true` under `[settings]` to start with
+`p` toggles a pane under the list with the selected item's title, URL, author, your note, the provider's fields
+(branch, labels, reviewers, CI, …), its sessions and its last run. Set `preview = true` under `[settings]` to start with
 it open.
 
 `i` shows the item's **history**: every action started on it, and how it ended (`finished`, `failed (exit n)`,
 `killed`). History is stored per project and survives restarts.
+
+`N` opens the item's **note** in `$VISUAL` / `$EDITOR` (as `:edit` does): keep your own context there, e.g.
+"waiting on backend". Saving stores it, saving an empty file deletes it, quitting the editor with an error (vim's
+`:cq`) leaves it unchanged; `:note <text>` sets a one-line note without the editor. A note belongs to the item, not
+to a view: every view that lists the item shows `✎` on its row, and the preview shows the full text. Filters and
+action templates see it as `note` (`note != ""`, `{{.note}}`); a provider field called `note` takes precedence
+(the preview then labels yours `my note`).
+Notes are stored per project and kept when the item leaves the list. A corrupt notes file is reported in the
+footer and left alone until you save a note, which moves it to `notes.json.bak`.
 
 ## Actions
 
@@ -330,6 +365,11 @@ aliases and PATH apply). The session appears as a badge on the item. Press `ente
 get the full interactive terminal. If the command is interactive (for example `claude`), you can answer its
 questions there.
 
+As soon as you press the key, each item shows a `⋯ <action>` badge and the footer says
+`starting <action> on <ids>…`. Until tmux has started the session, the item is **busy**: any action on it is
+skipped (`!12 busy (review)`). In a multi-item run the other items still run and the result adds `, N busy`. The
+lock ends once the session has started, so a long-running session does not block other actions on the item.
+
 If an action is already running for an item it is not started again (you are told so). If its previous session
 has ended, it is replaced by a fresh one.
 
@@ -352,6 +392,11 @@ Marked items are processed in parallel. The footer shows the result: `✓ ready 
 `✗ ready failed on 1/2 — !12: <last line of the command's output>`. With `refresh = true` the lists refetch
 afterwards, so the MR moves out of your `drafts` view.
 
+While the command runs, the item shows a `⋯ <action>` badge and is busy: any action on it is skipped, as for
+session actions. After a successful `refresh = true` run the item stays busy, with its row muted, until every
+provider has finished a fetch that started after the run (a fetch already under way gets a follow-up). A failed
+run unlocks the item right away.
+
 ### Templates
 
 `run`, `cwd` are [Go templates](https://pkg.go.dev/text/template). Available fields:
@@ -360,6 +405,7 @@ afterwards, so the MR moves out of your `drafts` view.
 |---------------------------------|-----------------------------------------------------------------|
 | `{{.id}}` `{{.title}}` `{{.url}}` `{{.author}}` | the item's own fields                           |
 | `{{.iid}}` `{{.branch}}` `{{.ticket}}` `{{.me}}` … | provider fields (see [Filters](#filters))   |
+| `{{.note}}`                     | your note on the item (empty when there is none)                |
 | `{{.vars.name}}`                | the action's `vars`                                             |
 | `{{.settings}}`                 | path to a Claude settings file that reports session status      |
 | `{{.session}}` `{{.action}}`    | the session / action name                                       |
@@ -383,6 +429,9 @@ Each item gets its own session; items that already have the action running are s
 - **Jump** — `enter` on an item attaches to its newest session. Inside tmux this opens a popup over `lanes`;
   outside tmux, `lanes` suspends and attaches. **Detach with `ctrl-b d`** to come back (the session keeps
   running). A hint is shown in the session's status bar.
+- **Next needing you** — `n` jumps into the next live session that is asking or waiting, across all views:
+  asking before waiting, oldest first. Pressing `n` again goes to the next one and wraps around; with none,
+  the footer says `nothing needs you`.
 - **Close** — `x` closes the sessions of the marked items, or of the item under the cursor. Running sessions are
   confirmed first (`Kill 2 running session(s)?`); finished ones are removed immediately.
 - **Sessions screen** — `S` (or `:sessions`) lists every session on the `lanes` tmux server, newest first:
@@ -411,9 +460,26 @@ state for the session:
 | notification (permission, question)  | `? asking`        |
 | turn finished                        | `● waiting`       |
 | idle reminder                        | `● waiting`       |
+| Claude exited (`SessionEnd`)         | `▶` running       |
 
 The settings are merged with your own Claude settings (via `--settings`), they don't replace them. Commands
 without the flag simply show `▶` while running.
+
+#### Usage in the footer
+
+With `claude_dir` under `[settings]`, the left of the footer shows that Claude profile's usage, e.g.
+`claude usage: 5h 23% · wk 30% · budget +4% · reset 15:00` (a notice, the mark count or an active search take its
+place while shown). lanes reads it from `<claude_dir>/usage-line.json`, which a Claude
+Code mod writes whenever Claude measures usage:
+
+```json
+{ "text": "5h 23% · wk 30% · budget +4% · reset 15:00", "at": 1761561600 }
+```
+
+lanes shows `text` as is, so it matches your Claude statusline. The file only changes while a Claude
+session of that profile runs; after 10 minutes the text shows its age. Each profile has its own
+dir (e.g. `~/.claude` and `~/.claude-personal` for `CLAUDE_CONFIG_DIR=~/.claude-personal claude`), and a
+project's `.lanes.toml` can point at a different one than the global config. Unset, or no file: nothing is shown.
 
 ### Notifications
 
@@ -522,6 +588,7 @@ footer shows the error.
 poll_interval = "30s"   # how often lists refresh (minimum 5s)
 preview       = false   # open the preview pane at startup
 no_notify     = false   # disable desktop notifications
+claude_dir    = "~/.claude"   # show this Claude profile's usage in the footer (see Claude Code integration)
 
 [provider.<name>]
 type    = "gitlab"      # or "command"
@@ -532,6 +599,7 @@ command = "..."             # command provider
 name     = "review"
 provider = "<name>"
 filter   = '<expression>'   # empty = everything
+sort     = "-field,field"    # "-" = descending; empty = provider order
 
 [keymap]
 <key> = "<action name>"     # single character, e.g. r
@@ -561,6 +629,7 @@ color under `[theme]`. Changes apply live.
 | Project config                         | `.lanes.toml` in the project (or a parent)              |
 | In-app views and filter edits          | `~/.local/state/lanes/<project>/views.json`             |
 | Item history                           | `~/.local/state/lanes/<project>/history.jsonl`          |
+| Item notes                             | `~/.local/state/lanes/<project>/notes.json`             |
 | Session status files, tmux config      | `~/.local/state/lanes/<project>/`                       |
 | Cached lists                           | `~/.cache/lanes/<project>/`                             |
 
@@ -579,7 +648,8 @@ two projects never share history, views or sessions. The `$XDG_*` variables are 
   list of sessions is simply asked from tmux once per second. This also means sessions survive quitting or
   crashing `lanes`.
 - **Claude status** is written by hooks to a small file per session in the state directory; `lanes` reads those
-  files together with the tmux pane state.
+  files together with the tmux pane state. The state is ignored once only a shell is left in the pane (Claude
+  quit or crashed), so the session counts as running again.
 - **Config reload** compares the modification time of the global and project files every second.
 
 ## tmux and lanes
@@ -598,6 +668,12 @@ two projects never share history, views or sessions. The `$XDG_*` variables are 
   (In session names, characters outside `A-Za-z0-9_-` in the item id are replaced with `_`; `!1948` becomes
   `_1948`.)
 - Detach with the private server's prefix, `ctrl-b d`.
+- `lanes status` prints the current project's sessions that need input, as `? <asking> ● <waiting>` (zero parts
+  left out, nothing at all when none do). It never prints errors, so it fits a status bar or a shell prompt:
+  ```tmux
+  # ~/.tmux.conf
+  set -g status-right '#(cd #{pane_current_path} && lanes status) %H:%M'
+  ```
 
 ## Troubleshooting
 

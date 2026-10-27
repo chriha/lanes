@@ -76,14 +76,14 @@ func (m *Manager) tmux(args ...string) *exec.Cmd {
 func (m *Manager) List() ([]Info, error) {
 	const sep = "\t"
 	out, err := m.run("list-panes", "-a", "-F",
-		strings.Join([]string{"#{session_name}", "#{pane_dead}", "#{pane_dead_status}", "#{session_created}"}, sep))
+		strings.Join([]string{"#{session_name}", "#{pane_dead}", "#{pane_dead_status}", "#{session_created}", "#{pane_current_command}"}, sep))
 	if err != nil {
 		return nil, nil // no server running = no sessions
 	}
 	var infos []Info
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		f := strings.Split(line, sep)
-		if len(f) != 4 {
+		if len(f) != 5 {
 			continue
 		}
 		action, key, ok := strings.Cut(f[0], "~")
@@ -93,13 +93,23 @@ func (m *Manager) List() ([]Info, error) {
 		created, _ := strconv.ParseInt(f[3], 10, 64)
 		exit, _ := strconv.Atoi(f[2])
 		in := Info{Name: f[0], Action: action, ItemKey: key, Dead: f[1] == "1", Exit: exit, Created: time.Unix(created, 0)}
-		if !in.Dead {
+		if !in.Dead && !isShell(f[4]) {
 			in.Claude = readState(in.Name)
 		}
 		infos = append(infos, in)
 	}
 	sort.Slice(infos, func(i, j int) bool { return infos[i].Created.After(infos[j].Created) })
 	return infos, nil
+}
+
+// isShell reports whether cmd (a pane's current command) is a shell, i.e. nothing but a shell is left in the
+// pane: the basename of $SHELL, sh, bash, zsh or fish.
+func isShell(cmd string) bool {
+	switch cmd {
+	case "sh", "bash", "zsh", "fish", filepath.Base(os.Getenv("SHELL")):
+		return true
+	}
+	return false
 }
 
 // Start launches command in the user's shell inside a new detached session.
@@ -125,6 +135,31 @@ func (m *Manager) Kill(name string) error {
 	_ = os.Remove(statePath(name))
 	_, err := m.run("kill-session", "-t", "="+name)
 	return err
+}
+
+// Prune kills the dead sessions of a fresh listing (with failedOnly, only those with a non-zero exit) and
+// never touches running ones. A failing kill does not stop the others: it returns the number of sessions
+// killed and the first error.
+func (m *Manager) Prune(failedOnly bool) (int, error) {
+	infos, err := m.List()
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	var first error
+	for _, s := range infos {
+		if !s.Dead || (failedOnly && s.Exit == 0) {
+			continue
+		}
+		if err := m.Kill(s.Name); err != nil {
+			if first == nil {
+				first = fmt.Errorf("killing %s: %w", s.Name, err)
+			}
+			continue
+		}
+		n++
+	}
+	return n, first
 }
 
 // JumpCmd returns a command that attaches to the session: in a popup when the user is inside tmux,
@@ -154,4 +189,35 @@ func (i Info) Badge() item.Badge {
 		return item.Badge{Text: "● " + i.Action + ": waiting", Kind: "warn"}
 	}
 	return item.Badge{Text: "▶ " + i.Action, Kind: "info"}
+}
+
+// Count tallies the live sessions: running (no Claude status, or working), asking and waiting.
+// Dead sessions are not counted.
+func Count(infos []Info) (run, ask, wait int) {
+	for _, s := range infos {
+		switch {
+		case s.Dead:
+		case s.Claude == "asking":
+			ask++
+		case s.Claude == "waiting":
+			wait++
+		default:
+			run++
+		}
+	}
+	return run, ask, wait
+}
+
+// StatusLine is the `lanes status` output: "? <asking> ● <waiting>", zero parts omitted, empty when
+// nothing needs input. No colour, so it fits tmux status bars and shell prompts.
+func StatusLine(infos []Info) string {
+	_, ask, wait := Count(infos)
+	var parts []string
+	if ask > 0 {
+		parts = append(parts, fmt.Sprintf("? %d", ask))
+	}
+	if wait > 0 {
+		parts = append(parts, fmt.Sprintf("● %d", wait))
+	}
+	return strings.Join(parts, " ")
 }

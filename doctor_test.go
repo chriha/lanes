@@ -39,6 +39,32 @@ func TestDoctor(t *testing.T) {
 		}
 	}
 	notFound := func(string) (string, error) { return "", errors.New("not found") }
+	missing := func(cli string) func(string) (string, error) {
+		return func(n string) (string, error) {
+			if n == cli {
+				return "", errors.New("not found")
+			}
+			return "/usr/bin/" + n, nil
+		}
+	}
+	withProvider := func(p config.Provider) func() (*config.Config, error) {
+		return func() (*config.Config, error) {
+			c := cfg()
+			c.Provider = map[string]config.Provider{"gitlab": p}
+			return c, nil
+		}
+	}
+	withOrigin := func(url string, err error) func(string, ...string) (string, error) {
+		return func(name string, _ ...string) (string, error) {
+			switch name {
+			case "tmux":
+				return "tmux 3.4\n", nil
+			case "git":
+				return url, err
+			}
+			return "Logged in as me\n", nil
+		}
+	}
 
 	tests := []struct {
 		name  string
@@ -87,6 +113,30 @@ func TestDoctor(t *testing.T) {
 					c.Provider = map[string]config.Provider{"gitlab": {Type: "command", Command: "echo []"}}
 					return c, nil
 				}
+			}},
+		{name: "github provider checks gh, not glab", code: 1, want: []string{"fail  gh", "ok    glab: skipped"},
+			edit: func(e *doctorEnv) {
+				e.lookPath = missing("gh")
+				e.load = withProvider(config.Provider{Type: "github"})
+			}},
+		{name: "auto on a github origin checks gh", code: 0, want: []string{"ok    gh: logged in", "ok    glab: skipped"},
+			avoid: []string{"fail", "warn"},
+			edit: func(e *doctorEnv) {
+				e.lookPath = missing("glab")
+				e.load = withProvider(config.Provider{Type: "auto"})
+				e.run = withOrigin("git@github.com:owner/repo.git\n", nil)
+			}},
+		{name: "auto on a gitlab origin checks glab", code: 0, want: []string{"ok    glab: logged in", "ok    gh: skipped"},
+			avoid: []string{"fail", "warn"},
+			edit: func(e *doctorEnv) {
+				e.lookPath = missing("gh")
+				e.load = withProvider(config.Provider{Type: "auto"})
+				e.run = withOrigin("https://gitlab.com/group/project.git\n", nil)
+			}},
+		{name: "auto without an origin warns", code: 0, want: []string{"warn  provider gitlab: auto"},
+			edit: func(e *doctorEnv) {
+				e.load = withProvider(config.Provider{Type: "auto"})
+				e.run = withOrigin("fatal: not a git repository\n", errors.New("exit status 128"))
 			}},
 		{name: "config fails", code: 1, want: []string{"fail  config: boom"},
 			edit: func(e *doctorEnv) { e.load = func() (*config.Config, error) { return nil, errors.New("boom") } }},

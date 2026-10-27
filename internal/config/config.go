@@ -31,8 +31,8 @@ type Theme struct {
 }
 
 type Provider struct {
-	Type    string `toml:"type"`    // gitlab | command
-	Project string `toml:"project"` // gitlab: group/project; empty = detect from git remote
+	Type    string `toml:"type"`    // gitlab | github | auto (github for a github.com origin, else gitlab) | command
+	Project string `toml:"project"` // gitlab: group/project, github: owner/repo; empty = detect from git remote
 	Command string `toml:"command"` // command: shell command printing a JSON array of items
 }
 
@@ -183,36 +183,40 @@ poll_interval = "30s"
 # no_notify = true    # disable desktop notifications
 # claude_dir = "~/.claude"  # show this Claude profile's usage in the footer (written by a Claude Code mod)
 
-# project is detected from the git remote of the current directory when empty
-[provider.gitlab]
-type = "gitlab"
+# type "auto" picks github for a github.com origin and gitlab otherwise, per project
+# (GitHub Enterprise: set type = "github"). project is detected from the git remote of the
+# current directory when empty.
+[provider.forge]
+type = "auto"
 # project = "group/project"
 
-# Filter fields (gitlab): author, draft, approved, approved_by_me, open_threads,
+# Filter fields (gitlab, github): author, draft, approved, approved_by_me, open_threads,
 # open_thread_by_me, ci, conflicts, diverged, labels, reviewers, assignees, branch, target, ticket, me
 [[view]]
 name = "review"
-provider = "gitlab"
+provider = "forge"
 filter = '!draft && !approved_by_me && !open_thread_by_me && author != me'
 
 [[view]]
 name = "mine"
-provider = "gitlab"
+provider = "forge"
 filter = 'author == me && !draft'
 
 [[view]]
 name = "drafts"
-provider = "gitlab"
+provider = "forge"
 filter = 'author == me && draft'
 
 # Keys run an action on the marked items (or the item under the cursor).
 # Built-in keys win over the keymap.
-# Template fields: id, title, url, author, plus provider fields (gitlab: iid, branch, ticket, ...).
+# Template fields: id, title, url, author, plus provider fields (gitlab: iid, github: number,
+# branch, ticket, ...).
 # {{.x | q}} shell-quotes a value; {{.settings}} lets claude report its status to lanes.
 [keymap]
 m = "ready"
 
 # type = "run" executes headless (no tmux session) and reports the result in the footer.
+# GitLab only; on GitHub use run = 'gh pr ready {{.number}}'.
 [action.ready]
 type = "run"
 refresh = true

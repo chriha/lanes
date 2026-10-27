@@ -46,6 +46,8 @@ you what each session is doing (running, working, asking a question, waiting for
   - [Notifications](#notifications)
 - [Providers](#providers)
   - [gitlab](#gitlab)
+  - [github](#github)
+  - [auto](#auto)
   - [command](#command)
 - [Configuration](#configuration)
   - [Global and project config](#global-and-project-config)
@@ -99,7 +101,8 @@ look at a list, press a key, and the work starts in the background in a session 
 - macOS or Linux
 - [tmux](https://github.com/tmux/tmux) ≥ 3.2 (sessions run in tmux; `lanes` never touches your own tmux server)
 - For the built-in GitLab provider: the [`glab`](https://gitlab.com/gitlab-org/cli) CLI, authenticated
-  (`glab auth login`). `lanes` reuses its credentials — it never asks for a token.
+  (`glab auth login`); for the GitHub provider: the [`gh`](https://cli.github.com) CLI, authenticated
+  (`gh auth login`). `lanes` reuses their credentials — it never asks for a token.
 - Go ≥ 1.23 only if you build from source
 
 ## Install
@@ -122,11 +125,12 @@ lanes --version
 
 ## Quick start
 
-1. `cd` into a git repository whose `origin` is on GitLab.
+1. `cd` into a git repository whose `origin` is on GitHub or GitLab.
 2. Run `lanes`.
 
 On first start `lanes` writes a default global config (see [Where things live](#where-things-live)) with three
-views — `review`, `mine`, `drafts` — and the GitLab provider, which detects the project from your `origin` remote.
+views — `review`, `mine`, `drafts` — and one `auto` provider named `forge`, which picks GitHub for a `github.com`
+`origin` and GitLab otherwise, and detects the repository from that remote.
 Press `?` at any time for the built-in help (scroll with `j`/`k`, close with `q`).
 
 Then make it yours: press `:edit` (or edit the file in your editor — changes apply immediately), define the
@@ -178,7 +182,7 @@ Useful building blocks:
 | `open_threads > 0`             | numbers                                    |
 
 **Fields** are the item's own (`id`, `title`, `url`, `author`, `draft`), your [note](#preview-pane-and-item-history)
-(`note`, empty when there is none, e.g. `note != ""`) plus whatever the provider adds. For GitLab:
+(`note`, empty when there is none, e.g. `note != ""`) plus whatever the provider adds. For GitLab (GitHub has the same fields, with `number` instead of `iid`):
 
 | Field               | Type        | Meaning                                                                    |
 |---------------------|-------------|----------------------------------------------------------------------------|
@@ -199,6 +203,7 @@ Useful building blocks:
 | `branch`, `target`  | string      | source and target branch                                                   |
 | `ticket`            | string      | first `ABC-123` style id found in the title or branch, upper-cased         |
 | `iid`               | string      | the MR number (used in the `id` as `!<iid>`)                               |
+| `number`            | number      | GitHub only, instead of `iid`: the PR number (used in the `id` as `#<number>`) |
 
 Examples:
 
@@ -505,6 +510,35 @@ immediately; a second pass (~9 s on large projects) adds who started which discu
 its value from the previous refresh, so the list does not flicker. Only the 100 most recently updated open MRs
 (and their first 100 discussions) are considered.
 
+### github
+
+```toml
+[provider.github]
+type = "github"
+# project = "owner/repo"   # default: detected from the git `origin` of the current directory
+```
+
+Lists the repository's **open pull requests**, drafts included (`draft = true`), via `gh api graphql` (so it uses
+your existing `gh` login), in one query. Items get the same fields and badges as GitLab (see [Filters](#filters)),
+with `number` instead of `iid`: `approved` is an approving review decision or any approving latest review,
+`open_threads` counts unresolved review threads, `ci` is the head commit's check rollup (`success`, `failed`,
+`running`), `conflicts` is a conflicting PR and `diverged` a branch behind its base. Only the 100 most recently
+updated open PRs (and their first 100 review threads) are considered. Use it for GitHub Enterprise hosts, which
+`auto` treats as GitLab.
+
+### auto
+
+```toml
+[provider.forge]
+type = "auto"
+# project = "owner/repo"   # default: detected from the git `origin` of the current directory
+```
+
+Picks `github` when the `origin` remote of the current directory is on `github.com` (https or ssh URL) and
+`gitlab` for any other host, each time `lanes` starts or reloads its config — so one global config works in
+GitHub and GitLab repositories alike. Without an `origin` remote it fails with an error asking you to set the
+type explicitly. This is what the default config uses.
+
 ### command
 
 Turn anything into a list. The command runs through `$SHELL -c` and must print a JSON array:
@@ -591,8 +625,8 @@ no_notify     = false   # disable desktop notifications
 claude_dir    = "~/.claude"   # show this Claude profile's usage in the footer (see Claude Code integration)
 
 [provider.<name>]
-type    = "gitlab"      # or "command"
-project = "group/project"   # gitlab; default: detected from git origin
+type    = "gitlab"      # or "github", "auto" (github for a github.com origin, else gitlab), "command"
+project = "group/project"   # gitlab/github (owner/repo); default: detected from git origin
 command = "..."             # command provider
 
 [[view]]
@@ -678,12 +712,16 @@ two projects never share history, views or sessions. The `$XDG_*` variables are 
 ## Troubleshooting
 
 Run `lanes doctor` first. Without starting the TUI or touching any tmux server, it checks `tmux` (in `PATH`,
-≥ 3.2), `glab` and `glab auth status` (only when a `gitlab` provider is configured), that the config loads, that
+≥ 3.2), `glab` and `glab auth status` (only when a `gitlab` provider is configured) and likewise `gh` and
+`gh auth status` for `github` (an `auto` provider counts as the forge its `origin` resolves to here; without an
+`origin` it warns), that the config loads, that
 every view filter compiles and every action template parses, and that the state and cache directories are
 writable. It prints one `ok` / `warn` / `fail` line per check, naming the view or action, and exits 1 on any fail.
 
-- **`glab: …` error in the list** — run `glab auth status`; `lanes` needs a logged-in `glab`. For a project that
-  cannot be detected from the git remote, set `project` on the provider.
+- **`glab: …` / `gh: …` error in the list** — run `glab auth status` / `gh auth status`; `lanes` needs a
+  logged-in CLI. For a project that cannot be detected from the git remote, set `project` on the provider.
+- **`auto: cannot detect the forge …`** — the directory has no `origin` remote; set `type = "github"` or
+  `type = "gitlab"` on the provider (in a `.lanes.toml` for that project).
 - **`tmux not found in PATH`** — install tmux (≥ 3.2).
 - **A key does nothing** — it may be a built-in key; open `?` and look at the actions list, shadowed bindings
   are flagged.
@@ -702,7 +740,7 @@ make test         # go vet + go test
 ```
 
 The code is organised by concern under `internal/`: `config` (TOML, project overlay, in-app overrides),
-`provider` (GitLab, command), `filter` (expressions), `session` (tmux, Claude hooks), `history`, `cache` and
+`provider` (GitLab, GitHub, command), `filter` (expressions), `session` (tmux, Claude hooks), `history`, `cache` and
 `ui` (Bubble Tea). Design notes: [docs/design.md](docs/design.md).
 
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea),

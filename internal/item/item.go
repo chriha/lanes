@@ -20,10 +20,13 @@ type Item struct {
 
 // Env is the variable set filter expressions are evaluated against.
 func (i Item) Env() map[string]any {
-	env := make(map[string]any, len(i.Fields)+5)
+	env := make(map[string]any, len(i.Fields)+6)
 	for k, v := range i.Fields {
 		env[k] = v
 	}
 	env["id"], env["title"], env["url"], env["author"], env["draft"] = i.ID, i.Title, i.URL, i.Author, i.Draft
+	if _, ok := env["note"]; !ok {
+		env["note"] = "" // notes are injected into Fields by the UI; a provider field named note wins
+	}
 	return env
 }

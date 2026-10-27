@@ -59,7 +59,7 @@ func Forge(remoteURL string) (typ, repo string) {
 
 // splitRemote splits a git remote URL into its host (without user and port) and repo path.
 func splitRemote(u string) (host, path string) {
-	u = strings.TrimSuffix(strings.TrimSpace(u), ".git")
+	u = strings.TrimSuffix(strings.TrimRight(strings.TrimSpace(u), "/"), ".git")
 	if i := strings.Index(u, "://"); i >= 0 {
 		u = u[i+3:]
 		host, path, _ = strings.Cut(u, "/")

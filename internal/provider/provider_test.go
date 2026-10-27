@@ -14,6 +14,7 @@ func TestForge(t *testing.T) {
 	}{
 		{"https://github.com/owner/repo.git", "github", "owner/repo"},
 		{"https://github.com/owner/repo", "github", "owner/repo"},
+		{"https://github.com/owner/repo.git/", "github", "owner/repo"},
 		{"git@github.com:owner/repo.git", "github", "owner/repo"},
 		{"ssh://git@github.com/owner/repo.git", "github", "owner/repo"},
 		{"ssh://git@github.com:22/owner/repo.git", "github", "owner/repo"},

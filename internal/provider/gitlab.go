@@ -95,13 +95,21 @@ func (g *GitLab) project() (string, error) {
 	return u, nil
 }
 
-// originPath returns the repo path (group/project, owner/repo) of the origin remote's URL.
-func originPath() (string, error) {
+// originURL returns the URL of the current directory's origin remote.
+func originURL() (string, error) {
 	out, err := exec.Command("git", "remote", "get-url", "origin").Output()
 	if err != nil {
 		return "", err
 	}
-	u := strings.TrimSpace(string(out))
+	return strings.TrimSpace(string(out)), nil
+}
+
+// originPath returns the repo path (group/project, owner/repo) of the origin remote's URL.
+func originPath() (string, error) {
+	u, err := originURL()
+	if err != nil {
+		return "", err
+	}
 	u = strings.TrimSuffix(u, ".git")
 	if i := strings.Index(u, "://"); i >= 0 {
 		u = u[i+3:]

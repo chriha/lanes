@@ -32,6 +32,15 @@ type sessionsMsg struct {
 type doneMsg struct {
 	notice  string
 	refresh bool
+	keys    []string // items the action ran on; their busy lock ends here (or after the refetch)
+	ok      bool     // every job succeeded
+}
+
+// busyState locks an item while an action on it starts or runs, and after a successful refresh run
+// until every provider in refetch has landed a fetch that started after the run.
+type busyState struct {
+	action  string
+	refetch map[string]bool
 }
 type pollNow struct{}
 
@@ -133,8 +142,22 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 		m.notice = "tmux unavailable"
 		return nil
 	}
-	ts := m.targets()
+	all := m.targets()
+	if len(all) == 0 {
+		return nil
+	}
+	// a busy item is starting or running an action: skip it, whatever the action
+	var ts []item.Item
+	var busy []string
+	for _, it := range all {
+		if b, ok := m.busy[session.Key(it.ID)]; ok {
+			busy = append(busy, fmt.Sprintf("%s busy (%s)", it.ID, b.action))
+			continue
+		}
+		ts = append(ts, it)
+	}
 	if len(ts) == 0 {
+		m.notice = strings.Join(busy, ", ")
 		return nil
 	}
 	var jobs []job
@@ -179,13 +202,19 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 	}
 	if len(jobs) == 0 {
 		m.notice = fmt.Sprintf("%s already running", name)
+		if len(busy) > 0 {
+			m.notice += ", " + strings.Join(busy, ", ")
+		}
 		return nil
 	}
-	start := func() tea.Cmd { return m.execute(name, jobs, skipped) }
-	if headless {
-		start = func() tea.Cmd { return m.executeRun(name, jobs, act.Refresh) }
+	start := func() tea.Cmd {
+		m.lock(name, jobs)
+		if headless {
+			return m.executeRun(name, jobs, act.Refresh, len(busy))
+		}
+		return m.execute(name, jobs, skipped, len(busy))
 	}
-	if len(ts) > 1 || act.Confirm == "single" {
+	if len(all) > 1 || act.Confirm == "single" {
 		what := ts[0].ID
 		if len(ts) > 1 {
 			what = fmt.Sprintf("%d items (%s)", len(ts), ids(ts))
@@ -196,9 +225,28 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 	return start()
 }
 
-func (m *Model) execute(action string, jobs []job, skipped int) tea.Cmd {
+// lock marks the jobs' items busy with action and says so in the footer; doneMsg releases them.
+func (m *Model) lock(action string, jobs []job) {
+	labels := make([]string, len(jobs))
+	for i, j := range jobs {
+		m.busy[j.itemKey] = busyState{action: action}
+		labels[i] = j.label
+	}
+	m.notice = fmt.Sprintf("starting %s on %s…", action, strings.Join(labels, ", "))
+}
+
+func jobKeys(jobs []job) []string {
+	keys := make([]string, len(jobs))
+	for i, j := range jobs {
+		keys[i] = j.itemKey
+	}
+	return keys
+}
+
+func (m *Model) execute(action string, jobs []job, skipped, busy int) tea.Cmd {
 	m.marks = map[string]bool{}
 	mgr := m.sess
+	keys := jobKeys(jobs)
 	return func() tea.Msg {
 		var errs []string
 		started := 0
@@ -217,17 +265,20 @@ func (m *Model) execute(action string, jobs []job, skipped int) tea.Cmd {
 		if skipped > 0 {
 			note += fmt.Sprintf(", %d already running", skipped)
 		}
+		if busy > 0 {
+			note += fmt.Sprintf(", %d busy", busy)
+		}
 		if len(errs) > 0 {
 			note += ": " + errs[0]
 		}
-		return doneMsg{notice: note}
+		return doneMsg{notice: note, keys: keys, ok: len(errs) == 0}
 	}
 }
 
 // executeRun runs the jobs headless and in parallel; the footer reports the outcome.
-func (m *Model) executeRun(action string, jobs []job, refresh bool) tea.Cmd {
+func (m *Model) executeRun(action string, jobs []job, refresh bool, busy int) tea.Cmd {
 	m.marks = map[string]bool{}
-	m.notice = fmt.Sprintf("running %s on %d item(s)…", action, len(jobs))
+	keys := jobKeys(jobs)
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/sh"
@@ -264,10 +315,13 @@ func (m *Model) executeRun(action string, jobs []job, refresh bool) tea.Cmd {
 			}
 		}
 		note := fmt.Sprintf("✓ %s done on %d item(s)", action, len(jobs))
+		if busy > 0 {
+			note += fmt.Sprintf(", %d busy", busy)
+		}
 		if len(bad) > 0 {
 			note = fmt.Sprintf("✗ %s failed on %d/%d — %s", action, len(bad), len(jobs), bad[0])
 		}
-		return doneMsg{notice: note, refresh: refresh}
+		return doneMsg{notice: note, refresh: refresh, keys: keys, ok: len(bad) == 0}
 	}
 }
 

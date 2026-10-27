@@ -365,6 +365,11 @@ aliases and PATH apply). The session appears as a badge on the item. Press `ente
 get the full interactive terminal. If the command is interactive (for example `claude`), you can answer its
 questions there.
 
+As soon as you press the key, each item shows a `⋯ <action>` badge and the footer says
+`starting <action> on <ids>…`. Until tmux has started the session, the item is **busy**: any action on it is
+skipped (`!12 busy (review)`). In a multi-item run the other items still run and the result adds `, N busy`. The
+lock ends once the session has started, so a long-running session does not block other actions on the item.
+
 If an action is already running for an item it is not started again (you are told so). If its previous session
 has ended, it is replaced by a fresh one.
 
@@ -386,6 +391,11 @@ vars = { reviewers = "alice,bob" }
 Marked items are processed in parallel. The footer shows the result: `✓ ready done on 2 item(s)` or
 `✗ ready failed on 1/2 — !12: <last line of the command's output>`. With `refresh = true` the lists refetch
 afterwards, so the MR moves out of your `drafts` view.
+
+While the command runs, the item shows a `⋯ <action>` badge and is busy: any action on it is skipped, as for
+session actions. After a successful `refresh = true` run the item stays busy, with its row muted, until every
+provider has finished a fetch that started after the run (a fetch already under way gets a follow-up). A failed
+run unlocks the item right away.
 
 ### Templates
 

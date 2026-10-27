@@ -31,7 +31,7 @@ func readState(name string) string {
 }
 
 // RunHook is the `<app> hook <event>` entry point called by Claude Code hooks. It maps the event to a
-// state and writes it for the session named in $LANES_SESSION. Never fails loudly: it must not disturb claude.
+// state and writes it (SessionEnd removes it) for the session named in $LANES_SESSION. Never fails loudly: it must not disturb claude.
 func RunHook(event string) {
 	name := os.Getenv("LANES_SESSION")
 	if name == "" {
@@ -42,6 +42,10 @@ func RunHook(event string) {
 	}
 	if b, err := io.ReadAll(os.Stdin); err == nil {
 		_ = json.Unmarshal(b, &in)
+	}
+	if event == "SessionEnd" {
+		_ = os.Remove(hookStatePath(name))
+		return
 	}
 	state := map[string]string{
 		"UserPromptSubmit": "working",
@@ -73,6 +77,7 @@ func SettingsFile() (string, error) {
 		"PreToolUse":       hook("PreToolUse"),
 		"Stop":             hook("Stop"),
 		"Notification":     hook("Notification"),
+		"SessionEnd":       hook("SessionEnd"),
 	}}
 	b, _ := json.MarshalIndent(settings, "", "  ")
 	p := filepath.Join(app.StateDir(), "claude-settings.json")

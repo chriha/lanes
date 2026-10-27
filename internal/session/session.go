@@ -76,14 +76,14 @@ func (m *Manager) tmux(args ...string) *exec.Cmd {
 func (m *Manager) List() ([]Info, error) {
 	const sep = "\t"
 	out, err := m.run("list-panes", "-a", "-F",
-		strings.Join([]string{"#{session_name}", "#{pane_dead}", "#{pane_dead_status}", "#{session_created}"}, sep))
+		strings.Join([]string{"#{session_name}", "#{pane_dead}", "#{pane_dead_status}", "#{session_created}", "#{pane_current_command}"}, sep))
 	if err != nil {
 		return nil, nil // no server running = no sessions
 	}
 	var infos []Info
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		f := strings.Split(line, sep)
-		if len(f) != 4 {
+		if len(f) != 5 {
 			continue
 		}
 		action, key, ok := strings.Cut(f[0], "~")
@@ -93,13 +93,23 @@ func (m *Manager) List() ([]Info, error) {
 		created, _ := strconv.ParseInt(f[3], 10, 64)
 		exit, _ := strconv.Atoi(f[2])
 		in := Info{Name: f[0], Action: action, ItemKey: key, Dead: f[1] == "1", Exit: exit, Created: time.Unix(created, 0)}
-		if !in.Dead {
+		if !in.Dead && !isShell(f[4]) {
 			in.Claude = readState(in.Name)
 		}
 		infos = append(infos, in)
 	}
 	sort.Slice(infos, func(i, j int) bool { return infos[i].Created.After(infos[j].Created) })
 	return infos, nil
+}
+
+// isShell reports whether cmd (a pane's current command) is a shell, i.e. nothing but a shell is left in the
+// pane: the basename of $SHELL, sh, bash, zsh or fish.
+func isShell(cmd string) bool {
+	switch cmd {
+	case "sh", "bash", "zsh", "fish", filepath.Base(os.Getenv("SHELL")):
+		return true
+	}
+	return false
 }
 
 // Start launches command in the user's shell inside a new detached session.

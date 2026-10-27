@@ -39,12 +39,16 @@ func RunHook(event string) {
 	}
 	var in struct {
 		NotificationType string `json:"notification_type"`
+		Reason           string `json:"reason"`
 	}
 	if b, err := io.ReadAll(os.Stdin); err == nil {
 		_ = json.Unmarshal(b, &in)
 	}
 	if event == "SessionEnd" {
-		_ = os.Remove(hookStatePath(name))
+		// /clear and resume end a session but Claude keeps running: keep the state then.
+		if in.Reason != "clear" && in.Reason != "resume" {
+			_ = os.Remove(hookStatePath(name))
+		}
 		return
 	}
 	state := map[string]string{

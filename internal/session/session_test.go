@@ -313,17 +313,32 @@ func TestListIgnoresStateWhileShell(t *testing.T) {
 }
 
 func TestSessionEndRemovesState(t *testing.T) {
-	stateEnv(t)
-	t.Setenv("LANES_SESSION", "fix~1")
-	feedStdin(t, "{}")
-	RunHook("Stop")
-	if _, err := os.Stat(statePath("fix~1")); err != nil {
-		t.Fatalf("state not written: %v", err)
+	tests := []struct {
+		name, stdin string
+		wantGone    bool
+	}{
+		{"no reason", "{}", true},
+		{"exit", `{"reason":"prompt_input_exit"}`, true},
+		{"logout", `{"reason":"logout"}`, true},
+		{"clear keeps state", `{"reason":"clear"}`, false},
+		{"resume keeps state", `{"reason":"resume"}`, false},
 	}
-	feedStdin(t, "{}")
-	RunHook("SessionEnd")
-	if _, err := os.Stat(statePath("fix~1")); !os.IsNotExist(err) {
-		t.Errorf("state file still there: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateEnv(t)
+			t.Setenv("LANES_SESSION", "fix~1")
+			feedStdin(t, "{}")
+			RunHook("Stop")
+			if _, err := os.Stat(statePath("fix~1")); err != nil {
+				t.Fatalf("state not written: %v", err)
+			}
+			feedStdin(t, tt.stdin)
+			RunHook("SessionEnd")
+			_, err := os.Stat(statePath("fix~1"))
+			if gone := os.IsNotExist(err); gone != tt.wantGone {
+				t.Errorf("state removed = %v, want %v (err %v)", gone, tt.wantGone, err)
+			}
+		})
 	}
 }
 

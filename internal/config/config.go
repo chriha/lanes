@@ -18,7 +18,7 @@ type Settings struct {
 	PollInterval string `toml:"poll_interval"`
 	Preview      bool   `toml:"preview"` // show the detail pane at startup (toggle with p)
 	NoNotify     bool   `toml:"no_notify"`
-	ClaudeDir    string `toml:"claude_dir"` // Claude config dir whose usage the header shows, e.g. ~/.claude
+	ClaudeDir    string `toml:"claude_dir"` // Claude config dir whose usage the footer shows, e.g. ~/.claude
 }
 
 // Theme overrides the default adaptive palette; values are hex colors like "#A78BFA".
@@ -181,7 +181,7 @@ const Default = `# lanes — global config. A ".lanes.toml" in a project overlay
 poll_interval = "30s"
 # preview = true      # show the detail pane at startup (toggle with p)
 # no_notify = true    # disable desktop notifications
-# claude_dir = "~/.claude"  # show this Claude profile's usage in the header (written by a Claude Code mod)
+# claude_dir = "~/.claude"  # show this Claude profile's usage in the footer (written by a Claude Code mod)
 
 # project is detected from the git remote of the current directory when empty
 [provider.gitlab]

@@ -56,7 +56,7 @@ type usageMsg struct {
 	at   time.Time
 }
 
-// usageStale is the age after which the Claude usage is dimmed and shows how old it is.
+// usageStale is the age after which the Claude usage shows how old it is.
 const usageStale = 10 * time.Minute
 
 type Model struct {
@@ -97,7 +97,7 @@ type Model struct {
 	ov         *config.Overrides
 	notes      notes.Store
 	preview_   bool
-	usage      usageMsg // Claude usage from [settings] claude_dir, shown at the right of the header
+	usage      usageMsg // Claude usage from [settings] claude_dir, shown at the left of the footer
 
 	width, height int
 }
@@ -691,9 +691,6 @@ func (m *Model) header() string {
 	}
 	left := sTitle.Render(" "+app.Name) + "  " + strings.Join(tabs, "")
 	right := m.sessionSummary() + sDim.Render(m.freshness())
-	if u := m.usageText(time.Now()); u != "" && m.width-lipgloss.Width(left)-lipgloss.Width(right+u) > 3 {
-		right += "   " + u // dropped when the header has no room for it
-	}
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 1
 	if gap < 1 {
 		gap = 1
@@ -709,15 +706,16 @@ func (m *Model) pollUsage() tea.Cmd {
 	}
 }
 
-// usageText is the Claude usage for the header; once stale it is dimmed and carries its age.
+// usageText is the Claude usage for the footer; once stale it carries its age.
 func (m *Model) usageText(now time.Time) string {
 	if m.usage.text == "" {
 		return ""
 	}
+	text := "claude usage: " + m.usage.text
 	if d := now.Sub(m.usage.at); d > usageStale {
-		return sDim.Render(m.usage.text + " (" + age(d) + " ago)")
+		text += " (" + age(d) + " ago)"
 	}
-	return m.usage.text
+	return text
 }
 
 func (m *Model) freshness() string {
@@ -844,6 +842,8 @@ func (m *Model) footer() string {
 		left = sMark.Render(fmt.Sprintf(" %d marked", len(m.marks)))
 	case m.query != "":
 		left = sDim.Render(" filter: ") + sText.Render(m.query)
+	case m.usage.text != "":
+		left = sDim.Render(" " + m.usageText(time.Now()))
 	}
 	hint := sDim.Render("j/k move · h/l view · space mark · enter jump · x close · p preview · ? help")
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(hint) - 1

@@ -245,36 +245,37 @@ func TestUsageText(t *testing.T) {
 		want string
 	}{
 		{"nothing configured", usageMsg{}, ""},
-		{"fresh is shown as is", usageMsg{"5h 23%", now.Add(-time.Minute)}, "5h 23%"},
-		{"stale carries its age", usageMsg{"5h 23%", now.Add(-12 * time.Minute)}, "5h 23% (12m ago)"},
+		{"fresh is shown as is", usageMsg{"5h 23%", now.Add(-time.Minute)}, "claude usage: 5h 23%"},
+		{"stale carries its age", usageMsg{"5h 23%", now.Add(-12 * time.Minute)}, "claude usage: 5h 23% (12m ago)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := &Model{usage: tt.u}
-			if got := ansi.Strip(m.usageText(now)); got != tt.want {
+			if got := m.usageText(now); got != tt.want {
 				t.Errorf("usageText = %q, want %q", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestHeaderUsage(t *testing.T) {
+func TestFooterUsage(t *testing.T) {
 	tests := []struct {
-		name  string
-		width int
-		want  bool
+		name   string
+		notice string
+		want   bool
 	}{
-		{"shown at the right end when it fits", 120, true},
-		{"dropped when the header has no room", 30, false},
+		{"shown at the left of the footer", "", true},
+		{"a notice takes its place", "config reloaded", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newBackoffModel(t)
-			m.width = tt.width
+			m.width = 160
+			m.notice = tt.notice
 			m.Update(usageMsg{"5h 23% · wk 30%", time.Now()})
-			h := ansi.Strip(m.header())
-			if got := strings.HasSuffix(h, "5h 23% · wk 30%"); got != tt.want {
-				t.Errorf("header = %q, usage at end = %v, want %v", h, got, tt.want)
+			f := ansi.Strip(m.footer())
+			if got := strings.HasPrefix(f, " claude usage: 5h 23% · wk 30%"); got != tt.want {
+				t.Errorf("footer = %q, usage at start = %v, want %v", f, got, tt.want)
 			}
 		})
 	}

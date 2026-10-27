@@ -26,6 +26,7 @@ type namedDir struct{ name, path string }
 type doctorEnv struct {
 	lookPath  func(string) (string, error)
 	run       func(name string, args ...string) (string, error) // combined output
+	getenv    func(string) string
 	load      func() (*config.Config, error)
 	overrides func() (*config.Overrides, error)
 	dirs      []namedDir
@@ -34,6 +35,7 @@ type doctorEnv struct {
 func realDoctorEnv() doctorEnv {
 	return doctorEnv{
 		lookPath: exec.LookPath,
+		getenv:   os.Getenv,
 		run: func(name string, args ...string) (string, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()

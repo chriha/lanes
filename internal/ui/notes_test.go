@@ -146,6 +146,12 @@ func TestProviderNoteFieldWins(t *testing.T) {
 	if !strings.Contains(rowOf(t, m, "a"), "✎") {
 		t.Errorf("row lacks ✎ for the user's note")
 	}
+	preview := ansi.Strip(m.preview())
+	for _, want := range []string{"my note     mine", "note        from provider"} {
+		if !strings.Contains(preview, want) {
+			t.Errorf("preview lacks %q:\n%s", want, preview)
+		}
+	}
 }
 
 func TestNotesSurviveRefreshAndRestart(t *testing.T) {
@@ -229,9 +235,10 @@ func TestReadNote(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tt.content), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			msg, ok := readNote("a", path, tt.exitErr).(noteEdited)
+			raw := readNote("a", path, tt.exitErr)
+			msg, ok := raw.(noteEdited)
 			if !ok {
-				t.Fatalf("readNote returned %T", msg)
+				t.Fatalf("readNote returned %T, want noteEdited", raw)
 			}
 			if msg.id != "a" || msg.text != tt.wantText || (msg.err != nil) != tt.wantErr {
 				t.Errorf("got %+v, want text %q err %v", msg, tt.wantText, tt.wantErr)

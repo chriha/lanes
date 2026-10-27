@@ -326,7 +326,8 @@ it open.
 "waiting on backend". Saving stores it, saving an empty file deletes it, quitting the editor with an error (vim's
 `:cq`) leaves it unchanged; `:note <text>` sets a one-line note without the editor. A note belongs to the item, not
 to a view: every view that lists the item shows `✎` on its row, and the preview shows the full text. Filters and
-action templates see it as `note` (`note != ""`, `{{.note}}`); a provider field called `note` takes precedence.
+action templates see it as `note` (`note != ""`, `{{.note}}`); a provider field called `note` takes precedence
+(the preview then labels yours `my note`).
 Notes are stored per project and kept when the item leaves the list. A corrupt notes file is reported in the
 footer and left alone until you save a note, which moves it to `notes.json.bak`.
 

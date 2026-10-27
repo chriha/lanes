@@ -101,6 +101,8 @@ type Model struct {
 	notes      notes.Store
 	preview_   bool
 	usage      usageMsg // Claude usage from [settings] claude_dir, shown at the left of the footer
+	// originForge detects the forge for a new .lanes.toml (:edit project); nil = provider.OriginForge
+	originForge func() (typ, repo string, err error)
 
 	width, height int
 }

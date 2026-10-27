@@ -879,6 +879,7 @@ func (m *Model) helpLines() []string {
 		{":note [text]", "set the item's note to a line of text / clear it"},
 		{":run <action>", "run an action by name"},
 		{":sessions", "list every session (same as S)"},
+		{":prune [failed]", "kill every finished session (only failed ones)"},
 		{":refresh  :reload  :edit  :config  :quit", ""},
 	} {
 		b.WriteString("  " + sKey.Render(fmt.Sprintf("%-26s", c[0])) + sText.Render(c[1]) + "\n")

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -245,5 +246,47 @@ func TestNextAttention(t *testing.T) {
 		if got != tt.want || ok != tt.ok {
 			t.Errorf("%s: got (%q, %v), want (%q, %v)", tt.name, got, ok, tt.want, tt.ok)
 		}
+	}
+}
+
+func TestPruneNotice(t *testing.T) {
+	tests := []struct {
+		name string
+		n    int
+		err  error
+		want string
+	}{
+		{"none", 0, nil, "pruned 0 sessions"},
+		{"one", 1, nil, "pruned 1 session"},
+		{"several", 2, nil, "pruned 2 sessions"},
+		{"error appended", 1, errors.New("exit status 1"), "pruned 1 session; exit status 1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := pruneNotice(tt.n, tt.err); got != tt.want {
+				t.Errorf("pruneNotice(%d, %v) = %q, want %q", tt.n, tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPruneCommand(t *testing.T) {
+	tests := []struct {
+		line    string
+		wantCmd bool
+		notice  string
+	}{
+		{"prune", true, ""},
+		{"prune failed", true, ""},
+		{"prune bogus", false, "usage: :prune [failed]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.line, func(t *testing.T) {
+			m := sessModel(t)
+			_, cmd := m.runCommand(tt.line)
+			if (cmd != nil) != tt.wantCmd || m.notice != tt.notice {
+				t.Errorf("cmd %v, notice %q; want cmd %v, notice %q", cmd != nil, m.notice, tt.wantCmd, tt.notice)
+			}
+		})
 	}
 }

@@ -283,6 +283,8 @@ narrows the view; it does not change its filter.
 | `:note`                   | delete the selected item's note                                       |
 | `:run <action>`           | run an action by name, even if it has no key                          |
 | `:sessions`               | open the sessions screen (same as `S`)                                |
+| `:prune`                  | kill every finished session; running ones are never touched           |
+| `:prune failed`           | kill only finished sessions that exited non-zero                      |
 | `:refresh`                | refetch now                                                           |
 | `:reload`                 | re-read the config now                                                |
 | `:config`                 | print the global and project config paths                             |

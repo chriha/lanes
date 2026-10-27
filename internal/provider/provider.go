@@ -41,6 +41,8 @@ func newProvider(c config.Provider, origin func() (string, error)) (Provider, er
 		return &GitLab{Project: c.Project}, nil
 	case "github":
 		return &GitHub{Project: c.Project}, nil
+	case "github-issues":
+		return &GitHubIssues{Project: c.Project}, nil
 	case "command":
 		return &Command{Cmd: c.Command}, nil
 	}

@@ -48,6 +48,7 @@ you what each session is doing (running, working, asking a question, waiting for
 - [Providers](#providers)
   - [gitlab](#gitlab)
   - [github](#github)
+  - [github-issues](#github-issues)
   - [auto](#auto)
   - [command](#command)
 - [Configuration](#configuration)
@@ -102,7 +103,7 @@ look at a list, press a key, and the work starts in the background in a session 
 - macOS or Linux
 - [tmux](https://github.com/tmux/tmux) ≥ 3.2 (sessions run in tmux; `lanes` never touches your own tmux server)
 - For the built-in GitLab provider: the [`glab`](https://gitlab.com/gitlab-org/cli) CLI, authenticated
-  (`glab auth login`); for the GitHub provider: the [`gh`](https://cli.github.com) CLI, authenticated
+  (`glab auth login`); for the GitHub providers: the [`gh`](https://cli.github.com) CLI, authenticated
   (`gh auth login`). `lanes` reuses their credentials — it never asks for a token.
 - Go ≥ 1.23 only if you build from source
 
@@ -447,7 +448,8 @@ run  = 'claude --settings {{.settings}} "/harness:work {{.number}}"'
 when = 'kind == "ticket"'
 ```
 
-`kind` is `pr` for items from `gitlab` and `github` (a `command` provider sets it in its fields, if at all).
+`kind` is `pr` for items from `gitlab` and `github` and `ticket` for items from `github-issues` (a `command`
+provider sets it in its fields, if at all).
 
 - A run on marked items starts the action on the matching ones and reports `<action>: skipped N item(s) (when)`.
   Skipped items stay marked, so you can see what did not run. If no item matches, nothing runs.
@@ -554,6 +556,48 @@ with `number` instead of `iid`: `approved` is an approving review decision or an
 updated open PRs (and their first 100 review threads) are considered. Use it for GitHub Enterprise hosts, which
 `auto` treats as GitLab.
 
+### github-issues
+
+```toml
+[provider.issues]
+type = "github-issues"
+# project = "owner/repo"   # default: detected from the git `origin` of the current directory
+```
+
+Lists the repository's **open issues** via `gh api graphql` (pull requests are not included), the 100 most
+recently updated, each with its first 20 blockers. The ID is `#<number>`; `author` and `url` are set as usual,
+and a `blocked` badge marks issues with an open blocker.
+
+Ticket fields:
+
+| Field        | Type     | Meaning                                                              |
+|--------------|----------|----------------------------------------------------------------------|
+| `kind`       | string   | `ticket`                                                             |
+| `number`     | number   | issue number                                                         |
+| `status`     | string   | always `open` (only open issues are listed; filter on labels)        |
+| `assignees`  | []string | assignee logins                                                      |
+| `labels`     | []string | label names                                                          |
+| `blocked`    | bool     | an issue it is blocked by (GitHub issue dependencies) is still open  |
+| `blocked_by` | []string | the open blockers, e.g. `["#7"]`                                     |
+| `priority`   | number   | always `0` on GitHub                                                 |
+| `me`         | string   | your login                                                           |
+
+A view of your unblocked issues that are not being planned, with a key that hands the selected one to Claude:
+
+```toml
+[[view]]
+name     = "tickets"
+provider = "issues"
+filter   = 'me in assignees && !blocked && !("planning" in labels)'
+
+[keymap]
+w = "work"
+
+[action.work]
+run  = 'claude --settings {{.settings}} "/harness:work {{.number}}"'
+when = 'kind == "ticket"'
+```
+
 ### auto
 
 ```toml
@@ -653,8 +697,8 @@ no_notify     = false   # disable desktop notifications
 claude_dir    = "~/.claude"   # show this Claude profile's usage in the footer (see Claude Code integration)
 
 [provider.<name>]
-type    = "gitlab"      # or "github", "auto" (github for a github.com origin, else gitlab), "command"
-project = "group/project"   # gitlab/github (owner/repo); default: detected from git origin
+type    = "gitlab"      # or "github", "github-issues", "auto" (github for a github.com origin, else gitlab), "command"
+project = "group/project"   # gitlab/github/github-issues (owner/repo); default: detected from git origin
 command = "..."             # command provider
 
 [[view]]
@@ -742,7 +786,7 @@ two projects never share history, views or sessions. The `$XDG_*` variables are 
 
 Run `lanes doctor` first. Without starting the TUI or touching any tmux server, it checks `tmux` (in `PATH`,
 ≥ 3.2), `glab` and `glab auth status` (only when a `gitlab` provider is configured) and likewise `gh` and
-`gh auth status` for `github` (an `auto` provider counts as the forge its `origin` resolves to here; without an
+`gh auth status` for `github` and `github-issues` (an `auto` provider counts as the forge its `origin` resolves to here; without an
 `origin` it warns), that the config loads, that
 every view filter compiles and every action template parses, and that the state and cache directories are
 writable. It prints one `ok` / `warn` / `fail` line per check, naming the view or action, and exits 1 on any fail.

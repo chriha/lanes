@@ -32,7 +32,7 @@ type Theme struct {
 }
 
 type Provider struct {
-	Type    string `toml:"type"`    // gitlab | github | auto (github for a github.com origin, else gitlab) | command
+	Type    string `toml:"type"`    // gitlab | github | github-issues | auto (github for a github.com origin, else gitlab) | command
 	Project string `toml:"project"` // gitlab: group/project, github: owner/repo; empty = detect from git remote
 	Command string `toml:"command"` // command: shell command printing a JSON array of items
 }

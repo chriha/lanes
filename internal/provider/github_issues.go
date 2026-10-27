@@ -1,0 +1,111 @@
+package provider
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strconv"
+
+	"github.com/chriha/lanes/internal/item"
+)
+
+// GitHubIssues lists a repository's open issues as tickets through `gh api graphql`.
+type GitHubIssues struct {
+	Project string // owner/repo; detected from the origin remote when empty
+	// Run executes gh with args; nil runs the real gh binary.
+	Run func(ctx context.Context, args ...string) ([]byte, error)
+}
+
+// ponytail: first 100 open issues (and 20 blockers each); paginate if a repo needs more.
+const ghIssuesQuery = `query($owner:String!,$name:String!){
+  viewer{login}
+  repository(owner:$owner,name:$name){ issues(states:OPEN,first:100,orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{
+    number title url
+    author{login}
+    assignees(first:20){nodes{login}}
+    labels(first:50){nodes{name}}
+    blockedBy(first:20){nodes{number state}}
+  }}}
+}`
+
+type ghIssue struct {
+	Number    int
+	Title     string
+	URL       string
+	Author    *ghUser // null for deleted users
+	Assignees nodes[ghUser]
+	Labels    nodes[struct{ Name string }]
+	BlockedBy nodes[struct {
+		Number int
+		State  string
+	}]
+}
+
+type ghIssuesResp struct {
+	Data struct {
+		Viewer     ghUser
+		Repository *struct{ Issues nodes[ghIssue] }
+	}
+	Errors []struct{ Message string }
+}
+
+func (g *GitHubIssues) Fetch(ctx context.Context) ([]item.Item, error) {
+	out, err := ghGraphQL(ctx, "github-issues", &g.Project, g.Run, ghIssuesQuery)
+	if err != nil {
+		return nil, err
+	}
+	var r ghIssuesResp
+	if err := json.Unmarshal(out, &r); err != nil {
+		return nil, fmt.Errorf("github-issues: bad response: %w", err)
+	}
+	if len(r.Errors) > 0 {
+		return nil, fmt.Errorf("github-issues: %s", r.Errors[0].Message)
+	}
+	if r.Data.Repository == nil {
+		return nil, fmt.Errorf("github-issues: repository %q not found", g.Project)
+	}
+	me := r.Data.Viewer.Login
+	issues := r.Data.Repository.Issues.Nodes
+	items := make([]item.Item, 0, len(issues))
+	for _, is := range issues {
+		items = append(items, ghIssueToItem(is, me))
+	}
+	return items, nil
+}
+
+// ghIssueToItem maps an issue onto the ticket field set (kind "ticket"); only open blockers block it.
+func ghIssueToItem(is ghIssue, me string) item.Item {
+	assignees := make([]string, 0, len(is.Assignees.Nodes))
+	for _, a := range is.Assignees.Nodes {
+		assignees = append(assignees, a.Login)
+	}
+	labels := make([]string, 0, len(is.Labels.Nodes))
+	for _, l := range is.Labels.Nodes {
+		labels = append(labels, l.Name)
+	}
+	blockedBy := []string{}
+	for _, b := range is.BlockedBy.Nodes {
+		if b.State == "OPEN" {
+			blockedBy = append(blockedBy, "#"+strconv.Itoa(b.Number))
+		}
+	}
+	var badges []item.Badge
+	if len(blockedBy) > 0 {
+		badges = append(badges, item.Badge{Text: "blocked", Kind: "bad"})
+	}
+	author := ""
+	if is.Author != nil {
+		author = is.Author.Login
+	}
+	return item.Item{
+		ID:     "#" + strconv.Itoa(is.Number),
+		Title:  is.Title,
+		URL:    is.URL,
+		Author: author,
+		Badges: badges,
+		Fields: map[string]any{
+			"kind": "ticket", "number": is.Number, "status": "open", "assignees": assignees, "labels": labels,
+			"blocked": len(blockedBy) > 0, "blocked_by": blockedBy, "priority": 0, "me": me,
+		},
+	}
+}

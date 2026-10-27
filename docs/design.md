@@ -111,6 +111,7 @@ confirm = "none"
     filter/     expr env + helpers (has_label, approved_by_me, …)
     session/    tmux backend, status, claude hooks
     history/    per-item log
+    notes/      per-item notes (<state>/notes.json)
     ui/         bubbletea models: root, list, preview, cmdline, confirm, help; theme
 ```
 
@@ -130,6 +131,9 @@ confirm = "none"
 5. **Extract — DONE.** Own repo, per-project config (`.lanes.toml` overlays the global config) and per-project
    state/tmux socket, MIT license, README, CI.
 6. **Attention key — DONE.** `n` jumps to the next session that is asking or waiting.
+7. **Notes — DONE.** Per-item notes (`N` in `$EDITOR`, `:note`), stored in `<state>/notes.json` keyed by item ID.
+   The UI copies `note` into an item's fields when it builds the views (never into the provider data or its
+   cache), so filters and templates see it; rows get a `✎` badge, the preview shows the text.
 
 ## Later
 

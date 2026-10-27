@@ -84,6 +84,12 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// pruneNotice is the footer after :prune: "pruned N sessions" ("pruned 1 session" for one), with the first
+// failed kill appended.
+func pruneNotice(n int, err error) string {
+	return ""
+}
+
 // editor is the user's editor command: $VISUAL, then $EDITOR, then vi.
 func editor() string {
 	if e := os.Getenv("VISUAL"); e != "" {

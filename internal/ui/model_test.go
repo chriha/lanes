@@ -334,7 +334,7 @@ func TestRowAuthorFollowsTitle(t *testing.T) {
 		{"short title", "fix it", "alice", []item.Badge{{Text: "ok"}}, "fix it  alice  "},
 		{"no author", "fix it", "", []item.Badge{{Text: "ok"}}, "fix it   "},
 		{"long author is cut", "fix it", long, nil, "fix it  " + strings.Repeat("a", 15) + "…"},
-		{"title cut first", strings.Repeat("t", 200), "alice", []item.Badge{{Text: "ok"}}, "…  alice "},
+		{"title cut first", strings.Repeat("t", 200), "alice", []item.Badge{{Text: "ok"}}, strings.Repeat("t", 57) + "…  alice "},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -343,10 +343,10 @@ func TestRowAuthorFollowsTitle(t *testing.T) {
 			it := item.Item{ID: "!1", Title: tt.title, Author: tt.author, Badges: tt.badges, Fields: map[string]any{}}
 			line := ansi.Strip(m.row(it, false, 7))
 			cell := line[3+7+1:]
-			if !strings.HasPrefix(cell, tt.wantPrefix) && !strings.Contains(cell, tt.wantPrefix) {
+			if !strings.HasPrefix(cell, tt.wantPrefix) {
 				t.Errorf("row = %q, want %q after the ID", line, tt.wantPrefix)
 			}
-			if tt.author == "" && strings.HasPrefix(cell, tt.title+"  ") && strings.TrimSpace(cell[len(tt.title):]) != "ok" {
+			if tt.author == "" && !reflect.DeepEqual(strings.Fields(cell), []string{"fix", "it", "ok"}) {
 				t.Errorf("row = %q, dangling content after the title", line)
 			}
 			if w := ansi.StringWidth(line); w != m.width-1 {

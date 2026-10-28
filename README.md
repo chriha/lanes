@@ -144,7 +144,7 @@ Besides the TUI, `lanes` has these commands:
 
 | Command          | Does                                                                                      |
 |------------------|-------------------------------------------------------------------------------------------|
-| `lanes init`     | write a commented `.lanes.toml` to the current directory (see [Global and project config](#global-and-project-config)) |
+| `lanes init`     | write a commented `.lanes.toml` to the current directory; asks before overwriting one, with a backup (see [Global and project config](#global-and-project-config)) |
 | `lanes doctor`   | check tmux, the forge CLIs, the config and the state dirs (see [Troubleshooting](#troubleshooting)) |
 | `lanes status`   | print the current project's sessions that need input (see [tmux and lanes](#tmux-and-lanes)) |
 | `lanes --version`| print the version                                                                         |
@@ -709,7 +709,10 @@ and templates.
   `:edit project` (which also opens it in your editor). Both write the same file to the current directory:
   every option, explained and commented out, except a `[provider.forge]` whose `type` and `project` are taken
   from the git `origin` (it replaces the global `forge` provider the default views use; with no `origin` it is
-  commented out too). `lanes init` refuses to overwrite an existing `.lanes.toml`.
+  commented out too). If a `.lanes.toml` already exists, `lanes init` on a terminal asks
+  `Overwrite it with the default template? [y/N]` (default no; declining keeps the file and exits 0) and then
+  `Keep a backup of the current file as .lanes.toml.bak? [Y/n]` (default yes; an older `.bak` is replaced). Prompts
+  go to stderr. Without a terminal on stdin it refuses (exit 1) and never overwrites. `:edit project` never overwrites.
 
 The project config **overlays** the global one — it does not replace it. You only write what differs:
 

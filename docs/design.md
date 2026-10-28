@@ -141,7 +141,7 @@ confirm = "none"
 6. **Attention key — DONE.** `n` jumps to the next session that is asking or waiting.
 7. **Notes — DONE.** Per-item notes (`N` in `$EDITOR`, `:note`), stored in `<state>/notes.json` keyed by item ID.
    The UI copies `note` into an item's fields when it builds the views (never into the provider data or its
-   cache), so filters and templates see it; rows get a `✎` badge, the preview shows the text.
+   cache), so filters and templates see it; rows get a blue `✎` after the author, the preview shows the text.
 8. **Claude usage — DONE.** `[settings] claude_dir` shows that profile's usage at the left of the footer
    (`claude usage: …`), read from `<claude_dir>/usage-line.json` (written by a Claude Code mod; text shown
    verbatim, with its age after 10 minutes).

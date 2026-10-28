@@ -321,11 +321,11 @@ narrows the view; it does not change its filter.
 ### Row badges
 
 Each row ends with small status badges: the item's own (from the provider) followed by up to three of its
-sessions.
+sessions. A blue `✎` after the author (or after the title when there is no author) is not a badge: it marks an
+item you left a [note](#preview-pane-and-item-history) on.
 
 | Badge          | Meaning                                                       |
 |----------------|---------------------------------------------------------------|
-| `✎`            | you left a [note](#preview-pane-and-item-history) on the item |
 | `draft`        | MR is a draft                                                 |
 | `✓ ci` `✗ ci` `◌ ci` | pipeline passed / failed / running or pending           |
 | `↓ behind`     | source branch is behind its target branch                     |

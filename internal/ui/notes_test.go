@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chriha/lanes/internal/app"
@@ -279,5 +280,58 @@ func TestNoteEditedMsg(t *testing.T) {
 				t.Errorf("notice %q does not report the editor error", m.notice)
 			}
 		})
+	}
+}
+
+func TestNoteMarkerPlacement(t *testing.T) {
+	tests := []struct {
+		name   string
+		title  string
+		author string
+		width  int
+		want   string // stripped row must contain this
+	}{
+		{"after author", "fix it", "alice", 80, "fix it  alice ✎"},
+		{"after title without author", "fix it", "", 80, "fix it ✎"},
+		{"survives truncation", strings.Repeat("long ", 30), "alice", 60, "alice ✎"},
+		{"survives truncation without author", strings.Repeat("long ", 30), "", 60, "… ✎"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newNotesModel(t)
+			m.width = tt.width
+			if err := m.notes.Set("!1", "n"); err != nil {
+				t.Fatal(err)
+			}
+			it := item.Item{ID: "!1", Title: tt.title, Author: tt.author, Badges: []item.Badge{{Text: "ok", Kind: "ok"}}, Fields: map[string]any{}}
+			row := ansi.Strip(m.row(it, false, 7))
+			if !strings.Contains(row, tt.want) {
+				t.Errorf("row = %q, want it to contain %q", row, tt.want)
+			}
+			if strings.Count(row, "✎") != 1 || !strings.HasSuffix(strings.TrimRight(row, " "), "ok") {
+				t.Errorf("row = %q, want one ✎ and the badges at the right edge", row)
+			}
+			if w := ansi.StringWidth(row); w != tt.width-1 {
+				t.Errorf("row is %d cells wide, want %d", w, tt.width-1)
+			}
+		})
+	}
+}
+
+func TestNoteMarkerIsInfoBlue(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0) // termenv.TrueColor: render the colors the test compares
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+	m := newNotesModel(t)
+	if err := m.notes.Set("!1", "n"); err != nil {
+		t.Fatal(err)
+	}
+	it := item.Item{ID: "!1", Title: "fix it", Fields: map[string]any{}}
+	want := badgeStyle("info").Render("✎")
+	if want == "✎" {
+		t.Fatal("test needs a color profile: styles rendered plain")
+	}
+	if got := m.row(it, false, 7); !strings.Contains(got, want) {
+		t.Errorf("row = %q, want ✎ in the info style %q", got, want)
 	}
 }

@@ -880,9 +880,6 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	}
 	var badges []string
 	var all []item.Badge
-	if m.notes.Get(it.ID) != "" {
-		all = append(all, item.Badge{Text: "✎", Kind: "dim"})
-	}
 	all = append(all, it.Badges...)
 	for i, ss := range m.sessionsOf(it) {
 		if i < 3 {
@@ -911,7 +908,11 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	if authText != "" {
 		authCellW = 2 + ansi.StringWidth(authText) // two spaces, then the author
 	}
-	titleW := cellW - authCellW
+	noteW := 0
+	if m.notes.Get(it.ID) != "" {
+		noteW = 2 // a space, then the note marker
+	}
+	titleW := cellW - authCellW - noteW
 	if titleW < 10 {
 		titleW = 10
 	}
@@ -925,6 +926,10 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	if authText != "" {
 		title += plain.Render("  ") + st(sDim).Render(authText)
 		used += authCellW
+	}
+	if noteW > 0 {
+		title += plain.Render(" ") + st(badgeStyle("info")).Render("✎")
+		used += noteW
 	}
 	if pad := cellW - used; pad > 0 {
 		title += plain.Render(strings.Repeat(" ", pad))

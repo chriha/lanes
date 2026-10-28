@@ -237,7 +237,9 @@ runtime error (e.g. comparing a missing field) shows as a message in the list in
 **Editing filters in the app.** Press `F` on a view to open its filter in the command line, change it and press
 `enter`. The change is saved *outside* your config (see [Where things live](#where-things-live)), so your
 hand-written TOML is never rewritten, and shows as `*` in the tab bar. `:filter reset` goes back to the
-config's filter.
+config's filter. The one exception is `:filter save`: it writes the edit into the config file that defines the
+view (`.lanes.toml` when the project defines it, else the global config), changing only that view's `filter`
+line, and drops the `*`. A filter written across several lines can't be saved this way; edit the file by hand.
 
 ### Sorting
 
@@ -300,6 +302,7 @@ narrows the view; it does not change its filter.
 | `:filter`                 | show the current view's filter                                        |
 | `:filter <expr>`          | set the current view's filter (validated; saved outside the config)   |
 | `:filter reset`           | drop the in-app override and use the config's filter again            |
+| `:filter save`            | write the in-app edit into the config file that defines the view      |
 | `:newview <name> <expr>`  | create a view on the current view's provider                          |
 | `:delview <name>`         | delete a view created with `:newview`                                 |
 | `:note <text>`            | set the selected item's note to one line of text                      |

@@ -1028,7 +1028,7 @@ func (m *Model) helpLines() []string {
 	b.WriteString("\n" + sTitle.Render(" commands") + "\n\n")
 	for _, c := range [][2]string{
 		{":view <name>", "switch view"},
-		{":filter [expr|reset]", "set / reset this view's filter"},
+		{":filter [expr|reset|save]", "set / reset this view's filter / save it into the config"},
 		{":newview <name> <expr>", "create a view (same provider as the current one)"},
 		{":delview <name>", "delete a view created with :newview"},
 		{":note [text]", "set the item's note to a line of text / clear it"},

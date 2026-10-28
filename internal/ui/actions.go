@@ -465,6 +465,15 @@ func (m *Model) killSessions(infos []session.Info) tea.Cmd {
 	return nil
 }
 
+// shell runs the built-in shell action on it alone (marks are ignored and kept) and jumps into it.
+func (m *Model) shell(it item.Item) tea.Cmd {
+	marks := m.marks
+	m.marks = map[string]bool{it.ID: true} // ponytail: runAction targets the marks; borrow them for this item
+	cmd := m.runAction(config.ShellAction, config.Action{Run: `exec "${SHELL:-/bin/sh}"`, Jump: true})
+	m.marks = marks
+	return cmd
+}
+
 // jump attaches to the newest session of the item under the cursor.
 func (m *Model) jump(it item.Item) tea.Cmd {
 	ss := m.sessionsOf(it)

@@ -57,6 +57,9 @@ type Action struct {
 	Jump    bool           `toml:"jump"`    // session type: on a single item, attach to the session once started (or if running)
 }
 
+// ShellAction is the name of the built-in shell session (key t); config actions cannot use it.
+const ShellAction = "shell"
+
 type Config struct {
 	Settings Settings            `toml:"settings"`
 	Provider map[string]Provider `toml:"provider"`
@@ -170,6 +173,9 @@ func Load() (*Config, error) {
 	for name, a := range c.Action {
 		if strings.Contains(name, "~") || a.Run == "" || (a.Type != "" && a.Type != "session" && a.Type != "run") {
 			return nil, fmt.Errorf("%s: action %q needs a run command, type session|run, and no ~ in its name", p, name)
+		}
+		if name == ShellAction {
+			return nil, fmt.Errorf("%s: action %q: the name is reserved for the built-in shell (t); rename the action", p, name)
 		}
 		if a.Jump && a.Type == "run" {
 			return nil, fmt.Errorf("%s: action %q: jump needs type session", p, name)

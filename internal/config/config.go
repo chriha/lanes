@@ -54,6 +54,7 @@ type Action struct {
 	Vars    map[string]any `toml:"vars"`    // available in templates as {{.vars.name}}
 	Refresh bool           `toml:"refresh"` // run type: refetch providers when finished
 	When    string         `toml:"when"`    // expr against the item's fields; the action only runs on matching items (empty = all)
+	Jump    bool           `toml:"jump"`    // session type: on a single item, attach to the session once started (or if running)
 }
 
 type Config struct {

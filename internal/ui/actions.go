@@ -36,6 +36,7 @@ type doneMsg struct {
 	refresh bool
 	keys    []string // items the action ran on; their busy lock ends here (or after the refetch)
 	ok      bool     // every job succeeded
+	jump    string   // session to attach to once the start has succeeded
 }
 
 // busyState locks an item while an action on it starts or runs, and after a successful refresh run

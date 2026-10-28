@@ -134,6 +134,7 @@ const projectTail = `
 # vars = { dir = "." }        # your own values, available as {{.vars.name}}
 # refresh = false             # run type only: refetch the lists when it finishes (default false)
 # when = 'kind == "pr"'       # filter expression; the action only runs on matching items (default: all)
+# jump = false               # session type only: on one item, attach once started, or if running (default false)
 
 # ---------------------------------------------------------------------------------------------------------
 # Theme: hex colors overriding the adaptive palette (merged per field).

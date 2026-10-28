@@ -36,7 +36,7 @@ func TestRunInit(t *testing.T) {
 				}
 			}
 			var stdout, stderr bytes.Buffer
-			if code := runInit(&stdout, &stderr, dir, tt.detect); code != tt.wantCode {
+			if code := runInit(nil, false, &stdout, &stderr, dir, tt.detect); code != tt.wantCode {
 				t.Errorf("exit code = %d, want %d", code, tt.wantCode)
 			}
 			if stderr.String() != tt.wantStderr {

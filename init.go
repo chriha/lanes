@@ -12,7 +12,7 @@ import (
 
 // runInit writes a commented .lanes.toml to dir and returns the exit code; detect reports the origin's forge.
 // An existing file is never overwritten.
-func runInit(stdout, stderr io.Writer, dir string, detect func() (typ, repo string, err error)) int {
+func runInit(stdin io.Reader, isTTY bool, stdout, stderr io.Writer, dir string, detect func() (typ, repo string, err error)) int {
 	typ, repo, err := detect()
 	if err != nil {
 		typ, repo = "", "" // no origin: the template comments the provider out and says why

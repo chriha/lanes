@@ -220,6 +220,7 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 	}
 	var jobs []job
 	skipped := 0
+	var runningItems []item.Item
 	headless := act.Type == "run"
 	jump := act.Jump && !headless && len(all) == 1 // several targets start all and jump into none
 	vars := act.Vars
@@ -241,6 +242,7 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 					return m.jumpTo(sname)
 				}
 				skipped++
+				runningItems = append(runningItems, it)
 				goto next
 			}
 			restart = true
@@ -282,7 +284,7 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 			}
 			cmd = m.execute(name, jobs, skipped, len(busy), skippedWhen, attach)
 		}
-		for _, it := range append(unmatched, busyItems...) {
+		for _, it := range append(append(unmatched, busyItems...), runningItems...) {
 			m.marks[it.ID] = true // skipped items stay marked, so it shows what did not run
 		}
 		return cmd

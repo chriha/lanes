@@ -1024,6 +1024,7 @@ func (m *Model) helpLines() []string {
 		b.WriteString(sDim.Render("  project config  none (create "+config.ProjectFile+" in the project, :edit project)") + "\n")
 	}
 	b.WriteString(sDim.Render("  state           "+app.StateDir()+"  (history, views, notes, sessions)") + "\n")
+	b.WriteString(m.fieldsHelp())
 	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 }
 

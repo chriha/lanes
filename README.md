@@ -195,7 +195,9 @@ Useful building blocks:
 | `open_threads > 0`             | numbers                                    |
 
 **Fields** are the item's own (`id`, `title`, `url`, `author`, `draft`), your [note](#preview-pane-and-item-history)
-(`note`, empty when there is none, e.g. `note != ""`) plus whatever the provider adds. For GitLab (GitHub has the same fields, with `number` instead of `iid`):
+(`note`, empty when there is none, e.g. `note != ""`) plus whatever the provider adds. The `fields` section at the
+bottom of the help (`?`) lists every provider type's keys, and for each configured `command` provider the keys of its
+last fetched items. For GitLab (GitHub has the same fields, with `number` instead of `iid`):
 
 | Field               | Type        | Meaning                                                                    |
 |---------------------|-------------|----------------------------------------------------------------------------|
@@ -274,7 +276,7 @@ An unknown field name is not an error (fields come from the provider); an empty 
 | `F`                 | edit the current view's filter                     |
 | `R`                 | refresh data now                                   |
 | `ctrl-r`            | reload the config now                              |
-| `?`                 | help (scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; close with `q`) |
+| `?`                 | help: keys, actions, commands, config paths and the fields per provider (scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; close with `q`) |
 | `q`                 | quit after confirming — sessions keep running      |
 
 Any other key you bind in `[keymap]` runs its [action](#actions). Built-in keys cannot be rebound; if you try,
@@ -337,7 +339,7 @@ The top right of the screen summarizes live sessions (`◐ 2  ? 1  ● 1`) and w
 ### Preview pane and item history
 
 `p` toggles a pane under the list with the selected item's title, URL, author, your note, the provider's fields
-(branch, labels, reviewers, CI, …), its sessions and its last run. Set `preview = true` under `[settings]` to start with
+(the identifier — `iid`, `number` or `key` — then branch, labels, reviewers, CI, …), its sessions and its last run. Set `preview = true` under `[settings]` to start with
 it open.
 
 `i` shows the item's **history**: every action started on it, and how it ended (`finished`, `failed (exit n)`,

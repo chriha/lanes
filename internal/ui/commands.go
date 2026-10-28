@@ -200,17 +200,17 @@ func (m *Model) saveFilter(name string) tea.Cmd {
 		return nil
 	}
 	delete(m.ov.Filters, name) // before the reload, so the view does not show the old * state
-	if err := m.ov.Save(); err != nil {
-		m.notice = "saving views: " + err.Error()
-		return nil
+	saved := "filter saved to " + path
+	if err := m.ov.Save(); err != nil { // the file already holds the filter: still reload
+		saved += "; saving views: " + err.Error()
 	}
 	cfg, err := config.Load()
 	if err != nil {
-		m.notice = "filter saved to " + path + "; config: " + err.Error()
+		m.notice = saved + "; config: " + err.Error()
 		return nil // the tick's reload reports it again
 	}
 	m.applyConfig(cfg)
-	m.notice = "filter saved to " + path
+	m.notice = saved
 	return m.refreshAll()
 }
 

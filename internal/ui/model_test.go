@@ -280,3 +280,42 @@ func TestFooterUsage(t *testing.T) {
 		})
 	}
 }
+
+func TestIDColumn(t *testing.T) {
+	long := strings.Repeat("x", 25)
+	tests := []struct {
+		name    string
+		ids     []string
+		wantW   int
+		wantID  string // the ID cell as rendered for ids[0]
+		wantEnd string // rendered ID cell for the last id
+	}{
+		{"all short", []string{"!1", "!123"}, 7, "!1     ", "!123   "},
+		{"eight chars", []string{"EQD-1001"}, 8, "EQD-1001", "EQD-1001"},
+		{"mix, longest wins", []string{"EQD-1", "EQD-1001", "!7"}, 8, "EQD-1  ", "!7      "},
+		{"over the max", []string{long, "!1"}, 20, strings.Repeat("x", 19) + "…", "!1                  "},
+		{"empty view", nil, 7, "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			its := mkItems(tt.ids...)
+			if got := idColWidth(its); got != tt.wantW {
+				t.Fatalf("idColWidth = %d, want %d", got, tt.wantW)
+			}
+			if len(its) == 0 {
+				return
+			}
+			m := newNotesModel(t)
+			for i, want := range map[int]string{0: tt.wantID, len(its) - 1: tt.wantEnd} {
+				line := ansi.Strip(m.row(its[i], false, tt.wantW))
+				if !strings.HasPrefix(line[3:], want) {
+					t.Errorf("row %d = %q, want ID cell %q", i, line, want)
+				}
+				// the title column absorbs the ID width: rows keep the width of the 7-wide layout
+				if w := ansi.StringWidth(line); w != m.width-1 {
+					t.Errorf("row %d is %d cells wide, want %d", i, w, m.width-1)
+				}
+			}
+		})
+	}
+}

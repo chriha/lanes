@@ -50,7 +50,7 @@ func rowOf(t *testing.T, m *Model, id string) string {
 	t.Helper()
 	for _, it := range m.items() {
 		if it.ID == id {
-			return ansi.Strip(m.row(it, false))
+			return ansi.Strip(m.row(it, false, idColWidth(m.items())))
 		}
 	}
 	t.Fatalf("item %s not in view %s", id, m.views[m.cur].cfg.Name)

@@ -115,3 +115,24 @@ func TestJumpAction(t *testing.T) {
 		})
 	}
 }
+
+func TestRunningItemsKeepTheirMark(t *testing.T) {
+	m, _ := busyModel(t)
+	fakeTmux(t)
+	mgr, err := session.NewManager()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.sess = mgr
+	m.sessions = []session.Info{{Name: "review~1", Action: "review", ItemKey: "1"}}
+	m.sessByItem["1"] = m.sessions
+	m.marks["1"], m.marks["2"] = true, true // 1 already runs, 2 starts
+	m.runAction("review", config.Action{Run: "echo review"})
+	if m.mode != modeConfirm {
+		t.Fatal("several items did not ask first")
+	}
+	settle(m, press(m, "y"))
+	if len(m.marks) != 1 || !m.marks["1"] {
+		t.Errorf("marks = %v, want only the running item 1", m.marks)
+	}
+}

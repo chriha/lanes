@@ -36,6 +36,7 @@ func TestRunInit(t *testing.T) {
 		{"YES, backup y", "# mine\n", "", "YES\ny\n", true, github, 0, true, "# mine\n", "backed up to %BAK%\n", tmpl},
 		{"yes, backup n keeps an old bak", "# mine\n", "# old\n", "yes\nn\n", true, github, 0, true, "# old\n", "", tmpl},
 		{"yes, backup replaces an old bak", "# mine\n", "# old\n", "y\n\n", true, github, 0, true, "# mine\n", "backed up to %BAK%\n", tmpl},
+		{"tty, no file: no prompt", "", "", "y\n", true, github, 0, true, "", "", tmpl},
 		{"enter declines", "# mine\n", "", "\n", true, github, 0, false, "", "", mine},
 		{"n declines", "# mine\n", "", "n\n", true, github, 0, false, "", "", mine},
 		{"other text declines", "# mine\n", "", "sure\n", true, github, 0, false, "", "", mine},

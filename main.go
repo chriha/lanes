@@ -67,5 +67,9 @@ func runStatus() {
 // stdinIsTerminal reports whether stdin is an interactive terminal (no new dependency: a character device).
 func stdinIsTerminal() bool {
 	fi, err := os.Stdin.Stat()
-	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	null, err := os.Stat(os.DevNull)
+	return err != nil || !os.SameFile(fi, null) // /dev/null is a character device but not a terminal
 }

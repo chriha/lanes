@@ -48,7 +48,7 @@ func runInit(stdin io.Reader, isTTY bool, stdout, stderr io.Writer, dir string, 
 // y/yes, (when def is true) anything but n/no.
 func ask(in *bufio.Reader, w io.Writer, prompt string, def bool) bool {
 	fmt.Fprint(w, prompt)
-	line, _ := in.ReadString('\n')
+	line, _ := in.ReadString('\n') // ponytail: a read error (incl. EOF) leaves line empty and so means the default
 	switch strings.ToLower(strings.TrimSpace(line)) {
 	case "y", "yes":
 		return true

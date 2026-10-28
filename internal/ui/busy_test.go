@@ -140,13 +140,14 @@ func TestBusyItemsAreSkipped(t *testing.T) {
 		action     string
 		wantCmd    bool
 		wantNotice []string // substrings of the notice (after the run, when one ran)
+		wantMarked []string // marks left after the run
 	}{
-		{"same action", map[string]string{"1": "quick"}, nil, "quick", false, []string{"1 busy (quick)"}},
-		{"other action", map[string]string{"1": "review"}, nil, "quick", false, []string{"1 busy (review)"}},
+		{"same action", map[string]string{"1": "quick"}, nil, "quick", false, []string{"1 busy (quick)"}, nil},
+		{"other action", map[string]string{"1": "review"}, nil, "quick", false, []string{"1 busy (review)"}, nil},
 		{"mixed selection runs the rest", map[string]string{"1": "review"}, []string{"1", "2"}, "quick", true,
-			[]string{"done on 1 item(s)", ", 1 busy"}},
+			[]string{"done on 1 item(s)", ", 1 busy"}, []string{"1"}},
 		{"all busy runs nothing", map[string]string{"1": "review", "2": "ready"}, []string{"1", "2"}, "quick", false,
-			[]string{"1 busy (review)", "2 busy (ready)"}},
+			[]string{"1 busy (review)", "2 busy (ready)"}, []string{"1", "2"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -175,6 +176,14 @@ func TestBusyItemsAreSkipped(t *testing.T) {
 			for id, a := range tt.busy {
 				if got := m.busy[session.Key(id)].action; got != a {
 					t.Errorf("item %s busy with %q, want %q kept", id, got, a)
+				}
+			}
+			if len(m.marks) != len(tt.wantMarked) {
+				t.Errorf("marks = %v, want %v", m.marks, tt.wantMarked)
+			}
+			for _, id := range tt.wantMarked {
+				if !m.marks[id] {
+					t.Errorf("item %s lost its mark, marks = %v", id, m.marks)
 				}
 			}
 		})

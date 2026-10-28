@@ -204,9 +204,11 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 	// a busy item is starting or running an action: skip it, whatever the action
 	var ts []item.Item
 	var busy []string
+	var busyItems []item.Item
 	for _, it := range all {
 		if b, ok := m.busy[session.Key(it.ID)]; ok {
 			busy = append(busy, fmt.Sprintf("%s busy (%s)", it.ID, b.action))
+			busyItems = append(busyItems, it)
 			continue
 		}
 		ts = append(ts, it)
@@ -271,7 +273,7 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 		} else {
 			cmd = m.execute(name, jobs, skipped, len(busy), skippedWhen)
 		}
-		for _, it := range unmatched {
+		for _, it := range append(unmatched, busyItems...) {
 			m.marks[it.ID] = true // skipped items stay marked, so it shows what did not run
 		}
 		return cmd

@@ -145,3 +145,55 @@ func TestInitProject(t *testing.T) {
 		}
 	})
 }
+
+func TestOverwriteProject(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing bool
+		oldBak   string
+		backup   bool
+		wantBak  string // "" = no .bak
+	}{
+		{"no existing file", false, "", true, ""},
+		{"backup", true, "", true, "# mine\n"},
+		{"backup replaces an older one", true, "# old\n", true, "# mine\n"},
+		{"no backup leaves an older one", true, "# old\n", false, "# old\n"},
+		{"no backup, none before", true, "", false, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, ProjectFile)
+			if tt.existing {
+				write(t, path, "# mine\n")
+			}
+			if tt.oldBak != "" {
+				write(t, path+".bak", tt.oldBak)
+			}
+			got, err := OverwriteProject(dir, "github", "o/r", tt.backup)
+			if err != nil || got != path {
+				t.Fatalf("OverwriteProject = %q, %v; want %q", got, err, path)
+			}
+			if b, _ := os.ReadFile(path); string(b) != ProjectTemplate("github", "o/r") {
+				t.Errorf("file = %q, want the template", b)
+			}
+			bak, err := os.ReadFile(path + ".bak")
+			if tt.wantBak == "" && err == nil || tt.wantBak != "" && string(bak) != tt.wantBak {
+				t.Errorf(".bak = %q (err %v), want %q", bak, err, tt.wantBak)
+			}
+		})
+	}
+}
+
+// InitProject keeps refusing to overwrite (`:edit project` relies on it).
+func TestInitProjectNeverOverwrites(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ProjectFile)
+	write(t, path, "# mine\n")
+	if _, err := InitProject(dir, "github", "o/r"); !errors.Is(err, os.ErrExist) {
+		t.Fatalf("err = %v, want ErrExist", err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "# mine\n" {
+		t.Errorf("file = %q, want unchanged", b)
+	}
+}

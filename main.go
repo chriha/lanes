@@ -31,7 +31,7 @@ func main() {
 		os.Exit(runDoctor(os.Stdout, realDoctorEnv()))
 	}
 	if len(os.Args) == 2 && os.Args[1] == "init" {
-		os.Exit(runInit(os.Stdout, os.Stderr, wd, provider.OriginForge))
+		os.Exit(runInit(os.Stdin, stdinIsTerminal(), os.Stdout, os.Stderr, wd, provider.OriginForge))
 	}
 	if len(os.Args) == 2 && os.Args[1] == "status" {
 		runStatus()
@@ -62,4 +62,14 @@ func runStatus() {
 	if line := session.StatusLine(infos); line != "" {
 		fmt.Println(line)
 	}
+}
+
+// stdinIsTerminal reports whether stdin is an interactive terminal (no new dependency: a character device).
+func stdinIsTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	null, err := os.Stat(os.DevNull)
+	return err != nil || !os.SameFile(fi, null) // /dev/null is a character device but not a terminal
 }

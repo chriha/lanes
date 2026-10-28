@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"text/template"
@@ -165,9 +166,26 @@ func render(text string, data map[string]any) (string, error) {
 	}
 	var b bytes.Buffer
 	if err := t.Execute(&b, data); err != nil {
+		if m := missingKey.FindStringSubmatch(err.Error()); m != nil {
+			return "", fmt.Errorf("no field %q; this item's identifier is %q (see fields with p)", m[1], identifierKey(data))
+		}
 		return "", err
 	}
 	return b.String(), nil
+}
+
+// missingKey matches text/template's error for a top-level key the data does not have (not .vars.x and the like).
+// It relies on the error text; the tests catch a change in it.
+var missingKey = regexp.MustCompile(`at <\.([^.>\s]+)>: map has no entry for key "`)
+
+// identifierKey is the field that identifies an item: iid (gitlab), number (github), key (linear), else id.
+func identifierKey(data map[string]any) string {
+	for _, k := range []string{"iid", "number", "key"} {
+		if _, ok := data[k]; ok {
+			return k
+		}
+	}
+	return "id"
 }
 
 func (m *Model) runAction(name string, act config.Action) tea.Cmd {

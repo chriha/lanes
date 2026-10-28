@@ -431,7 +431,12 @@ run unlocks the item right away.
 | `{{.session}}` `{{.action}}`    | the session / action name                                       |
 
 `{{.title | q}}` shell-quotes a value — use it for anything that may contain spaces or quotes. A missing field or
-variable is an error shown in the footer; nothing runs.
+variable is an error shown in the footer; nothing runs. The message names the missing field and the item's
+identifier field (`iid` on GitLab, `number` on GitHub, `key` on Linear, otherwise `id`); `p` shows the item's fields:
+
+```text
+action work-tickets: no field "iid"; this item's identifier is "key" (see fields with p)
+```
 
 ### Running on many items
 
@@ -844,8 +849,9 @@ writable. It prints one `ok` / `warn` / `fail` line per check, naming the view o
 - **`tmux not found in PATH`** — install tmux (≥ 3.2).
 - **A key does nothing** — it may be a built-in key; open `?` and look at the actions list, shadowed bindings
   are flagged.
-- **An action reports `map has no entry for key "x"`** — the template uses `{{.vars.x}}` (or another field)
-  that is not defined. Add it to the action's `vars`.
+- **An action reports `no field "x"; this item's identifier is …`** — the template uses a field the item does
+  not have; check the name against `p`. **`map has no entry for key "x"`** means `{{.vars.x}}` is not defined:
+  add it to the action's `vars`.
 - **The list is empty** — the filter excludes everything, or its fields don't exist for that provider. Press
   `F` to look at the filter, or `:filter reset`.
 - **Start fresh** — delete `~/.local/state/lanes` and `~/.cache/lanes` (and the config if you want the

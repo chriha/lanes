@@ -379,6 +379,7 @@ Every action accepts:
 | `vars`    | none      | your own values, available as `{{.vars.name}}`                                       |
 | `refresh` | `false`   | `run` type only: refetch the lists when the command finishes                         |
 | `when`    | none      | [filter expression](#filters); the action runs only on items it matches (see [below](#restricting-actions-when)) |
+| `jump`    | `false`   | `session` type only: on a single item, attach to the session once it has started (see [below](#session-actions)) |
 
 ### Session actions
 
@@ -394,6 +395,11 @@ lock ends once the session has started, so a long-running session does not block
 
 If an action is already running for an item it is not started again (you are told so). If its previous session
 has ended, it is replaced by a fresh one.
+
+With `jump = true`, running the action on a single item also takes you into its session, exactly like `enter`:
+lanes attaches once tmux has started it, or attaches to the running one instead of saying it is already running
+(a finished one is restarted first). On several marked items it starts them all and jumps into none. `jump` on a
+`type = "run"` action is a config error.
 
 When the command exits the session stays around (tmux `remain-on-exit`), showing `✓` or `✗ (exit code)`, so you
 can still read the output. Close it with `x`.

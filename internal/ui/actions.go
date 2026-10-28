@@ -219,6 +219,7 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 	var jobs []job
 	skipped := 0
 	headless := act.Type == "run"
+	jump := act.Jump && !headless && len(all) == 1 // several targets start all and jump into none
 	vars := act.Vars
 	if vars == nil {
 		vars = map[string]any{}
@@ -234,6 +235,9 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 				continue
 			}
 			if !s.Dead {
+				if jump {
+					return m.jumpTo(sname)
+				}
 				skipped++
 				goto next
 			}
@@ -270,7 +274,11 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 		if headless {
 			cmd = m.executeRun(name, jobs, act.Refresh, len(busy), skippedWhen)
 		} else {
-			cmd = m.execute(name, jobs, skipped, len(busy), skippedWhen)
+			attach := ""
+			if jump {
+				attach = jobs[0].name
+			}
+			cmd = m.execute(name, jobs, skipped, len(busy), skippedWhen, attach)
 		}
 		for _, it := range unmatched {
 			m.marks[it.ID] = true // skipped items stay marked, so it shows what did not run
@@ -317,7 +325,8 @@ func withNote(s, note string) string {
 	return s + ", " + note
 }
 
-func (m *Model) execute(action string, jobs []job, skipped, busy int, skippedWhen string) tea.Cmd {
+// execute starts the jobs' sessions; with attach set, the doneMsg asks to attach to it once all started.
+func (m *Model) execute(action string, jobs []job, skipped, busy int, skippedWhen, attach string) tea.Cmd {
 	m.marks = map[string]bool{}
 	mgr := m.sess
 	keys := jobKeys(jobs)
@@ -346,7 +355,11 @@ func (m *Model) execute(action string, jobs []job, skipped, busy int, skippedWhe
 		if len(errs) > 0 {
 			note += ": " + errs[0]
 		}
-		return doneMsg{notice: note, keys: keys, ok: len(errs) == 0}
+		d := doneMsg{notice: note, keys: keys, ok: len(errs) == 0}
+		if d.ok {
+			d.jump = attach
+		}
+		return d
 	}
 }
 

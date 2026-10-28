@@ -171,6 +171,9 @@ func Load() (*Config, error) {
 		if strings.Contains(name, "~") || a.Run == "" || (a.Type != "" && a.Type != "session" && a.Type != "run") {
 			return nil, fmt.Errorf("%s: action %q needs a run command, type session|run, and no ~ in its name", p, name)
 		}
+		if a.Jump && a.Type == "run" {
+			return nil, fmt.Errorf("%s: action %q: jump needs type session", p, name)
+		}
 		if _, err := filter.Compile(a.When); err != nil {
 			return nil, fmt.Errorf("%s: action %q: when: %w", p, name, err)
 		}

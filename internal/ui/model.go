@@ -372,6 +372,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.pollSessions(), m.refreshAll())
 		}
 		m.unlock(msg.keys)
+		if msg.jump != "" {
+			return m, tea.Batch(m.pollSessions(), m.jumpTo(msg.jump))
+		}
 		return m, m.pollSessions()
 	case editorDone:
 		return m, m.reload()

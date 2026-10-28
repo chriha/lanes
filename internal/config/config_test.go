@@ -204,3 +204,45 @@ run = "echo work"
 		})
 	}
 }
+
+func TestActionJumpValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		action  string // TOML lines for the action
+		wantErr bool
+	}{
+		{"session", "jump = true", false},
+		{"explicit session", "type = \"session\"\njump = true", false},
+		{"run", "type = \"run\"\njump = true", true},
+		{"run without jump", "type = \"run\"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+			t.Setenv("HOME", tmp)
+			old, _ := os.Getwd()
+			defer os.Chdir(old)
+			if err := os.Chdir(tmp); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[action.work]
+run = "echo work"
+`+tt.action+`
+`)
+			_, err := Load()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil && (!strings.Contains(err.Error(), `action "work"`) || !strings.Contains(err.Error(), "jump")) {
+				t.Errorf("error %q does not name the action and jump", err)
+			}
+		})
+	}
+}

@@ -897,9 +897,14 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	right := strings.Join(badges, plain.Render("  "))
 	const authW = 16
 	id := st(sID).Render(fmt.Sprintf("%-*s", idW, ansi.Truncate(it.ID, idW, "…")))
-	auth := st(sDim).Render(fmt.Sprintf("%-*s", authW, ansi.Truncate(it.Author, authW, "…")))
-	fixed := 1 + 2 + idW + 1 + 1 + authW + 1 + rightW + 1
-	titleW := m.width - fixed
+	fixed := 1 + 2 + idW + 1 + 1 + rightW + 1
+	cellW := m.width - fixed // title, author and padding share this cell
+	authText := ansi.Truncate(it.Author, authW, "…")
+	authCellW := 0
+	if authText != "" {
+		authCellW = 2 + ansi.StringWidth(authText) // two spaces, then the author
+	}
+	titleW := cellW - authCellW
 	if titleW < 10 {
 		titleW = 10
 	}
@@ -907,13 +912,22 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	if it.Draft || len(b.refetch) > 0 {
 		ts = sDim // drafts, and items whose refresh run's result is not fetched yet
 	}
-	title := st(ts).Render(fmt.Sprintf("%-*s", titleW, ansi.Truncate(it.Title, titleW, "…")))
+	titleText := ansi.Truncate(it.Title, titleW, "…")
+	used := ansi.StringWidth(titleText)
+	title := st(ts).Render(titleText)
+	if authText != "" {
+		title += plain.Render("  ") + st(sDim).Render(authText)
+		used += authCellW
+	}
+	if pad := cellW - used; pad > 0 {
+		title += plain.Render(strings.Repeat(" ", pad))
+	}
 	cur := plain.Render(" ")
 	if selected {
 		cur = st(sMark).Render("▸")
 	}
 	sp := plain.Render(" ")
-	line := cur + mark + id + sp + title + sp + auth + sp + right
+	line := cur + mark + id + sp + title + sp + right
 	if selected {
 		return plain.Width(m.width).Render(line)
 	}

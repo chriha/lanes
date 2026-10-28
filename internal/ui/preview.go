@@ -14,7 +14,7 @@ import (
 
 const previewH = 9
 
-var preferred = []string{"branch", "target", "ticket", "labels", "reviewers", "assignees", "approved_by", "ci", "diverged", "open_threads"}
+var preferred = []string{"iid", "number", "key", "branch", "target", "ticket", "labels", "reviewers", "assignees", "approved_by", "ci", "diverged", "open_threads"}
 
 func fmtVal(v any) string {
 	switch x := v.(type) {

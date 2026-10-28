@@ -44,6 +44,11 @@ func TestRunActionTemplateErrors(t *testing.T) {
 			wantNotice: `action a cwd: no field "iid"; this item's identifier is "number" (see fields with p)`,
 		},
 		{
+			name: "missing var keeps the raw error", fields: map[string]any{"iid": 7},
+			act:        config.Action{Type: "run", Run: "echo {{.vars.x}}"},
+			wantNotice: `action a: template: :1:12: executing "" at <.vars.x>: map has no entry for key "x"`,
+		},
+		{
 			name: "other errors are unchanged", fields: map[string]any{},
 			act:        config.Action{Type: "run", Run: "echo {{.id | nofunc}}"},
 			wantNotice: `action a: template: :1: function "nofunc" not defined`,

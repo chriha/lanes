@@ -174,8 +174,9 @@ func render(text string, data map[string]any) (string, error) {
 	return b.String(), nil
 }
 
-// missingKey matches text/template's error for a map key the data does not have.
-var missingKey = regexp.MustCompile(`map has no entry for key "([^"]*)"`)
+// missingKey matches text/template's error for a top-level key the data does not have (not .vars.x and the like).
+// It relies on the error text; the tests catch a change in it.
+var missingKey = regexp.MustCompile(`at <\.([^.>\s]+)>: map has no entry for key "`)
 
 // identifierKey is the field that identifies an item: iid (gitlab), number (github), key (linear), else id.
 func identifierKey(data map[string]any) string {

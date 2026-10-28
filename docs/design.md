@@ -132,7 +132,8 @@ confirm = "none"
    (`lanes hook <event>` via `claude --settings {{.settings}}`: working / asking / waiting).
 3. **Actions & config — DONE.** `[keymap]` + `[action.*]` (`session` and headless `run` types, `vars`,
    `refresh`), multi-select confirm, item history (`i`), in-TUI filter editing (`F`, `:filter`, `:newview`,
-   `:delview` — stored in `<state>/views.json`, config untouched), `:edit` / `:config` / `:run`, live config reload.
+   `:delview` — stored in `<state>/views.json`, config untouched; `:filter save` writes an edit back into the
+   defining config's `filter` line), `:edit` / `:config` / `:run`, live config reload.
 4. **Polish — DONE.** `[theme]` color overrides, preview pane (`p`), CI/thread/approval badges, header session
    summary, desktop notifications (claude asking/waiting, session finished/failed; `no_notify` to disable).
 5. **Extract — DONE.** Own repo, per-project config (`.lanes.toml` overlays the global config) and per-project

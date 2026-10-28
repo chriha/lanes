@@ -68,7 +68,7 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 		sort.Strings(names)
 		m.notice = fmt.Sprintf("unknown view %q (have: %s)", arg, strings.Join(names, ", "))
 	case "filter":
-		m.setFilter(arg)
+		return m, m.setFilter(arg)
 	case "newview":
 		m.newView(arg)
 	case "delview":
@@ -141,23 +141,25 @@ func (m *Model) inConfig(name string) bool {
 	return false
 }
 
-func (m *Model) setFilter(arg string) {
+func (m *Model) setFilter(arg string) tea.Cmd {
 	v := m.views[m.cur]
 	name := v.cfg.Name
 	switch arg {
 	case "":
 		m.notice = "filter: " + v.cfg.Filter
-		return
+		return nil
 	case "reset":
 		if !m.inConfig(name) {
 			m.notice = "only config views can be reset"
-			return
+			return nil
 		}
 		delete(m.ov.Filters, name)
+	case "save":
+		return m.saveFilter(name)
 	default:
 		if _, err := filter.Compile(arg); err != nil {
 			m.notice = "filter: " + err.Error()
-			return
+			return nil
 		}
 		if m.inConfig(name) {
 			m.ov.Filters[name] = arg
@@ -170,6 +172,46 @@ func (m *Model) setFilter(arg string) {
 		}
 	}
 	m.saveViews("filter updated")
+	return nil
+}
+
+// saveFilter writes the view's in-app filter edit into the config file defining the view, drops the
+// override and reloads the config (like ctrl-r).
+func (m *Model) saveFilter(name string) tea.Cmd {
+	if !m.inConfig(name) {
+		m.notice = "only config views can be saved"
+		return nil
+	}
+	expr, ok := m.ov.Filters[name]
+	if !ok {
+		m.notice = "filter: nothing to save"
+		return nil
+	}
+	path, err := config.ViewFile(name)
+	if err == nil {
+		err = config.SaveViewFilter(path, name, expr)
+	}
+	if errors.Is(err, config.ErrNotSavable) {
+		m.notice = "filter: can't save, edit " + path + " by hand"
+		return nil
+	}
+	if err != nil {
+		m.notice = "filter: " + err.Error()
+		return nil
+	}
+	delete(m.ov.Filters, name) // before the reload, so the view does not show the old * state
+	saved := "filter saved to " + path
+	if err := m.ov.Save(); err != nil { // the file already holds the filter: still reload
+		saved += "; saving views: " + err.Error()
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		m.notice = saved + "; config: " + err.Error()
+		return nil // the tick's reload reports it again
+	}
+	m.applyConfig(cfg)
+	m.notice = saved
+	return m.refreshAll()
 }
 
 func (m *Model) newView(arg string) {

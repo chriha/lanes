@@ -246,3 +246,27 @@ run = "echo work"
 		})
 	}
 }
+
+func TestReservedShellAction(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+	t.Setenv("HOME", tmp)
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[action.shell]
+run = "echo shell"
+`)
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), `action "shell"`) || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("err = %v, want it to say action \"shell\" is reserved", err)
+	}
+}

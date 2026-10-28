@@ -38,6 +38,7 @@ you what each session is doing (running, working, asking a question, waiting for
   - [Preview pane and item history](#preview-pane-and-item-history)
 - [Actions](#actions)
   - [Session actions](#session-actions)
+  - [Shell sessions](#shell-sessions)
   - [Run actions](#run-actions)
   - [Templates](#templates)
   - [Running on many items](#running-on-many-items)
@@ -268,6 +269,7 @@ An unknown field name is not an error (fields come from the provider); an empty 
 | `enter`             | jump into the item's newest session (opens the URL if it has none) |
 | `o`                 | open the item's URL in the browser                 |
 | `x`                 | close the item's sessions (asks if any is still running) |
+| `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
 | `i`                 | show the item's history                            |
 | `N`                 | edit the item's note in `$VISUAL` / `$EDITOR` (save it empty to delete it) |
 | `n`                 | jump into the next session that is asking or waiting (any view) |
@@ -403,6 +405,14 @@ lanes attaches once tmux has started it, or attaches to the running one instead 
 
 When the command exits the session stays around (tmux `remain-on-exit`), showing `✓` or `✗ (exit code)`, so you
 can still read the output. Close it with `x`.
+
+### Shell sessions
+
+`t` opens a plain shell for the item under the cursor: your `$SHELL`, interactive, in the directory you started
+`lanes` in, as the session `shell~<item id>`. It works with no config and jumps right in. Marks are ignored. If the
+item already has a live shell, `t` jumps into it; if the shell has ended (`exit`), it shows as `✓ shell` (or
+`✗ shell (n)`) and the next `t` restarts it. Close it with `x` and remove finished ones with `:prune`, like any
+other session. `shell` is a reserved action name: a config action called `shell` fails to load.
 
 ### Run actions
 

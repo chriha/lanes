@@ -849,7 +849,13 @@ func (m *Model) list() string {
 
 // idColWidth is the width of the ID column for items: the longest ID, within [idMinW, idMaxW].
 func idColWidth(items []item.Item) int {
-	return idMinW
+	w := idMinW
+	for _, it := range items {
+		if iw := lipgloss.Width(it.ID); iw > w {
+			w = iw
+		}
+	}
+	return min(w, idMaxW)
 }
 
 func (m *Model) row(it item.Item, selected bool, idW int) string {
@@ -890,9 +896,9 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	}
 	right := strings.Join(badges, plain.Render("  "))
 	const authW = 16
-	id := st(sID).Render(fmt.Sprintf("%-*s", idMinW, ansi.Truncate(it.ID, idMinW, "")))
+	id := st(sID).Render(fmt.Sprintf("%-*s", idW, ansi.Truncate(it.ID, idW, "…")))
 	auth := st(sDim).Render(fmt.Sprintf("%-*s", authW, ansi.Truncate(it.Author, authW, "…")))
-	fixed := 1 + 2 + idMinW + 1 + 1 + authW + 1 + rightW + 1
+	fixed := 1 + 2 + idW + 1 + 1 + authW + 1 + rightW + 1
 	titleW := m.width - fixed
 	if titleW < 10 {
 		titleW = 10

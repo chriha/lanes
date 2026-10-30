@@ -21,6 +21,7 @@ import (
 	"github.com/chriha/lanes/internal/notes"
 	"github.com/chriha/lanes/internal/provider"
 	"github.com/chriha/lanes/internal/session"
+	"github.com/chriha/lanes/internal/snooze"
 )
 
 type mode int
@@ -44,6 +45,8 @@ type view struct {
 	edited bool             // filter overridden from inside the TUI
 	groups []*filter.Filter // compiled cfg.Groups, same order
 	heads  []head           // non-empty groups, in items order; nil without groups
+	// snoozed counts the snoozed items the filter matches (hidden unless showSnoozed)
+	snoozed int
 }
 
 // head is a group header in the list: items[at:at+n] belong to the group name.
@@ -108,8 +111,11 @@ type Model struct {
 	lastAttn   string // session the n key jumped to last
 	ov         *config.Overrides
 	notes      notes.Store
-	preview_   bool
-	usage      usageMsg // Claude usage from [settings] claude_dir, shown at the left of the footer
+	snoozes    snooze.Store
+	// showSnoozed lists snoozed items too (:snoozed)
+	showSnoozed bool
+	preview_    bool
+	usage       usageMsg // Claude usage from [settings] claude_dir, shown at the left of the footer
 	// originForge detects the forge for a new .lanes.toml (:edit project); nil = provider.OriginForge
 	originForge func() (typ, repo string, err error)
 
@@ -142,6 +148,9 @@ func New(cfg *config.Config) *Model {
 	}
 	if m.notes, err = notes.Load(); err != nil {
 		m.notice = strings.TrimSpace(m.notice + " notes: " + err.Error())
+	}
+	if m.snoozes, err = snooze.Load(); err != nil {
+		m.notice = strings.TrimSpace(m.notice + " snoozes: " + err.Error())
 	}
 	m.settings, _ = session.SettingsFile()
 	m.sessByItem = map[string][]session.Info{}
@@ -223,12 +232,12 @@ func (m *Model) rebuild() {
 	selected := m.selectedID()
 	q := strings.ToLower(m.query)
 	for i, v := range m.views {
-		v.items, v.heads = v.items[:0], nil
+		v.items, v.heads, v.snoozed = v.items[:0], nil, 0
 		if v.err != nil {
 			continue
 		}
 		for _, it := range m.data[v.cfg.Provider] {
-			it = m.withNote(it)
+			it = m.withSnooze(m.withNote(it))
 			ok, err := v.filter.Match(it.Env())
 			if err != nil {
 				v.err = err
@@ -236,6 +245,12 @@ func (m *Model) rebuild() {
 			}
 			if !ok {
 				continue
+			}
+			if _, snoozed := m.snoozes[it.ID]; snoozed {
+				v.snoozed++
+				if !m.showSnoozed {
+					continue
+				}
 			}
 			if i == m.cur && q != "" && !matches(it, q) {
 				continue
@@ -416,6 +431,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.data[msg.name] = items
 		if !msg.partial {
 			m.fetchedAt[msg.name] = time.Now()
+			m.wake(time.Now(), items) // a partial result lacks pending fields: only a full one can tell a change
 		}
 		cache.Save(msg.name, items)
 		for _, v := range m.views {
@@ -424,6 +440,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.rebuild()
 		return m, again
 	case tickMsg:
+		if m.wake(time.Time(msg), nil) {
+			m.rebuild()
+		}
 		return m, tea.Batch(tick(), m.onTick(), m.pollSessions(), m.pollUsage())
 	case usageMsg:
 		m.usage = msg
@@ -542,7 +561,7 @@ func (m *Model) onTick() tea.Cmd {
 }
 
 // builtinKeys cannot be rebound through [keymap].
-const builtinKeys = "jkgGhlVqRoixtpnNFSy/:? "
+const builtinKeys = "jkgGhlVqRoixtpnNFSyz/:? "
 
 // reload re-reads the config (also triggered by saving the file) and refetches, so edits apply live.
 func (m *Model) reload() tea.Cmd {
@@ -682,6 +701,13 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "i":
 		m.showHistory()
+	case "z":
+		if m.toggleSnooze() {
+			m.mode = modeCommand
+			m.cmdline.SetValue("snooze ")
+			m.cmdline.CursorEnd()
+			return m, m.cmdline.Focus()
+		}
 	case "N":
 		if n > 0 {
 			return m, m.editNote(m.items()[m.cursor].ID)
@@ -999,13 +1025,18 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	if m.notes.Get(it.ID) != "" {
 		noteW = 2 // a space, then the note marker
 	}
-	titleW := cellW - authCellW - noteW
+	_, snoozed := m.snoozes[it.ID]
+	snoozeW := 0
+	if snoozed {
+		snoozeW = 2 // a space, then the snooze marker
+	}
+	titleW := cellW - authCellW - noteW - snoozeW
 	if titleW < 10 {
 		titleW = 10
 	}
 	ts := sText
-	if it.Draft || len(b.refetch) > 0 {
-		ts = sDim // drafts, and items whose refresh run's result is not fetched yet
+	if it.Draft || len(b.refetch) > 0 || snoozed {
+		ts = sDim // drafts, snoozed items (:snoozed), and items whose refresh run's result is not fetched yet
 	}
 	titleText := ansi.Truncate(it.Title, titleW, "…")
 	used := ansi.StringWidth(titleText)
@@ -1017,6 +1048,10 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	if noteW > 0 {
 		title += plain.Render(" ") + st(badgeStyle("info")).Render("✎")
 		used += noteW
+	}
+	if snoozed {
+		title += plain.Render(" ") + st(sDim).Render("z")
+		used += snoozeW
 	}
 	if pad := cellW - used; pad > 0 {
 		title += plain.Render(strings.Repeat(" ", pad))
@@ -1053,6 +1088,13 @@ func (m *Model) footer() string {
 	case m.usage.text != "":
 		left = sDim.Render(" " + m.usageText(time.Now()))
 	}
+	if n := m.views[m.cur].snoozed; n > 0 {
+		sep := " · "
+		if left == "" {
+			sep = " "
+		}
+		left += sDim.Render(fmt.Sprintf("%s%d snoozed", sep, n))
+	}
 	hint := sDim.Render("j/k move · h/l view · space mark · enter jump · x close · p preview · ? help")
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(hint) - 1
 	if gap < 1 {
@@ -1078,6 +1120,7 @@ func (m *Model) helpLines() []string {
 		{"t", "shell for the cursor item: jump into it (started, or restarted if finished)"},
 		{"i", "item history"},
 		{"N", "edit the item's note in $EDITOR (save empty to delete)"},
+		{"z", "snooze item(s): 2h, 3d, mon, 2026-11-03, empty = until it changes; on a snoozed one: unsnooze"},
 		{"n", "jump into the next session that is asking or waiting"},
 		{"S", "sessions: every session, also of items no longer listed (enter jump, x close)"},
 		{"p", "toggle preview pane"},
@@ -1125,6 +1168,8 @@ func (m *Model) helpLines() []string {
 		{":newview <name> <expr>", "create a view (same provider as the current one)"},
 		{":delview <name>", "delete a view created with :newview"},
 		{":note [text]", "set the item's note to a line of text / clear it"},
+		{":snooze [when]", "snooze marked items / cursor item until when (empty: until it changes)"},
+		{":snoozed", "show / hide snoozed items (dimmed, marked z)"},
 		{":run <action>", "run an action by name"},
 		{":sessions", "list every session (same as S)"},
 		{":prune [failed]", "kill every finished session (only failed ones)"},
@@ -1138,7 +1183,7 @@ func (m *Model) helpLines() []string {
 	} else {
 		b.WriteString(sDim.Render("  project config  none (create "+config.ProjectFile+" in the project, :edit project)") + "\n")
 	}
-	b.WriteString(sDim.Render("  state           "+app.StateDir()+"  (history, views, notes, sessions)") + "\n")
+	b.WriteString(sDim.Render("  state           "+app.StateDir()+"  (history, views, notes, snoozes, sessions)") + "\n")
 	b.WriteString(m.fieldsHelp())
 	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 }

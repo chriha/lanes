@@ -28,5 +28,8 @@ func (i Item) Env() map[string]any {
 	if _, ok := env["note"]; !ok {
 		env["note"] = "" // notes are injected into Fields by the UI; a provider field named note wins
 	}
+	if _, ok := env["snoozed"]; !ok {
+		env["snoozed"] = false // injected by the UI like note
+	}
 	return env
 }

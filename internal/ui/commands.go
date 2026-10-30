@@ -95,6 +95,15 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 		} else {
 			m.notice = "no item to note"
 		}
+	case "snooze":
+		m.snoozeTargets(arg)
+	case "snoozed":
+		m.showSnoozed = !m.showSnoozed
+		m.notice = "hiding snoozed items"
+		if m.showSnoozed {
+			m.notice = "showing snoozed items"
+		}
+		m.rebuild()
 	case "run":
 		act, ok := m.cfg.Action[arg]
 		if !ok {

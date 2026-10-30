@@ -121,18 +121,26 @@ func (m *Model) sessionsView() string {
 	// ponytail: the window only follows the cursor down; scroll state is not worth a field here
 	for i := max(0, m.sessCursor-h+1); i < len(rows) && lines < h; i++ {
 		r := rows[i]
-		cur := "  "
-		if i == m.sessCursor {
-			cur = sMark.Render("▸ ")
+		// every segment carries its own background: a nested style's reset would otherwise end the highlight
+		st := func(s lipgloss.Style) lipgloss.Style {
+			if i == m.sessCursor {
+				return s.Background(cSelBg)
+			}
+			return s
 		}
+		cur := st(lipgloss.NewStyle()).Render("  ")
+		if i == m.sessCursor {
+			cur = st(sMark).Render("▸ ")
+		}
+		sp := st(lipgloss.NewStyle()).Render("  ")
 		badge := r.info.Badge()
-		right := badgeStyle(badge.Kind).Render(badge.Text) + "  " + sDim.Render(age(time.Since(r.info.Created)))
+		right := st(badgeStyle(badge.Kind)).Render(badge.Text) + sp + st(sDim).Render(age(time.Since(r.info.Created)))
 		if r.orphan {
-			right += "  " + sDim.Render("(not in any view)")
+			right += sp + st(sDim).Render("(not in any view)")
 		}
 		labelW := max(10, m.width-lipgloss.Width(right)-4)
-		label := sText.Render(fmt.Sprintf("%-*s", labelW, ansi.Truncate(r.label, labelW, "…")))
-		b.WriteString(cur + label + " " + right + "\n")
+		label := st(sText).Render(fmt.Sprintf("%-*s", labelW, ansi.Truncate(r.label, labelW, "…")))
+		b.WriteString(cur + label + st(lipgloss.NewStyle()).Render(" ") + right + "\n")
 		lines++
 	}
 	for ; lines < h; lines++ {

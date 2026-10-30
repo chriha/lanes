@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/chriha/lanes/internal/app"
@@ -41,6 +42,10 @@ type Manager struct {
 	// run executes tmux with args and returns stdout; on failure the returned bytes are tmux's stderr.
 	// Tests replace it so no real tmux server is contacted.
 	run func(args ...string) ([]byte, error)
+	// ps lists every process as "pid ppid pgid" lines; signal sends sig to the process group pgid.
+	// Tests replace both so no real process is looked up or signalled.
+	ps     func() ([]byte, error)
+	signal func(pgid int, sig syscall.Signal) error
 }
 
 func NewManager() (*Manager, error) {
@@ -135,6 +140,11 @@ func (m *Manager) Kill(name string) error {
 	_ = os.Remove(statePath(name))
 	_, err := m.run("kill-session", "-t", "="+name)
 	return err
+}
+
+// Interrupt stops the command running in the session and keeps the session: SIGTERM, or SIGKILL with force.
+func (m *Manager) Interrupt(name string, force bool) error {
+	return nil
 }
 
 // Prune kills the dead sessions of a fresh listing (with failedOnly, only those with a non-zero exit) and

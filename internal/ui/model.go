@@ -109,9 +109,11 @@ type Model struct {
 	helpOff    int
 	sessCursor int    // cursor of the sessions screen
 	lastAttn   string // session the n key jumped to last
-	ov         *config.Overrides
-	notes      notes.Store
-	snoozes    snooze.Store
+	// interrupted holds the sessions X interrupted in this run; X on one of them again sends SIGKILL
+	interrupted map[string]bool
+	ov          *config.Overrides
+	notes       notes.Store
+	snoozes     snooze.Store
 	// showSnoozed lists snoozed items too (:snoozed)
 	showSnoozed bool
 	preview_    bool

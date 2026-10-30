@@ -90,6 +90,10 @@ func (m *Model) keySessions(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.sessCursor < len(m.sessions) {
 			return m, m.killSessions(m.sessions[m.sessCursor : m.sessCursor+1])
 		}
+	case "X":
+		if m.sessCursor < len(m.sessions) {
+			return m, m.interruptSessions(m.sessions[m.sessCursor : m.sessCursor+1])
+		}
 	}
 	m.restoreSessCursor("")
 	return m, nil

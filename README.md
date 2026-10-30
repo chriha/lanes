@@ -310,6 +310,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `o`                 | open the item's URL in the browser                 |
 | `y`                 | copy the item's ID to the clipboard (all marked IDs, space-separated, if any are marked) |
 | `x`                 | close the item's sessions (asks first)             |
+| `X`                 | interrupt the item's running sessions and keep their output (asks first; again: `SIGKILL`) |
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
 | `i`                 | show the item's history                            |
 | `N`                 | edit the item's note in `$VISUAL` / `$EDITOR` (save it empty to delete it) |
@@ -324,7 +325,8 @@ compile, is a config error. Groups are set in the config only (global or project
 | `q`                 | quit after confirming — sessions keep running      |
 
 Any other key you bind in `[keymap]` runs its [action](#actions). Built-in keys cannot be rebound; if you try,
-the help marks the binding as shadowed and the reload message tells you.
+the help marks the binding as shadowed and the reload message tells you. `X` became a built-in key with
+interrupt; an older `[keymap]` binding of `X` is now shadowed.
 
 ### Searching
 
@@ -463,7 +465,8 @@ lanes attaches once tmux has started it, or attaches to the running one instead 
 `type = "run"` action is a config error.
 
 When the command exits the session stays around (tmux `remain-on-exit`), showing `✓` or `✗ (exit code)`, so you
-can still read the output. Close it with `x` (it asks first).
+can still read the output. Stop a running command with `X` (the session stays with its output and shows
+`✗ (143)`), close it with `x` (it asks first).
 
 ### Shell sessions
 
@@ -564,10 +567,15 @@ provider sets it in its fields, if at all).
 - **Close** — `x` closes the sessions of the marked items, or of the item under the cursor. It always asks
   first (`Close 3 session(s) (1 running)?`, the running part only when one is still running): a finished session
   still holds its output.
+- **Interrupt** — `X` stops the command of the running sessions of the marked items, or of the item under the
+  cursor, after a confirmation (`Interrupt 2 running session(s)?`); finished sessions are skipped, and with none
+  running the footer says `no running sessions here`. The command gets `SIGTERM`; the session stays, shows
+  `✗ <action> (143)` and keeps its output, so you can still read it with `enter` and close it with `x`. If a
+  command ignores `SIGTERM`, `X` on it again sends `SIGKILL`. The item history records `interrupted`.
 - **Sessions screen** — `S` (or `:sessions`) lists every session on the `lanes` tmux server, newest first:
   item ID and title (or the item key when no provider returns the item any more), status badge and age.
   Sessions whose item is in no view — filtered out, or merged/closed — are marked `(not in any view)`. `enter`
-  jumps in, `x` closes (after confirming), `j`/`k`, `gg`/`G` move, `q` / `esc` / `S` go back.
+  jumps in, `X` interrupts, `x` closes (after confirming), `j`/`k`, `gg`/`G` move, `q` / `esc` / `S` go back.
 - **Quit** — `q` asks first (`y`/`enter` quits, any other key cancels); `ctrl-c` and `:quit` leave at once. Sessions keep running and reappear when you start it again.
 - **Status** — shown as row badges and in the header summary, refreshed every second.
 

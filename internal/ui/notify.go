@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"net/url"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -20,20 +21,26 @@ func notify(title, body string) {
 	}
 }
 
-// openItemURL opens an item's URL with m.open, or the system opener when unset.
-func (m *Model) openItemURL(u string) {
-	if m.open != nil {
-		_ = m.open(u)
+// openItemURL opens an item's URL with m.open (the system opener when unset), but only if it is an
+// http(s) URL with a host: provider data must not reach the opener as file:, custom schemes or options.
+func (m *Model) openItemURL(raw string) {
+	u, err := url.Parse(raw)
+	if err != nil || (!strings.EqualFold(u.Scheme, "http") && !strings.EqualFold(u.Scheme, "https")) || u.Host == "" {
+		m.notice = "not opened: only http(s) URLs can be opened"
 		return
 	}
-	openURL(u)
+	if m.open != nil {
+		_ = m.open(raw)
+		return
+	}
+	openURL(raw)
 }
 
 // openURL opens a URL in the default browser.
-func openURL(url string) {
+func openURL(u string) {
 	opener := "xdg-open"
 	if runtime.GOOS == "darwin" {
 		opener = "open"
 	}
-	_ = exec.Command(opener, url).Start()
+	_ = exec.Command(opener, u).Start()
 }

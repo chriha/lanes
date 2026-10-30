@@ -335,3 +335,27 @@ func TestSessionsViewHighlightsCursorRow(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionsRowFillsScreenWidth(t *testing.T) {
+	long := strings.Repeat("long label ", 20)
+	for _, width := range []int{60, 120} {
+		infos := []session.Info{
+			{Name: "a~1", ItemKey: "1", Created: time.Now().Add(-time.Hour)},
+			{Name: "b~2", ItemKey: long, Created: time.Now().Add(-time.Hour)},
+		}
+		for cursor := range infos {
+			m := sessModel(t, infos...)
+			m.width = width
+			m.sessCursor = cursor
+			lines := strings.Split(m.sessionsView(), "\n")
+			for i := range infos {
+				if got := ansi.StringWidth(lines[2+i]); got != width {
+					t.Errorf("width %d cursor %d: row %d is %d columns wide: %q", width, cursor, i, got, lines[2+i])
+				}
+			}
+			if !strings.Contains(lines[3], "…") {
+				t.Errorf("width %d: long label not truncated: %q", width, lines[3])
+			}
+		}
+	}
+}

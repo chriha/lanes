@@ -138,7 +138,7 @@ func (m *Model) sessionsView() string {
 		if r.orphan {
 			right += sp + st(sDim).Render("(not in any view)")
 		}
-		labelW := max(10, m.width-lipgloss.Width(right)-4)
+		labelW := max(10, m.width-lipgloss.Width(right)-3)
 		label := st(sText).Render(fmt.Sprintf("%-*s", labelW, ansi.Truncate(r.label, labelW, "…")))
 		b.WriteString(cur + label + st(lipgloss.NewStyle()).Render(" ") + right + "\n")
 		lines++

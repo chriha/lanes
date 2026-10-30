@@ -115,6 +115,35 @@ func TestCorruptStore(t *testing.T) {
 	}
 }
 
+func TestNullStore(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	mustMkdir(t, filepath.Dir(path()))
+	mustWrite(t, path(), "null")
+
+	if err := Trust("/p", "h"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := IsTrusted("/p", "h"); !ok || err != nil {
+		t.Errorf("IsTrusted = %v, %v; want true, nil", ok, err)
+	}
+}
+
+func TestRootRelative(t *testing.T) {
+	top := t.TempDir()
+	mustMkdir(t, filepath.Join(top, ".git"))
+	mustMkdir(t, filepath.Join(top, "a"))
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(filepath.Join(top, "a")); err != nil {
+		t.Fatal(err)
+	}
+
+	want, _ := filepath.EvalSymlinks(top)
+	if got, _ := filepath.EvalSymlinks(Root(".")); got != want {
+		t.Errorf("Root(\".\") = %q, want %q", got, want)
+	}
+}
+
 func mustMkdir(t *testing.T, p string) {
 	t.Helper()
 	if err := os.MkdirAll(p, 0o755); err != nil {

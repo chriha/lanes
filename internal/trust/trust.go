@@ -18,6 +18,9 @@ import (
 // Root is the project root of dir: the nearest directory at or above it containing .git (a directory, or a file in
 // worktrees), else dir itself. It never runs git, since git would already read the repo's own config.
 func Root(dir string) string {
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs // a relative dir would stop walking at "."
+	}
 	for d := dir; ; {
 		if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil {
 			return d
@@ -61,6 +64,9 @@ func load() (map[string]string, error) {
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path(), err)
+	}
+	if m == nil { // the file held JSON null
+		m = map[string]string{}
 	}
 	return m, nil
 }

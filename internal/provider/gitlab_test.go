@@ -1,7 +1,9 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -74,6 +76,77 @@ func TestToItemDiverged(t *testing.T) {
 			}
 			if got, err := f.Match(it.Env()); err != nil || got != tc.diverged {
 				t.Errorf("filter: got %v err %v, want %v", got, err, tc.diverged)
+			}
+		})
+	}
+}
+
+const glBaseResponse = `{"data":{"currentUser":{"username":"me"},"project":{"mergeRequests":{"nodes":[
+ {"iid":"1","title":"ABC-1 one","webUrl":"u1","author":{"username":"alex"},"headPipeline":{"status":"SUCCESS"},
+  "resolvableDiscussionsCount":2,"resolvedDiscussionsCount":0},
+ {"iid":"2","title":"two","webUrl":"u2","author":{"username":"me"}}]}}}}`
+
+const glThreadsResponse = `{"data":{"project":{"mergeRequests":{"nodes":[
+ {"iid":"1","discussions":{"nodes":[
+  {"resolvable":true,"resolved":false,"notes":{"nodes":[{"author":{"username":"me"}}]}},
+  {"resolvable":true,"resolved":true,"notes":{"nodes":[{"author":{"username":"me"}}]}},
+  {"resolvable":false,"resolved":false,"notes":{"nodes":[]}}]}}]}}}}`
+
+// fakeGlab answers by query; Fetch runs both queries concurrently, so it keeps no shared state.
+func fakeGlab(base, threads string, err error) func(context.Context, ...string) ([]byte, error) {
+	return func(_ context.Context, args ...string) ([]byte, error) {
+		if err != nil {
+			return nil, err
+		}
+		if strings.Contains(strings.Join(args, " "), "discussions(") {
+			return []byte(threads), nil
+		}
+		return []byte(base), nil
+	}
+}
+
+func TestGitLabFetchAndQuick(t *testing.T) {
+	g := &GitLab{Project: "g/p", Run: fakeGlab(glBaseResponse, glThreadsResponse, nil)}
+
+	items, err := g.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 || items[0].ID != "!1" || items[1].ID != "!2" {
+		t.Fatalf("items = %+v", items)
+	}
+	if items[0].Fields["open_threads"] != 1 || items[0].Fields["open_thread_by_me"] != true {
+		t.Errorf("threads not applied: %+v", items[0].Fields)
+	}
+	if items[1].Fields["open_threads"] != 0 || items[1].Fields["me"] != "me" {
+		t.Errorf("bad item 2: %+v", items[1].Fields)
+	}
+
+	quick, err := g.Quick(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(quick) != 2 || !reflect.DeepEqual(quick[0].Pending, []string{"open_thread_by_me"}) {
+		t.Errorf("quick = %+v", quick)
+	}
+}
+
+func TestGitLabFetchErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name, base, threads string
+		runErr              error
+		want                string
+	}{
+		{"run fails", "", "", errors.New("boom"), "glab: boom"},
+		{"bad json", "not json", glThreadsResponse, nil, "bad response"},
+		{"graphql error", `{"errors":[{"message":"nope"}]}`, glThreadsResponse, nil, "gitlab: nope"},
+		{"project missing", `{"data":{"project":null}}`, glThreadsResponse, nil, "not found"},
+		{"threads project missing", glBaseResponse, `{"data":{"project":null}}`, nil, "not found"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := &GitLab{Project: "g/p", Run: fakeGlab(tc.base, tc.threads, tc.runErr)}
+			if _, err := g.Fetch(context.Background()); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("err = %v, want containing %q", err, tc.want)
 			}
 		})
 	}

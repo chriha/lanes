@@ -201,6 +201,7 @@ Useful building blocks:
 | `a == b`, `a != b`             | equality                                   |
 | `&&`, `\|\|`, `!`, `( )`         | and, or, not, grouping                     |
 | `"x" in labels`                | list membership                            |
+| `hasNone(labels, "needs-info", "triage", "planning")` | none of these are in the list (also `hasAny`, `hasAll`) |
 | `title contains "fix"`         | substring (also `startsWith`, `endsWith`)  |
 | `title matches "^feat"`        | regular expression                         |
 | `len(reviewers) >= 2`          | list length                                |
@@ -241,6 +242,9 @@ ci == "failed" && author == me                                 # my MRs with a r
 !draft && len(reviewers) == 0                                  # nobody assigned yet
 ticket startsWith "ABC-" && open_threads > 0                   # open threads on one ticket prefix
 ```
+
+`hasAny`, `hasNone` and `hasAll` take a list field and any number of values; a missing field counts as an empty
+list. `["a", "b"] in labels` is rejected: use `hasAny(labels, "a", "b")` or `hasNone(...)`.
 
 If a filter has a syntax error it is rejected when you edit it (in-app) or shown in the view (config); a
 runtime error (e.g. comparing a missing field) shows as a message in the list instead of silently hiding items.

@@ -134,7 +134,7 @@ func Trust(root, hash string) error {
 		return err
 	}
 	dir := filepath.Dir(path())
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, app.DirMode); err != nil {
 		return err
 	}
 	// CreateTemp makes the file 0600, which the rename keeps.

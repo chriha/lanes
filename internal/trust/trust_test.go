@@ -188,3 +188,15 @@ func TestHashRootIndependentOfCwd(t *testing.T) {
 		t.Errorf("HashRoot without files = %q, %v; want \"\", nil", h, err)
 	}
 }
+
+func TestTrustFileIsPrivate(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	if err := Trust("/r", "h"); err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]os.FileMode{filepath.Dir(path()): 0o700, path(): 0o600} {
+		if fi, err := os.Stat(p); err != nil || fi.Mode().Perm() != want {
+			t.Errorf("%s = %v, %v; want %o", p, fi, err, want)
+		}
+	}
+}

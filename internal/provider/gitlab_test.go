@@ -151,3 +151,92 @@ func TestGitLabFetchErrors(t *testing.T) {
 		})
 	}
 }
+
+// countingGlab records every query it answers and serves the given threads response.
+type countingGlab struct {
+	base, threads string
+	queries       []string
+}
+
+func (c *countingGlab) run(_ context.Context, args ...string) ([]byte, error) {
+	q := strings.Join(args, " ")
+	c.queries = append(c.queries, q)
+	if strings.Contains(q, "discussions(") {
+		return []byte(c.threads), nil
+	}
+	return []byte(c.base), nil
+}
+
+func (c *countingGlab) threadQueries() []string {
+	var out []string
+	for _, q := range c.queries {
+		if strings.Contains(q, "discussions(") {
+			out = append(out, q)
+		}
+	}
+	return out
+}
+
+func glBase(updated1, updated2 string, resolved1 int) string {
+	return fmt.Sprintf(`{"data":{"currentUser":{"username":"me"},"project":{"mergeRequests":{"nodes":[
+ {"iid":"1","title":"one","updatedAt":%q,"author":{"username":"alex"},"resolvableDiscussionsCount":2,"resolvedDiscussionsCount":%d},
+ {"iid":"2","title":"two","updatedAt":%q,"author":{"username":"me"}}]}}}}`, updated1, resolved1, updated2)
+}
+
+func TestGitLabFetchLoadsDiscussionsOnlyForChangedMRs(t *testing.T) {
+	c := &countingGlab{base: glBase("t1", "t1", 0), threads: glThreadsResponse}
+	g := &GitLab{Project: "g/p", Run: c.run}
+	ctx := context.Background()
+
+	if _, err := g.Fetch(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.threadQueries(); len(got) != 1 || !strings.Contains(got[0], `iids:["1","2"]`) {
+		t.Fatalf("first fetch thread queries = %v, want one for both iids", got)
+	}
+
+	t.Run("nothing changed sends only the base query", func(t *testing.T) {
+		c.queries = nil
+		items, err := g.Fetch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(c.queries) != 1 || len(c.threadQueries()) != 0 {
+			t.Errorf("queries = %d (threads %d), want 1 and 0", len(c.queries), len(c.threadQueries()))
+		}
+		if items[0].Fields["open_threads"] != 1 || items[0].Fields["open_thread_by_me"] != true {
+			t.Errorf("thread info not kept: %+v", items[0].Fields)
+		}
+	})
+
+	t.Run("one changed MR queries only its iid and keeps the other", func(t *testing.T) {
+		c.queries = nil
+		c.base = glBase("t2", "t1", 0)
+		c.threads = `{"data":{"project":{"mergeRequests":{"nodes":[{"iid":"1","discussions":{"nodes":[]}}]}}}}`
+		items, err := g.Fetch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tq := c.threadQueries()
+		if len(tq) != 1 || !strings.Contains(tq[0], `iids:["1"]`) || strings.Contains(tq[0], `"2"`) {
+			t.Fatalf("thread queries = %v, want one restricted to iid 1", tq)
+		}
+		if items[0].Fields["open_threads"] != 0 || items[0].Fields["open_thread_by_me"] != false {
+			t.Errorf("changed MR not refreshed: %+v", items[0].Fields)
+		}
+		if items[1].Fields["open_threads"] != 0 {
+			t.Errorf("unchanged MR: %+v", items[1].Fields)
+		}
+	})
+
+	t.Run("a resolved-count change alone counts as changed", func(t *testing.T) {
+		c.queries = nil
+		c.base = glBase("t2", "t1", 1)
+		if _, err := g.Fetch(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if tq := c.threadQueries(); len(tq) != 1 || !strings.Contains(tq[0], `iids:["1"]`) {
+			t.Errorf("thread queries = %v, want one for iid 1", tq)
+		}
+	})
+}

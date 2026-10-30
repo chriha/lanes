@@ -114,7 +114,7 @@ func (s Store) Delete(ids ...string) error {
 // ponytail: last writer wins across lanes instances (same as notes).
 func (s Store) save() error {
 	dir := filepath.Dir(path())
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, app.DirMode); err != nil {
 		return err
 	}
 	// Only a file that reads but doesn't decode is corrupt; a read error must not move a healthy file aside.

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/chriha/lanes/internal/item"
 )
@@ -16,12 +18,23 @@ type GitLab struct {
 	Project string
 	// Run executes glab with args; nil runs the real glab binary.
 	Run func(ctx context.Context, args ...string) ([]byte, error)
+
+	mu   sync.Mutex
+	snap map[string]mrSnap // last full result by iid; in memory only
+}
+
+// mrSnap is what Fetch remembers of an MR to tell whether its discussions need loading again.
+type mrSnap struct {
+	updatedAt  string
+	resolvable int
+	resolved   int
+	threads    threadInfo
 }
 
 const gqlQuery = `query($p:ID!){
   currentUser{username}
   project(fullPath:$p){ mergeRequests(state:opened,first:100,sort:UPDATED_DESC){ nodes{
-    iid title webUrl draft approved sourceBranch targetBranch conflicts divergedFromTargetBranch
+    iid title webUrl updatedAt draft approved sourceBranch targetBranch conflicts divergedFromTargetBranch
     author{username}
     assignees{nodes{username}}
     reviewers{nodes{username}}
@@ -32,9 +45,10 @@ const gqlQuery = `query($p:ID!){
   }}}
 }`
 
-// Discussions are by far the slowest part (~9s vs ~2s), so they are fetched separately.
-const gqlThreads = `query($p:ID!){
-  project(fullPath:$p){ mergeRequests(state:opened,first:100,sort:UPDATED_DESC){ nodes{
+// Discussions are by far the slowest part (~9s vs ~2s), so they are fetched separately and only for the MRs
+// that changed; %s is the iids list, e.g. "1","2".
+const gqlThreadsFmt = `query($p:ID!){
+  project(fullPath:$p){ mergeRequests(iids:[%s],state:opened,first:100){ nodes{
     iid
     discussions(first:100){nodes{resolvable resolved notes(first:1){nodes{author{username}}}}}
   }}}
@@ -45,6 +59,7 @@ type nodes[T any] struct{ Nodes []T }
 
 type gqlMR struct {
 	IID                        string
+	UpdatedAt                  string
 	Title                      string
 	WebURL                     string
 	Draft                      bool
@@ -168,30 +183,66 @@ func (g *GitLab) Quick(ctx context.Context) ([]item.Item, error) {
 	return items, nil
 }
 
+// Fetch returns the full result. Discussions are loaded only for MRs that are new or whose updatedAt or discussion
+// counts differ from the last full result; the others keep their previous thread info.
 func (g *GitLab) Fetch(ctx context.Context) ([]item.Item, error) {
 	proj, err := g.project()
 	if err != nil {
 		return nil, err
 	}
-	var (
-		mrs      []gqlMR
-		me       string
-		baseErr  error
-		threads  gqlThreadsResp
-		threadEr error
-		done     = make(chan struct{})
-	)
-	go func() {
-		defer close(done)
-		threadEr = g.graphql(ctx, gqlThreads, proj, &threads)
-	}()
-	mrs, me, baseErr = g.base(ctx, proj)
-	<-done
-	if baseErr != nil {
-		return nil, baseErr
+	mrs, me, err := g.base(ctx, proj)
+	if err != nil {
+		return nil, err
 	}
-	if threadEr != nil {
-		return nil, threadEr
+	g.mu.Lock()
+	prev := g.snap
+	g.mu.Unlock()
+
+	info := map[string]threadInfo{}
+	var changed []string
+	for _, mr := range mrs {
+		s, ok := prev[mr.IID]
+		if ok && s.updatedAt == mr.UpdatedAt && s.resolvable == mr.ResolvableDiscussionsCount && s.resolved == mr.ResolvedDiscussionsCount {
+			info[mr.IID] = s.threads
+			continue
+		}
+		changed = append(changed, mr.IID)
+	}
+	if len(changed) > 0 {
+		fresh, err := g.threads(ctx, proj, me, changed)
+		if err != nil {
+			return nil, err
+		}
+		for _, iid := range changed {
+			info[iid] = fresh[iid]
+		}
+	}
+
+	snap := make(map[string]mrSnap, len(mrs))
+	items := make([]item.Item, 0, len(mrs))
+	for _, mr := range mrs {
+		ti := info[mr.IID]
+		snap[mr.IID] = mrSnap{mr.UpdatedAt, mr.ResolvableDiscussionsCount, mr.ResolvedDiscussionsCount, ti}
+		items = append(items, toItem(mr, me, &ti))
+	}
+	g.mu.Lock()
+	g.snap = snap
+	g.mu.Unlock()
+	return items, nil
+}
+
+// threads loads the discussions of the MRs with the given iids.
+func (g *GitLab) threads(ctx context.Context, proj, me string, iids []string) (map[string]threadInfo, error) {
+	quoted := make([]string, 0, len(iids))
+	for _, iid := range iids {
+		if _, err := strconv.ParseUint(iid, 10, 64); err != nil {
+			return nil, fmt.Errorf("gitlab: bad merge request iid %q", iid)
+		}
+		quoted = append(quoted, strconv.Quote(iid))
+	}
+	var threads gqlThreadsResp
+	if err := g.graphql(ctx, fmt.Sprintf(gqlThreadsFmt, strings.Join(quoted, ",")), proj, &threads); err != nil {
+		return nil, err
 	}
 	if threads.Data.Project == nil {
 		return nil, fmt.Errorf("gitlab: project %q not found", proj)
@@ -211,12 +262,7 @@ func (g *GitLab) Fetch(ctx context.Context) ([]item.Item, error) {
 		}
 		info[mr.IID] = ti
 	}
-	items := make([]item.Item, 0, len(mrs))
-	for _, mr := range mrs {
-		ti := info[mr.IID]
-		items = append(items, toItem(mr, me, &ti))
-	}
-	return items, nil
+	return info, nil
 }
 
 type gqlThreadsResp struct {

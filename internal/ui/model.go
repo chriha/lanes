@@ -76,10 +76,12 @@ type Model struct {
 	providers map[string]provider.Provider
 	data      map[string][]item.Item
 	fetchedAt map[string]time.Time
-	loading   map[string]bool
-	provErr   map[string]error
-	fails     map[string]int       // consecutive failed fetches per provider
-	retryAt   map[string]time.Time // no refetch before this
+	// fullFetched marks providers with a full result in this run; their polls skip the Quick pass.
+	fullFetched map[string]bool
+	loading     map[string]bool
+	provErr     map[string]error
+	fails       map[string]int       // consecutive failed fetches per provider
+	retryAt     map[string]time.Time // no refetch before this
 	// refetchAfter marks providers whose in-flight fetch started before a refresh run ended: when it lands, fetch again
 	refetchAfter map[string]bool
 	busy         map[string]busyState // by session.Key of the item
@@ -97,6 +99,7 @@ type Model struct {
 	pendingG bool
 	notice   string
 	clip     func(string) error // nil: the system clipboard (tests fake it)
+	open     func(string) error // nil: the system opener (tests fake it)
 
 	sess       *session.Manager
 	settings   string
@@ -172,7 +175,8 @@ func (m *Model) applyConfig(cfg *config.Config) {
 			continue
 		}
 		m.providers[name] = p
-		delete(m.provErr, name) // built again: drop the stale build error until the next fetch
+		delete(m.fullFetched, name) // a rebuilt provider has no snapshot: show the partial result first again
+		delete(m.provErr, name)     // built again: drop the stale build error until the next fetch
 		if _, ok := m.data[name]; !ok {
 			m.data[name] = cache.Load(name)
 		}
@@ -375,7 +379,7 @@ func (m *Model) fetch(name string) tea.Cmd {
 		return fetchedMsg{name: name, items: items, err: err}
 	}
 	q, ok := p.(provider.Quicker)
-	if !ok {
+	if !ok || m.fullFetched[name] {
 		return full
 	}
 	quick := func() tea.Msg {
@@ -426,6 +430,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		delete(m.provErr, msg.name)
 		if !msg.partial {
+			if m.fullFetched == nil {
+				m.fullFetched = map[string]bool{}
+			}
+			m.fullFetched[msg.name] = true
 			delete(m.fails, msg.name)
 			delete(m.retryAt, msg.name)
 		}
@@ -693,7 +701,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.refreshAll()
 	case "o":
 		if n > 0 {
-			openURL(m.items()[m.cursor].URL)
+			m.openItemURL(m.items()[m.cursor].URL)
 		}
 	case "y":
 		m.copyIDs()

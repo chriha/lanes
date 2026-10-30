@@ -85,3 +85,24 @@ func TestPathUnderTempState(t *testing.T) {
 		t.Fatalf("history path %s escapes state dir", path())
 	}
 }
+
+func TestAppendIsPrivate(t *testing.T) {
+	setup(t)
+	if err := os.MkdirAll(filepath.Dir(path()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path(), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	Append(Event{Item: "a"})
+	if fi, err := os.Stat(path()); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("existing file = %v, %v; want 0600", fi, err)
+	}
+	setup(t)
+	Append(Event{Item: "a"})
+	fi, err := os.Stat(path())
+	di, derr := os.Stat(filepath.Dir(path()))
+	if err != nil || derr != nil || fi.Mode().Perm() != 0o600 || di.Mode().Perm() != 0o700 {
+		t.Errorf("new file/dir = %v %v, %v %v; want 0600/0700", fi, err, di, derr)
+	}
+}

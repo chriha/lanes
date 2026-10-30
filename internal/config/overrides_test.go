@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -43,3 +44,26 @@ func TestLoadOverrides(t *testing.T) {
 }
 
 func ptr(s string) *string { return &s }
+
+func TestConfigFilesArePrivate(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	write(t, overridesPath(), `{}`)
+	if err := os.Chmod(overridesPath(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&Overrides{}).Save(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(filepath.Dir(Path())); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Errorf("config dir = %v, %v; want 0700", fi, err)
+	}
+	for _, p := range []string{overridesPath(), Path()} {
+		if fi, err := os.Stat(p); err != nil || fi.Mode().Perm() != 0o600 {
+			t.Errorf("%s = %v, %v; want 0600", p, fi, err)
+		}
+	}
+}

@@ -3,11 +3,14 @@ package ui
 import (
 	"errors"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/item"
@@ -288,5 +291,47 @@ func TestPruneCommand(t *testing.T) {
 				t.Errorf("cmd %v, notice %q; want cmd %v, notice %q", cmd != nil, m.notice, tt.wantCmd, tt.notice)
 			}
 		})
+	}
+}
+
+func TestSessionsViewHighlightsCursorRow(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0) // termenv.TrueColor: render the colors the test compares
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+	bgRe := regexp.MustCompile(`48;[0-9;]+`)
+	bg := bgRe.FindString(lipgloss.NewStyle().Background(cSelBg).Render("x"))
+	if bg == "" {
+		t.Fatal("test needs a color profile: styles rendered plain")
+	}
+	infos := []session.Info{
+		{Name: "a~1", ItemKey: "1", Created: time.Now().Add(-time.Hour)},
+		{Name: "b~9", ItemKey: "9", Created: time.Now().Add(-time.Hour)}, // in no view: orphan hint
+	}
+	rowLine := func(m *Model, i int) string { return strings.Split(m.sessionsView(), "\n")[2+i] }
+	for cursor := range infos {
+		m := sessModel(t, infos...)
+		m.sessCursor = cursor
+		for i := range infos {
+			line := rowLine(m, i)
+			if i != cursor {
+				if strings.Contains(line, bg) || strings.Contains(line, "▸") {
+					t.Errorf("cursor %d: row %d = %q, want no highlight", cursor, i, line)
+				}
+				continue
+			}
+			if !strings.Contains(line, "▸ ") {
+				t.Errorf("cursor %d: row %d = %q, lost the marker", cursor, i, line)
+			}
+			// every visible chunk (text between resets) must carry the background
+			for _, chunk := range strings.Split(line, "\x1b[0m") {
+				if ansi.Strip(chunk) != "" && !strings.Contains(chunk, bg) {
+					t.Errorf("cursor %d: chunk %q of %q has no background", cursor, chunk, line)
+				}
+			}
+			other := rowLine(m, 1-i)
+			if got, want := ansi.StringWidth(line), ansi.StringWidth(other); got != want {
+				t.Errorf("cursor %d: row width %d, other row %d", cursor, got, want)
+			}
+		}
 	}
 }

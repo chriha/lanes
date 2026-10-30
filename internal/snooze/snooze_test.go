@@ -179,3 +179,22 @@ func TestCorruptFileIsReportedAndKept(t *testing.T) {
 		t.Fatal("snooze not saved")
 	}
 }
+
+func TestUnreadableFileIsNotBackedUp(t *testing.T) {
+	setup(t)
+	if err := load(t).Set(Entry{Fingerprint: "x"}, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(file(), 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.ReadFile(file()); err == nil {
+		t.Skip("file still readable (running as root)")
+	}
+	if err := (Store{"b": {Fingerprint: "y"}}).Set(Entry{Fingerprint: "z"}, "c"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(file() + ".bak"); err == nil {
+		t.Fatal("a read error moved snoozes.json aside as if it were corrupt")
+	}
+}

@@ -117,7 +117,8 @@ func (s Store) save() error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	if _, err := Load(); err != nil {
+	// Only a file that reads but doesn't decode is corrupt; a read error must not move a healthy file aside.
+	if b, err := os.ReadFile(path()); err == nil && json.Unmarshal(b, &Store{}) != nil {
 		if err := os.Rename(path(), path()+".bak"); err != nil {
 			return err
 		}

@@ -21,6 +21,9 @@ var (
 
 var base [8]lipgloss.AdaptiveColor
 
+// detectedDark is the terminal background lipgloss detected before the first forced mode; nil = never forced.
+var detectedDark *bool
+
 func init() {
 	base = [8]lipgloss.AdaptiveColor{cAccent, cOK, cWarn, cBad, cInfo, cText, cDim, cSelBg}
 	buildStyles()

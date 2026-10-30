@@ -86,8 +86,8 @@ func TestHelpFieldsSection(t *testing.T) {
 		{"common", ".id .title .url .author .draft .note"},
 		{"gitlab", ".approved .approved_by .approved_by_me .assignees .branch .ci .conflicts .diverged .iid .kind"},
 		{"github", ".me .number .open_thread_by_me"},
-		{"github-issues", ".assignees .blocked .blocked_by .kind .labels .me .number .priority .status"},
-		{"linear", ".assignees .blocked .blocked_by .key .kind .labels .me .priority .status"},
+		{"github-issues", ".assignees .blocked .blocked_by .blocking .closed_links"},
+		{"linear", ".assignees .blocked .blocked_by .blocking .closed_links"},
 		{"p (command)", ".bar .baz .foo"},
 		{"later (command)", "fetch pending"},
 		{"actions only", ".settings .session .action .vars"},
@@ -137,5 +137,47 @@ func TestHelpFieldsWrap(t *testing.T) {
 	joined := strings.Join(strings.Fields(strings.Join(sec, " ")), " ")
 	if !strings.Contains(joined, ".target .ticket") || strings.Contains(joined, "…") {
 		t.Errorf("wrapped keys are lost or truncated:\n%s", strings.Join(sec, "\n"))
+	}
+}
+
+func TestPreviewShowsRelations(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields map[string]any
+		want   []string
+		absent []string
+	}{
+		{"open and closed", map[string]any{
+			"number": 7, "labels": []string{"bug"}, "assignees": []string{"me"},
+			"blocked_by": []string{"#7", "#8"}, "blocking": []string{}, "related": []string{"#1"},
+			"closed_links": []string{"blocked_by:#9", "related:#12", "related:#13"},
+		}, []string{"blocked_by  #7, #8, #9 ✓", "related     #1, #12 ✓, #13 ✓"}, []string{"blocking", "closed_links"}},
+		{"only closed, decoded from JSON", map[string]any{
+			"number": 7, "labels": []string{"bug"},
+			"blocked_by": []any{}, "blocking": []any{}, "related": []any{},
+			"closed_links": []any{"blocking:#3"},
+		}, []string{"blocking    #3 ✓"}, []string{"blocked_by", "related", "closed_links"}},
+		{"none", map[string]any{
+			"number": 7, "labels": []string{"bug"},
+			"blocked_by": []string{}, "blocking": []string{}, "related": []string{}, "closed_links": []string{},
+		}, nil, []string{"blocked_by", "blocking", "related", "closed_links"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newNotesModel(t)
+			m.data["p"] = []item.Item{{ID: "a", Fields: tt.fields}}
+			m.rebuild()
+			got := ansi.Strip(m.preview())
+			for _, w := range tt.want {
+				if !strings.Contains(got, w) {
+					t.Errorf("preview lacks %q:\n%s", w, got)
+				}
+			}
+			for _, a := range tt.absent {
+				if strings.Contains(got, a) {
+					t.Errorf("preview has %q:\n%s", a, got)
+				}
+			}
+		})
 	}
 }

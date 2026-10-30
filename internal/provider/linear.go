@@ -26,7 +26,7 @@ type Linear struct {
 	Client   *http.Client // nil = http.DefaultClient
 }
 
-// ponytail: the 100 most recently updated open issues (and 50 inverse relations each); paginate if a team needs more.
+// ponytail: the 100 most recently updated open issues (and 50 relations and 50 inverse relations each); paginate if a team needs more.
 const linearQuery = `query($team:String!){
   viewer{displayName}
   issues(filter:{team:{key:{eq:$team}},state:{type:{nin:["completed","canceled"]}}},first:100,orderBy:updatedAt){ nodes{
@@ -35,6 +35,7 @@ const linearQuery = `query($team:String!){
     assignee{displayName}
     state{name}
     labels(first:50){nodes{name}}
+    relations(first:50){nodes{type relatedIssue{identifier state{type}}}}
     inverseRelations(first:50){nodes{type issue{identifier state{type}}}}
   }}
 }`
@@ -50,14 +51,22 @@ type linearIssue struct {
 	Assignee   *linearUser
 	State      struct{ Name string }
 	Labels     nodes[struct{ Name string }]
+	// Relations are the ones this issue holds to others; type "blocks" means it blocks that issue.
+	Relations nodes[struct {
+		Type         string
+		RelatedIssue linearRef
+	}]
 	// InverseRelations are the relations other issues hold to this one; type "blocks" means that issue blocks it.
 	InverseRelations nodes[struct {
 		Type  string
-		Issue struct {
-			Identifier string
-			State      struct{ Type string }
-		}
+		Issue linearRef
 	}]
+}
+
+// linearRef is a linked issue.
+type linearRef struct {
+	Identifier string
+	State      struct{ Type string }
 }
 
 type linearResp struct {
@@ -144,12 +153,27 @@ func linearToItem(is linearIssue, me string) item.Item {
 	for _, lb := range is.Labels.Nodes {
 		labels = append(labels, lb.Name)
 	}
-	blockedBy := []string{}
+	links := newRelLinks()
+	add := func(rel string, r linearRef) {
+		links.add(rel, r.Identifier, r.State.Type != "completed" && r.State.Type != "canceled")
+	}
 	for _, rel := range is.InverseRelations.Nodes {
-		if st := rel.Issue.State.Type; rel.Type == "blocks" && st != "completed" && st != "canceled" {
-			blockedBy = append(blockedBy, rel.Issue.Identifier)
+		switch rel.Type {
+		case "blocks":
+			add("blocked_by", rel.Issue)
+		case "related":
+			add("related", rel.Issue)
 		}
 	}
+	for _, rel := range is.Relations.Nodes {
+		switch rel.Type {
+		case "blocks":
+			add("blocking", rel.RelatedIssue)
+		case "related":
+			add("related", rel.RelatedIssue)
+		}
+	}
+	blockedBy := links.blockedBy
 	status := strings.ToLower(is.State.Name)
 	var badges []item.Badge
 	if len(blockedBy) > 0 {
@@ -168,9 +192,9 @@ func linearToItem(is linearIssue, me string) item.Item {
 		URL:    is.URL,
 		Author: author,
 		Badges: badges,
-		Fields: map[string]any{
+		Fields: links.fields(map[string]any{
 			"kind": "ticket", "key": is.Identifier, "status": status, "assignees": assignees, "labels": labels,
-			"blocked": len(blockedBy) > 0, "blocked_by": blockedBy, "priority": int(is.Priority), "me": me,
-		},
+			"blocked": len(blockedBy) > 0, "priority": int(is.Priority), "me": me,
+		}),
 	}
 }

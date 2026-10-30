@@ -16,7 +16,8 @@ import (
 	"github.com/chriha/lanes/internal/provider"
 )
 
-type editorDone struct{}
+// editorDone ends :edit; project is set for :edit project, whose file the user wrote through lanes.
+type editorDone struct{ project bool }
 
 func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 	name, arg, _ := strings.Cut(line, " ")
@@ -53,7 +54,7 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 			}
 		}
 		cmd := exec.Command("/bin/sh", "-c", editor()+" "+shq(path))
-		return m, tea.ExecProcess(cmd, func(error) tea.Msg { return editorDone{} })
+		return m, tea.ExecProcess(cmd, func(error) tea.Msg { return editorDone{project: arg == "project"} })
 	case "view", "v":
 		for i, v := range m.views {
 			if v.cfg.Name == arg {

@@ -26,7 +26,7 @@ func notify(title, body string) {
 func (m *Model) openItemURL(raw string) {
 	u, err := url.Parse(raw)
 	if err != nil || (!strings.EqualFold(u.Scheme, "http") && !strings.EqualFold(u.Scheme, "https")) || u.Host == "" {
-		m.notice = "not opened: only http(s) URLs can be opened"
+		m.say(lvWarn, "not opened: only http(s) URLs can be opened")
 		return
 	}
 	open := m.open
@@ -34,7 +34,7 @@ func (m *Model) openItemURL(raw string) {
 		open = openURL
 	}
 	if err := open(raw); err != nil {
-		m.notice = "open failed: " + err.Error()
+		m.say(lvErr, "open failed: "+err.Error())
 	}
 }
 

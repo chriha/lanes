@@ -39,7 +39,7 @@ func (m *Model) withNote(it item.Item) item.Item {
 func (m *Model) editNote(id string) tea.Cmd {
 	path, err := m.noteFile(id)
 	if err != nil {
-		m.notice = "note: " + err.Error()
+		m.say(lvErr, "note: "+err.Error())
 		return nil
 	}
 	cmd := exec.Command("/bin/sh", "-c", editor()+" "+shq(path))
@@ -78,12 +78,12 @@ func readNote(id, path string, err error) tea.Msg {
 func (m *Model) setNote(id, text string) {
 	text = strings.TrimSpace(text)
 	if err := m.notes.Set(id, text); err != nil {
-		m.notice = "saving note: " + err.Error()
+		m.say(lvErr, "saving note: "+err.Error())
 		return
 	}
-	m.notice = "note saved on " + id
+	m.say(lvInfo, "note saved on "+id)
 	if text == "" {
-		m.notice = "note removed from " + id
+		m.say(lvInfo, "note removed from "+id)
 	}
 	m.rebuild()
 }

@@ -33,6 +33,7 @@ type sessionsMsg struct {
 }
 type doneMsg struct {
 	notice  string
+	level   level
 	refresh bool
 	keys    []string // items the action ran on; their busy lock ends here (or after the refetch)
 	ok      bool     // every job succeeded
@@ -198,14 +199,14 @@ func identifierKey(data map[string]any) string {
 
 func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 	if m.sess == nil {
-		m.notice = "tmux unavailable"
+		m.say(lvWarn, "tmux unavailable")
 		return nil
 	}
 	all, unmatched, werr := matchWhen(act, m.targets())
 	skippedWhen := whenNotice(len(unmatched), werr)
 	if len(all) == 0 {
 		if skippedWhen != "" {
-			m.notice = name + ": " + skippedWhen
+			m.say(lvWarn, name+": "+skippedWhen)
 		}
 		return nil
 	}
@@ -222,7 +223,7 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 		ts = append(ts, it)
 	}
 	if len(ts) == 0 {
-		m.notice = withNote(strings.Join(busy, ", "), skippedWhen)
+		m.say(lvWarn, withNote(strings.Join(busy, ", "), skippedWhen))
 		return nil
 	}
 	var jobs []job
@@ -260,12 +261,12 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 			data["settings"], data["session"], data["action"], data["vars"] = m.settings, sname, name, vars
 			cmd, err := render(act.Run, data)
 			if err != nil {
-				m.notice = fmt.Sprintf("action %s: %v", name, err)
+				m.say(lvErr, fmt.Sprintf("action %s: %v", name, err))
 				return nil
 			}
 			cwd, err := render(act.Cwd, data)
 			if err != nil {
-				m.notice = fmt.Sprintf("action %s cwd: %v", name, err)
+				m.say(lvErr, fmt.Sprintf("action %s cwd: %v", name, err))
 				return nil
 			}
 			jobs = append(jobs, job{sname, it.ID, session.Key(it.ID), cwd, cmd, restart})
@@ -273,11 +274,11 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 	next:
 	}
 	if len(jobs) == 0 {
-		m.notice = fmt.Sprintf("%s already running", name)
+		note := fmt.Sprintf("%s already running", name)
 		if len(busy) > 0 {
-			m.notice += ", " + strings.Join(busy, ", ")
+			note += ", " + strings.Join(busy, ", ")
 		}
-		m.notice = withNote(m.notice, skippedWhen)
+		m.say(lvWarn, withNote(note, skippedWhen))
 		return nil
 	}
 	start := func() tea.Cmd {
@@ -315,7 +316,7 @@ func (m *Model) lock(action string, jobs []job) {
 		m.busy[j.itemKey] = busyState{action: action}
 		labels[i] = j.label
 	}
-	m.notice = fmt.Sprintf("starting %s on %s…", action, strings.Join(labels, ", "))
+	m.say(lvInfo, fmt.Sprintf("starting %s on %s…", action, strings.Join(labels, ", ")))
 }
 
 func jobKeys(jobs []job) []string {
@@ -367,7 +368,13 @@ func (m *Model) execute(action string, jobs []job, skipped, busy int, skippedWhe
 		if len(errs) > 0 {
 			note += ": " + errs[0]
 		}
-		d := doneMsg{notice: note, keys: keys, ok: len(errs) == 0}
+		d := doneMsg{notice: note, level: lvInfo, keys: keys, ok: len(errs) == 0}
+		if skipped > 0 || busy > 0 || skippedWhen != "" {
+			d.level = lvWarn
+		}
+		if !d.ok {
+			d.level = lvErr
+		}
 		if d.ok {
 			d.jump = attach
 		}
@@ -422,7 +429,14 @@ func (m *Model) executeRun(action string, jobs []job, refresh bool, busy int, sk
 			note += fmt.Sprintf(", %d busy", busy)
 		}
 		note = withNote(note, skippedWhen)
-		return doneMsg{notice: note, refresh: refresh, keys: keys, ok: len(bad) == 0}
+		lv := lvInfo
+		if busy > 0 || skippedWhen != "" {
+			lv = lvWarn
+		}
+		if len(bad) > 0 {
+			lv = lvErr
+		}
+		return doneMsg{notice: note, level: lv, refresh: refresh, keys: keys, ok: len(bad) == 0}
 	}
 }
 
@@ -440,7 +454,7 @@ func (m *Model) killTargets() tea.Cmd {
 		infos = append(infos, m.sessionsOf(it)...)
 	}
 	if len(infos) == 0 {
-		m.notice = "no sessions here"
+		m.say(lvWarn, "no sessions here")
 		return nil
 	}
 	return m.killSessions(infos)
@@ -493,7 +507,7 @@ func (m *Model) interruptSessions(infos []session.Info) tea.Cmd {
 		}
 	}
 	if len(alive) == 0 {
-		m.notice = "no running sessions here"
+		m.say(lvWarn, "no running sessions here")
 		return nil
 	}
 	mgr := m.sess
@@ -515,11 +529,11 @@ func (m *Model) interruptSessions(infos []session.Info) tea.Cmd {
 					history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: "interrupted"})
 				}
 			}
-			note := fmt.Sprintf("interrupted %d session(s)", len(done))
+			note, lv := fmt.Sprintf("interrupted %d session(s)", len(done)), lvInfo
 			if first != nil {
-				note = "✗ interrupt " + first.Error()
+				note, lv = "✗ interrupt "+first.Error(), lvErr
 			}
-			return interruptedMsg{names: done, notice: note}
+			return interruptedMsg{names: done, notice: note, level: lv}
 		}
 	})
 	return nil
@@ -529,6 +543,7 @@ func (m *Model) interruptSessions(infos []session.Info) tea.Cmd {
 type interruptedMsg struct {
 	names  []string
 	notice string
+	level  level
 }
 
 // shell runs the built-in shell action on it alone (marks are ignored and kept) and jumps into it.
@@ -595,7 +610,7 @@ func (m *Model) keyConfirm(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if s := k.String(); c != nil && (s == "y" || s == "enter") {
 		return m, c.do()
 	}
-	m.notice = "cancelled"
+	m.say(lvInfo, "cancelled")
 	return m, nil
 }
 

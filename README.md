@@ -877,6 +877,9 @@ accent = "#A78BFA"          # also: ok, warn, bad, info, text, dim, selection
 `lanes` ships an adaptive light/dark palette. Override any of `accent`, `ok`, `warn`, `bad`, `info`, `text` (body), `dim`
 (secondary text) and `selection` (selected row and tab background) with a hex color under `[theme]`. Changes apply live.
 
+The footer draws errors in the `bad` color and warnings (a request that was not fully carried out, such as
+`tmux unavailable` or a skipped item) in `warn`; other messages stay plain.
+
 `mode` picks the palette: `system` (the default) follows the terminal background as detected at start, `light` and
 `dark` force that palette. Forcing a mode helps when detection is slow or wrong, for example inside tmux or over SSH.
 

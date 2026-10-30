@@ -70,3 +70,25 @@ func TestQuit(t *testing.T) {
 		})
 	}
 }
+
+func TestQuitPromptCount(t *testing.T) {
+	tests := []struct {
+		name  string
+		infos []session.Info
+		want  string
+	}{
+		{"none", nil, "quit lanes? (0 sessions keep running) [y/N]"},
+		{"one", []session.Info{{Name: "a"}}, "quit lanes? (1 session keeps running) [y/N]"},
+		{"dead not counted", []session.Info{{Name: "a"}, {Name: "b", Dead: true}}, "quit lanes? (1 session keeps running) [y/N]"},
+		{"two", []session.Info{{Name: "a"}, {Name: "b"}}, "quit lanes? (2 sessions keep running) [y/N]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := sessModel(t, tt.infos...)
+			m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+			if m.confirm.prompt != tt.want {
+				t.Errorf("prompt = %q, want %q", m.confirm.prompt, tt.want)
+			}
+		})
+	}
+}

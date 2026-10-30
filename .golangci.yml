@@ -1,0 +1,22 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+  settings:
+    errcheck:
+      # Best-effort calls whose failure has no useful handling here: writes to the
+      # terminal/stderr, closing read-only or already-flushed files, temp-file cleanup,
+      # and restoring the working directory in tests.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*os.File).Close
+        - (io.Closer).Close
+        - os.Remove
+        - os.Chdir

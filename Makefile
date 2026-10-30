@@ -18,4 +18,7 @@ test:
 	go vet ./...
 	go test ./...
 
-.PHONY: build install dev test
+lint:
+	golangci-lint run
+
+.PHONY: build install dev test lint

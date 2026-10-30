@@ -182,7 +182,7 @@ func TestRefreshKeepsCursorAndMarks(t *testing.T) {
 					visible = append(visible, it.ID)
 				}
 			}
-			if !reflect.DeepEqual(visible, tt.wantMarked) && !(len(visible) == 0 && len(tt.wantMarked) == 0) {
+			if !reflect.DeepEqual(visible, tt.wantMarked) && (len(visible) != 0 || len(tt.wantMarked) != 0) {
 				t.Errorf("visible marked = %v, want %v", visible, tt.wantMarked)
 			}
 		})

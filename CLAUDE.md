@@ -8,6 +8,7 @@ JSON) and runs actions on them in tmux sessions. Read `README.md` for usage and 
 ```sh
 make build    # ./bin/lanes
 make test     # go vet ./... && go test ./...  (what CI runs)
+make lint     # golangci-lint run (needs golangci-lint installed; CI runs it too)
 gofmt -l .    # must print nothing
 ```
 

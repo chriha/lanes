@@ -23,6 +23,9 @@ var (
 
 var base [8]lipgloss.AdaptiveColor
 
+// cLabels maps a lowercased label name to its resolved color; a label without an entry renders in cText.
+var cLabels map[string]lipgloss.AdaptiveColor
+
 // detectedDark is the terminal background lipgloss detected before the first forced mode; nil = never forced.
 var detectedDark *bool
 

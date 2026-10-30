@@ -82,7 +82,7 @@ func TestProjectTemplateOverlayKeepsGlobal(t *testing.T) {
 				t.Fatalf("load with project config: %v", err)
 			}
 			if !reflect.DeepEqual(got.View, global.View) || !reflect.DeepEqual(got.Action, global.Action) ||
-				!reflect.DeepEqual(got.Keymap, global.Keymap) || got.Settings != global.Settings || got.Theme != global.Theme {
+				!reflect.DeepEqual(got.Keymap, global.Keymap) || got.Settings != global.Settings || !reflect.DeepEqual(got.Theme, global.Theme) {
 				t.Errorf("project template changed more than the forge provider:\ngot  %+v\nwant %+v", got, global)
 			}
 			want := map[string]Provider{"forge": tt.forge}

@@ -36,6 +36,8 @@ type Colors struct {
 	Text      string `toml:"text"`
 	Dim       string `toml:"dim"`
 	Selection string `toml:"selection"`
+
+	Labels map[string]string `toml:"labels"` // label name (case-insensitive) -> hex color, for the preview's labels line
 }
 
 // Theme holds the [theme] table: the flat color keys apply to both modes, [theme.light] / [theme.dark] to one.
@@ -48,10 +50,13 @@ type Theme struct {
 
 var hexColor = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
-// validate rejects any non-empty color that is not #RGB or #RRGGBB; it walks the fields, so new keys are covered.
+// validate rejects any non-empty color that is not #RGB or #RRGGBB; it walks the string fields, so new keys are covered.
 func (c Colors) validate(prefix string) error {
 	v := reflect.ValueOf(c)
 	for i := 0; i < v.NumField(); i++ {
+		if v.Field(i).Kind() != reflect.String {
+			continue
+		}
 		if s := v.Field(i).String(); s != "" && !hexColor.MatchString(s) {
 			return fmt.Errorf("%s%s %q: want #RGB or #RRGGBB", prefix, v.Type().Field(i).Tag.Get("toml"), s)
 		}

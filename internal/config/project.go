@@ -109,6 +109,7 @@ const projectTail = `
 # ---------------------------------------------------------------------------------------------------------
 # [settings]
 # poll_interval = "30s"       # how often lists refresh; Go duration, minimum 5s (default 30s)
+# poll_interval_blurred = "5m" # how often lists refresh while the terminal is unfocused; never below poll_interval (default 5m)
 # preview = false             # open the preview pane at startup (default false; toggle with p)
 # no_notify = false           # disable desktop notifications (default false)
 # claude_dir = "~/.claude"    # show this Claude profile's usage in the footer (default: none)

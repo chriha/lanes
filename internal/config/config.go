@@ -20,7 +20,7 @@ import (
 type Settings struct {
 	PollInterval string `toml:"poll_interval"`
 	PollBlurred  string `toml:"poll_interval_blurred"` // poll interval while the terminal is unfocused
-	Preview      bool   `toml:"preview"` // show the detail pane at startup (toggle with p)
+	Preview      bool   `toml:"preview"`               // show the detail pane at startup (toggle with p)
 	NoNotify     bool   `toml:"no_notify"`
 	ClaudeDir    string `toml:"claude_dir"` // Claude config dir whose usage the footer shows, e.g. ~/.claude
 }
@@ -180,9 +180,13 @@ func (c Config) Poll() time.Duration {
 	return d
 }
 
-// PollBlurred is the poll interval while the terminal is unfocused.
+// PollBlurred is the poll interval while the terminal is unfocused: 5m when unset or invalid, never below Poll().
 func (c Config) PollBlurred() time.Duration {
-	return 0
+	d, err := time.ParseDuration(c.Settings.PollBlurred)
+	if err != nil {
+		d = 5 * time.Minute
+	}
+	return max(d, c.Poll())
 }
 
 // Load reads the global config (writing a default on first run) and overlays the project config:
@@ -262,6 +266,7 @@ const Default = `# lanes — global config. A ".lanes.toml" in a project overlay
 
 [settings]
 poll_interval = "30s"
+# poll_interval_blurred = "5m"  # how often lists refresh while the terminal is unfocused (never below poll_interval)
 # preview = true      # show the detail pane at startup (toggle with p)
 # no_notify = true    # disable desktop notifications
 # claude_dir = "~/.claude"  # show this Claude profile's usage in the footer (written by a Claude Code mod)

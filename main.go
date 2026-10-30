@@ -11,6 +11,7 @@ import (
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/provider"
 	"github.com/chriha/lanes/internal/session"
+	"github.com/chriha/lanes/internal/trust"
 	"github.com/chriha/lanes/internal/ui"
 )
 
@@ -22,35 +23,33 @@ func main() {
 		fmt.Fprintln(os.Stderr, msg)
 		os.Exit(2)
 	}
-	if len(os.Args) == 3 && os.Args[1] == "hook" {
-		session.RunHook(os.Args[2])
-		return
-	}
-	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "version") {
-		fmt.Println(app.Name, version)
-		return
-	}
 	wd, _ := os.Getwd()
-	app.Init(wd)
-	if len(os.Args) == 2 && os.Args[1] == "doctor" {
-		os.Exit(runDoctor(os.Stdout, realDoctorEnv()))
-	}
-	if len(os.Args) == 2 && os.Args[1] == "init" {
-		os.Exit(runInit(os.Stdin, stdinIsTerminal(), os.Stdout, os.Stderr, wd, provider.OriginForge))
-	}
-	if len(os.Args) == 2 && os.Args[1] == "status" {
-		runStatus()
-		return
-	}
+	os.Exit(run(os.Args[1:], env{
+		wd: wd, isTTY: stdinIsTerminal(), stdout: os.Stdout, stderr: os.Stderr,
+		projectPath: config.ProjectPath,
+		ask:         ui.AskTrust,
+		initApp:     app.Init,
+		hook:        session.RunHook,
+		status:      runStatus,
+		doctor:      func() int { return runDoctor(os.Stdout, realDoctorEnv()) },
+		init: func() int {
+			return runInit(os.Stdin, stdinIsTerminal(), os.Stdout, os.Stderr, wd, provider.OriginForge)
+		},
+		tui: runTUI,
+	}))
+}
+
+func runTUI() int {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)
-		os.Exit(1)
+		return 1
 	}
 	if _, err := tea.NewProgram(ui.New(cfg), tea.WithAltScreen()).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 // env holds what run touches, so tests can see that nothing reads the project before it is trusted.
@@ -69,7 +68,73 @@ type env struct {
 }
 
 // run dispatches args (os.Args[1:], already checked by usageError) and returns the exit code.
-func run(args []string, e env) int { return 0 }
+func run(args []string, e env) int {
+	cmd := ""
+	if len(args) > 0 {
+		cmd = args[0]
+	}
+	if cmd == "--version" || cmd == "version" {
+		fmt.Fprintln(e.stdout, app.Name, version)
+		return 0
+	}
+	// Nothing below may run git, load the config or start a provider before the project is trusted.
+	root := trust.Root(e.wd)
+	hash, err := trust.Hash(e.projectPath())
+	trusted := false
+	if err == nil {
+		trusted, err = trust.IsTrusted(root, hash)
+	}
+	switch cmd {
+	case "hook": // called by Claude inside sessions: never prompts, does nothing untrusted
+		if trusted {
+			e.hook(args[1])
+		}
+		return 0
+	case "status": // tmux status bar: never prompts, prints nothing untrusted
+		if trusted {
+			e.initApp(e.wd)
+			e.status()
+		}
+		return 0
+	}
+	if err != nil {
+		fmt.Fprintf(e.stderr, "%s: %v\n", app.Name, err) // a corrupt trust.json trusts nothing
+	}
+	if !trusted {
+		if !e.isTTY {
+			fmt.Fprintf(e.stderr, "%s is not trusted; run %s in a terminal to trust it\n", root, app.Name)
+			return 1
+		}
+		yes, err := e.ask(root)
+		if err != nil {
+			fmt.Fprintf(e.stderr, "%s: %v\n", app.Name, err)
+			return 1
+		}
+		if !yes {
+			fmt.Fprintf(e.stderr, "%s: not trusted\n", app.Name)
+			return 1
+		}
+		if err := trust.Trust(root, hash); err != nil {
+			fmt.Fprintf(e.stderr, "%s: %v\n", app.Name, err)
+			return 1
+		}
+	}
+	e.initApp(e.wd)
+	switch cmd {
+	case "doctor":
+		return e.doctor()
+	case "init":
+		code := e.init()
+		// the user wrote .lanes.toml through lanes: trust its new content
+		if hash, err := trust.Hash(e.projectPath()); err != nil {
+			fmt.Fprintf(e.stderr, "%s: %v\n", app.Name, err)
+		} else if err := trust.Trust(root, hash); err != nil {
+			fmt.Fprintf(e.stderr, "%s: %v\n", app.Name, err)
+		}
+		return code
+	}
+	return e.tui()
+}
 
 // runStatus prints the cwd project's sessions that need input, for tmux status bars and shell prompts.
 // Errors (tmux missing, no server, state dir not writable) print nothing: a status bar must not show them.

@@ -919,7 +919,10 @@ two projects never share history, views or sessions. The `$XDG_*` variables are 
 ## How it works
 
 - **Data flow.** On start `lanes` paints the cached list, then fetches each provider in the background and
-  re-fetches every `poll_interval`; a failing provider is retried after `poll_interval`, doubling per consecutive failure up to 5 minutes (`R` / `:refresh` retry at once). New data is diffed into the list by item `id`, so the cursor and your marks
+  re-fetches every `poll_interval`. While the terminal is unfocused it re-fetches only every `poll_interval_blurred`
+  (default 5m, so desktop notifications lag by up to that much), and when it regains focus every provider older than
+  `poll_interval` is fetched at once. This needs a terminal that reports focus; inside tmux add `set -g focus-events on`
+  to `~/.tmux.conf`. Without focus reports lanes polls at `poll_interval` throughout. A failing provider is retried after `poll_interval`, doubling per consecutive failure up to 5 minutes (`R` / `:refresh` retry at once). New data is diffed into the list by item `id`, so the cursor and your marks
   stay put. Every view re-applies its filter on each refresh.
 - **Filters** are compiled once per view and evaluated against each item's fields; a view with a broken filter
   shows its error instead of items.

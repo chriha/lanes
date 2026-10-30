@@ -551,3 +551,108 @@ poll_interval_blurred = "3m"
 		t.Errorf("PollBlurred() = %v, want 3m from the project config", got)
 	}
 }
+
+func TestThemeLabelsValidation(t *testing.T) {
+	const base = `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+`
+	tests := []struct {
+		name    string
+		labels  string // body of the labels table
+		wantErr string // substring naming the key; empty = valid
+	}{
+		{"valid short and long hex", "bug = \"#F87171\"\nneeds-info = \"#abc\"\n", ""},
+		{"quoted key with a space", "\"to be deployed\" = \"#4ADE80\"\n", ""},
+		{"color name", "bug = \"red\"\n", `labels.bug "red": want #RGB or #RRGGBB`},
+		{"no hash", "bug = \"F87171\"\n", `labels.bug "F87171": want #RGB or #RRGGBB`},
+		{"empty value", "bug = \"\"\n", `labels.bug "": want #RGB or #RRGGBB`},
+		{"keys differing only in case", "bug = \"#F87171\"\nBug = \"#4ADE80\"\n", "labels.bug: same label as"},
+	}
+	for _, scope := range []string{"global", "project"} {
+		for _, table := range []string{"theme", "theme.light", "theme.dark"} {
+			for _, tt := range tests {
+				t.Run(scope+"/"+table+"/"+tt.name, func(t *testing.T) {
+					tmp := t.TempDir()
+					t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+					t.Setenv("HOME", tmp)
+					old, _ := os.Getwd()
+					defer os.Chdir(old)
+					if err := os.Chdir(tmp); err != nil {
+						t.Fatal(err)
+					}
+					theme := "\n[" + table + ".labels]\n" + tt.labels
+					if scope == "global" {
+						write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), base+theme)
+					} else {
+						write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), base)
+						write(t, filepath.Join(tmp, ".lanes.toml"), theme)
+					}
+					_, err := Load()
+					if tt.wantErr == "" {
+						if err != nil {
+							t.Fatalf("err = %v, want none", err)
+						}
+						return
+					}
+					if err == nil {
+						t.Fatal("err = nil, want a config error")
+					}
+					if want := table + "." + tt.wantErr; !strings.Contains(err.Error(), want) {
+						t.Errorf("error %q does not contain %q", err, want)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestThemeLabelsProjectMerge(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+	t.Setenv("HOME", tmp)
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[theme.labels]
+bug = "#111111"
+docs = "#222222"
+[theme.dark.labels]
+bug = "#333333"
+`)
+	write(t, filepath.Join(tmp, ".lanes.toml"), `
+[theme.labels]
+bug = "#aaaaaa"
+needs-info = "#bbbbbb"
+[theme.light.labels]
+docs = "#cccccc"
+`)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		table     string
+		got, want map[string]string
+	}{
+		{"theme.labels", c.Theme.Labels, map[string]string{"bug": "#aaaaaa", "docs": "#222222", "needs-info": "#bbbbbb"}},
+		{"theme.light.labels", c.Theme.Light.Labels, map[string]string{"docs": "#cccccc"}},
+		{"theme.dark.labels", c.Theme.Dark.Labels, map[string]string{"bug": "#333333"}},
+	}
+	for _, tt := range tests {
+		if !reflect.DeepEqual(tt.got, tt.want) {
+			t.Errorf("[%s] = %v, want %v (merged per key)", tt.table, tt.got, tt.want)
+		}
+	}
+}

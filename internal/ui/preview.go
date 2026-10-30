@@ -30,6 +30,25 @@ func fmtVal(v any) string {
 	return fmt.Sprint(v)
 }
 
+// labelsLine renders each label in its theme color, joined by ", " in the text color; it is empty when v is not a
+// list or has no labels.
+func labelsLine(v any) string {
+	var labels []string
+	switch x := v.(type) {
+	case []string:
+		labels = x
+	case []any: // decoded from JSON (cache, command provider)
+		for _, e := range x {
+			labels = append(labels, fmt.Sprint(e))
+		}
+	}
+	parts := make([]string, len(labels))
+	for i, l := range labels {
+		parts[i] = labelStyle(l).Render(l)
+	}
+	return strings.Join(parts, sText.Render(", "))
+}
+
 var relationKeys = map[string]bool{"blocked_by": true, "blocking": true, "related": true}
 
 // relationLine renders a relation's open ids, then its closed ones (from closed_links, "<relation>:<id>") dimmed
@@ -99,6 +118,12 @@ func (m *Model) preview() string {
 			}
 			if relationKeys[k] {
 				continue // no open or closed ids
+			}
+			if k == "labels" {
+				if l := labelsLine(cur.Fields[k]); l != "" {
+					lines = append(lines, " "+sDim.Render(fmt.Sprintf("%-12s", k))+l)
+					continue
+				}
 			}
 			if v := fmtVal(cur.Fields[k]); v != "" && v != "[]" && v != "0" {
 				lines = append(lines, " "+sDim.Render(fmt.Sprintf("%-12s", k))+sText.Render(v))

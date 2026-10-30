@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -60,6 +61,27 @@ func (c Colors) validate(prefix string) error {
 		if s := v.Field(i).String(); s != "" && !hexColor.MatchString(s) {
 			return fmt.Errorf("%s%s %q: want #RGB or #RRGGBB", prefix, v.Type().Field(i).Tag.Get("toml"), s)
 		}
+	}
+	return validateLabels(c.Labels, prefix+"labels.")
+}
+
+// validateLabels rejects a label color that is not #RGB or #RRGGBB, and two names that differ only in case.
+func validateLabels(labels map[string]string, prefix string) error {
+	names := make([]string, 0, len(labels))
+	for name := range labels {
+		names = append(names, name)
+	}
+	sort.Strings(names) // deterministic errors
+	seen := map[string]string{}
+	for _, name := range names {
+		if s := labels[name]; !hexColor.MatchString(s) {
+			return fmt.Errorf("%s%s %q: want #RGB or #RRGGBB", prefix, name, s)
+		}
+		lower := strings.ToLower(name)
+		if prev, ok := seen[lower]; ok {
+			return fmt.Errorf("%s%s: same label as %s%s (names match case-insensitively)", prefix, name, prefix, prev)
+		}
+		seen[lower] = name
 	}
 	return nil
 }
@@ -328,4 +350,7 @@ run = 'glab mr update {{.iid}} --ready'
 # accent = "#6C3FD1"
 # [theme.dark]         # same color keys, dark mode only
 # accent = "#A78BFA"
+# [theme.labels]       # preview label colors by name, case-insensitive; also [theme.light.labels] / [theme.dark.labels]
+# bug = "#F87171"
+# needs-info = "#FBBF24"
 `

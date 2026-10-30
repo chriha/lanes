@@ -20,7 +20,7 @@ func (m *Model) fieldsHelp() string {
 		keys  []string
 		dim   string // shown instead of keys
 	}
-	rows := []row{{label: "common", keys: []string{"id", "title", "url", "author", "draft", "note"}}}
+	rows := []row{{label: "common", keys: []string{"id", "title", "url", "author", "draft", "note", "snoozed"}}}
 	for _, typ := range builtinTypes {
 		rows = append(rows, row{label: typ, keys: provider.Fields(typ)})
 	}

@@ -94,6 +94,7 @@ look at a list, press a key, and the work starts in the background in a session 
 - **In-app filter editing** — change a view's filter, or create/delete views, without leaving the UI.
 - **Item history** — per-item log of which actions ran, when and how they ended.
 - **Notes** — your own note per item (`N`), shown in every view, usable in filters and templates.
+- **Snooze** — put an item aside (`z`) until a time or until it changes; it leaves every view until then.
 - **Preview pane** — details of the selected item, its sessions and last run.
 - **Notifications** — desktop notification when a session needs you or ends.
 - **Global + project config** — one config for you, optional `.lanes.toml` per project that overrides only what
@@ -209,7 +210,8 @@ Useful building blocks:
 | `open_threads > 0`             | numbers                                    |
 
 **Fields** are the item's own (`id`, `title`, `url`, `author`, `draft`), your [note](#preview-pane-and-item-history)
-(`note`, empty when there is none, e.g. `note != ""`) plus whatever the provider adds. The `fields` section at the
+(`note`, empty when there is none, e.g. `note != ""`), whether you [snoozed](#snoozing) it (`snoozed`) plus whatever
+the provider adds. The `fields` section at the
 bottom of the help (`?`) lists every provider type's keys, and for each configured `command` provider the keys of its
 last fetched items. For GitLab (GitHub has the same fields, with `number` instead of `iid`):
 
@@ -311,6 +313,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
 | `i`                 | show the item's history                            |
 | `N`                 | edit the item's note in `$VISUAL` / `$EDITOR` (save it empty to delete it) |
+| `z`                 | [snooze](#snoozing) the item (all marked items, if any are marked); on a snoozed item: unsnooze it |
 | `n`                 | jump into the next session that is asking or waiting (any view) |
 | `S`                 | sessions screen: every session, also of items no longer listed |
 | `p`                 | toggle the preview pane                            |
@@ -344,6 +347,8 @@ narrows the view; it does not change its filter.
 | `:delview <name>`         | delete a view created with `:newview`                                 |
 | `:note <text>`            | set the selected item's note to one line of text                      |
 | `:note`                   | delete the selected item's note                                       |
+| `:snooze [when]`          | snooze the selected / marked items until `when` (empty: until they change) |
+| `:snoozed`                | show / hide snoozed items                                             |
 | `:run <action>`           | run an action by name, even if it has no key                          |
 | `:sessions`               | open the sessions screen (same as `S`)                                |
 | `:prune`                  | kill every finished session; running ones are never touched           |
@@ -395,6 +400,18 @@ action templates see it as `note` (`note != ""`, `{{.note}}`); a provider field 
 (the preview then labels yours `my note`).
 Notes are stored per project and kept when the item leaves the list. A corrupt notes file is reported in the
 footer and left alone until you save a note, which moves it to `notes.json.bak`.
+
+### Snoozing
+
+`z` puts the selected item (or all marked items) aside: it opens a prompt (`:snooze `) that takes a duration
+(`30m`, `2h`, `3d`), a weekday (`mon`, `friday`: its next occurrence, at midnight) or a date (`2026-11-03`).
+Empty input snoozes **until the item changes**: its title, draft state, badges or provider fields differ on a later
+fetch (your note does not count). Invalid input or a time in the past shows an error and snoozes nothing.
+
+A snoozed item drops out of every view and its tab count; the footer shows how many items of the current view are
+snoozed. `:snoozed` shows them again, dimmed and marked `z`, and `z` on one of them unsnoozes it. Filters and
+action templates see `snoozed` (`true` / `false`), which is useful with `:snoozed` on. Snoozes are stored per
+project (`snoozes.json`, a corrupt file moves to `snoozes.json.bak` like notes) and removed once they wake.
 
 ## Actions
 
@@ -484,6 +501,7 @@ run unlocks the item right away.
 | `{{.id}}` `{{.title}}` `{{.url}}` `{{.author}}` | the item's own fields                           |
 | `{{.iid}}` `{{.branch}}` `{{.ticket}}` `{{.me}}` … | provider fields (see [Filters](#filters))   |
 | `{{.note}}`                     | your note on the item (empty when there is none)                |
+| `{{.snoozed}}`                  | whether the item is [snoozed](#snoozing)                        |
 | `{{.vars.name}}`                | the action's `vars`                                             |
 | `{{.settings}}`                 | path to a Claude settings file that reports session status      |
 | `{{.session}}` `{{.action}}`    | the session / action name                                       |
@@ -854,6 +872,7 @@ Colors must be `#RGB` or `#RRGGBB` (case-insensitive); an empty value keeps the 
 | In-app views and filter edits          | `~/.local/state/lanes/<project>/views.json`             |
 | Item history                           | `~/.local/state/lanes/<project>/history.jsonl`          |
 | Item notes                             | `~/.local/state/lanes/<project>/notes.json`             |
+| Snoozed items                          | `~/.local/state/lanes/<project>/snoozes.json`           |
 | Session status files, tmux config      | `~/.local/state/lanes/<project>/`                       |
 | Cached lists                           | `~/.cache/lanes/<project>/`                             |
 

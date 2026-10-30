@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"cmp"
+
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/chriha/lanes/internal/config"
@@ -21,6 +23,9 @@ var (
 
 var base [8]lipgloss.AdaptiveColor
 
+// detectedDark is the terminal background lipgloss detected before the first forced mode; nil = never forced.
+var detectedDark *bool
+
 func init() {
 	base = [8]lipgloss.AdaptiveColor{cAccent, cOK, cWarn, cBad, cInfo, cText, cDim, cSelBg}
 	buildStyles()
@@ -40,23 +45,40 @@ func buildStyles() {
 	sWarn = lipgloss.NewStyle().Foreground(cWarn).Bold(true)
 }
 
-// applyTheme overrides palette entries from config; empty values keep the default.
+// applyTheme resolves the palette from config: per color and side, the [theme.light] / [theme.dark] value wins
+// over the flat [theme] value, which wins over the built-in default. A forced mode pins the background.
 func applyTheme(t config.Theme) {
-	cAccent, cOK, cWarn, cBad, cInfo, cText, cDim, cSelBg = base[0], base[1], base[2], base[3], base[4], base[5], base[6], base[7]
-	set := func(c *lipgloss.AdaptiveColor, hex string) {
-		if hex != "" {
-			*c = lipgloss.AdaptiveColor{Light: hex, Dark: hex}
+	flat, light, dark := hexes(t.Colors), hexes(t.Light), hexes(t.Dark)
+	pal := base
+	for i := range pal {
+		pal[i].Light = cmp.Or(light[i], flat[i], pal[i].Light)
+		pal[i].Dark = cmp.Or(dark[i], flat[i], pal[i].Dark)
+	}
+	cAccent, cOK, cWarn, cBad, cInfo, cText, cDim, cSelBg = pal[0], pal[1], pal[2], pal[3], pal[4], pal[5], pal[6], pal[7]
+	applyMode(t.Mode)
+	buildStyles()
+}
+
+// hexes lists the colors in base's order.
+func hexes(c config.Colors) [8]string {
+	return [8]string{c.Accent, c.OK, c.Warn, c.Bad, c.Info, c.Text, c.Dim, c.Selection}
+}
+
+// applyMode forces light/dark via lipgloss; system restores the background lipgloss detected before the first
+// forced mode, since lipgloss never re-detects once a value is set.
+func applyMode(mode string) {
+	switch mode {
+	case "light", "dark":
+		if detectedDark == nil {
+			d := lipgloss.HasDarkBackground()
+			detectedDark = &d
+		}
+		lipgloss.SetHasDarkBackground(mode == "dark")
+	default:
+		if detectedDark != nil {
+			lipgloss.SetHasDarkBackground(*detectedDark)
 		}
 	}
-	set(&cAccent, t.Accent)
-	set(&cOK, t.OK)
-	set(&cWarn, t.Warn)
-	set(&cBad, t.Bad)
-	set(&cInfo, t.Info)
-	set(&cText, t.Text)
-	set(&cDim, t.Dim)
-	set(&cSelBg, t.Selection)
-	buildStyles()
 }
 
 func badgeStyle(kind string) lipgloss.Style {

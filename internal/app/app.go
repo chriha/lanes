@@ -38,7 +38,10 @@ func Socket() string {
 
 func ConfigDir() string { return xdg("XDG_CONFIG_HOME", ".config") }
 func CacheDir() string  { return filepath.Join(xdg("XDG_CACHE_HOME", ".cache"), scope) }
-func StateDir() string  { return filepath.Join(xdg("XDG_STATE_HOME", ".local/state"), scope) }
+func StateDir() string  { return filepath.Join(StateRoot(), scope) }
+
+// StateRoot is the state dir shared by all projects.
+func StateRoot() string { return xdg("XDG_STATE_HOME", ".local/state") }
 
 func xdg(env, fallback string) string {
 	base := os.Getenv(env)

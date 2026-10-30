@@ -59,7 +59,18 @@ func (c Colors) validate(prefix string) error {
 }
 
 func (t Theme) validate() error {
-	return t.Colors.validate("theme.")
+	switch t.Mode {
+	case "", "system", "light", "dark":
+	default:
+		return fmt.Errorf("theme.mode %q: want system, light or dark", t.Mode)
+	}
+	if err := t.Colors.validate("theme."); err != nil {
+		return err
+	}
+	if err := t.Light.validate("theme.light."); err != nil {
+		return err
+	}
+	return t.Dark.validate("theme.dark.")
 }
 
 type Provider struct {

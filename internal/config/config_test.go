@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -46,6 +47,8 @@ run = "echo x"
 [theme]
 accent = "#111111"
 ok = "#222222"
+text = "#444444"
+dim = "#555555"
 `)
 	write(t, filepath.Join(tmp, "proj", ProjectFile), `
 [settings]
@@ -64,6 +67,8 @@ s = "y"
 run = "echo y"
 [theme]
 ok = "#333333"
+dim = "#666666"
+selection = "#777777"
 `)
 	if err := os.MkdirAll(proj, 0o755); err != nil {
 		t.Fatal(err)
@@ -90,7 +95,8 @@ ok = "#333333"
 	if len(c.Action) != 2 {
 		t.Errorf("actions should merge by name: %+v", c.Action)
 	}
-	if c.Theme.Accent != "#111111" || c.Theme.OK != "#333333" {
+	if c.Theme.Accent != "#111111" || c.Theme.OK != "#333333" ||
+		c.Theme.Text != "#444444" || c.Theme.Dim != "#666666" || c.Theme.Selection != "#777777" {
 		t.Errorf("theme should merge per field: %+v", c.Theme)
 	}
 }
@@ -345,5 +351,61 @@ provider = "gl"
 				t.Errorf("groups = %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestThemeValidation(t *testing.T) {
+	const base = `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+`
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"short hex", "#abc", false},
+		{"long hex", "#A78BFA", false},
+		{"empty", "", false},
+		{"no hash", "A78BFA", true},
+		{"not hex digits", "#ZZZ", true},
+		{"wrong length", "#12345", true},
+		{"color name", "red", true},
+		{"ansi number", "212", true},
+	}
+	fields := reflect.TypeOf(Theme{})
+	for _, scope := range []string{"global", "project"} {
+		for i := 0; i < fields.NumField(); i++ {
+			key := fields.Field(i).Tag.Get("toml")
+			for _, tt := range tests {
+				t.Run(scope+"/"+key+"/"+tt.name, func(t *testing.T) {
+					tmp := t.TempDir()
+					t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+					t.Setenv("HOME", tmp)
+					old, _ := os.Getwd()
+					defer os.Chdir(old)
+					if err := os.Chdir(tmp); err != nil {
+						t.Fatal(err)
+					}
+					theme := "\n[theme]\n" + key + " = " + strconv.Quote(tt.value) + "\n"
+					if scope == "global" {
+						write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), base+theme)
+					} else {
+						write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), base)
+						write(t, filepath.Join(tmp, ".lanes.toml"), theme)
+					}
+					_, err := Load()
+					if (err != nil) != tt.wantErr {
+						t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+					}
+					if err != nil && !strings.Contains(err.Error(), "theme."+key+" "+strconv.Quote(tt.value)) {
+						t.Errorf("error %q does not name the key and value", err)
+					}
+				})
+			}
+		}
 	}
 }

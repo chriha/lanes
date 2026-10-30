@@ -160,4 +160,7 @@ const projectTail = `
 # warn = "#FBBF24"
 # bad = "#F87171"
 # info = "#60A5FA"
+# text = "#E6E8EE"
+# dim = "#6B7280"
+# selection = "#3A3560"
 `

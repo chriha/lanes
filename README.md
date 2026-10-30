@@ -281,6 +281,7 @@ An unknown field name is not an error (fields come from the provider); an empty 
 | `esc`               | clear marks and the search                         |
 | `enter`             | jump into the item's newest session (opens the URL if it has none) |
 | `o`                 | open the item's URL in the browser                 |
+| `y`                 | copy the item's ID to the clipboard (all marked IDs, space-separated, if any are marked) |
 | `x`                 | close the item's sessions (asks if any is still running) |
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
 | `i`                 | show the item's history                            |
@@ -806,13 +807,17 @@ refresh = false
 when    = '<expression>'    # only run on items it matches; empty = every item
 
 [theme]
-accent = "#A78BFA"          # also: ok, warn, bad, info
+accent = "#A78BFA"          # also: ok, warn, bad, info, text, dim, selection
 ```
 
 ### Theme
 
-`lanes` ships an adaptive light/dark palette. Override any of `accent`, `ok`, `warn`, `bad`, `info` with a hex
-color under `[theme]`. Changes apply live.
+`lanes` ships an adaptive light/dark palette. Override any of `accent`, `ok`, `warn`, `bad`, `info`, `text` (body), `dim`
+(secondary text) and `selection` (selected row and tab background) with a hex color under `[theme]`. Changes apply live.
+
+Colors must be `#RGB` or `#RRGGBB` (case-insensitive); an empty value keeps the default. Anything else (`A78BFA`,
+`red`, `212`) is a config error: `lanes` refuses to start, keeps the previous config on reload, and
+`lanes doctor` reports a failing `config` line.
 
 ### Where things live
 

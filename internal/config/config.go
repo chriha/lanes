@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -29,6 +31,23 @@ type Theme struct {
 	Warn   string `toml:"warn"`
 	Bad    string `toml:"bad"`
 	Info   string `toml:"info"`
+
+	Text      string `toml:"text"`
+	Dim       string `toml:"dim"`
+	Selection string `toml:"selection"`
+}
+
+var hexColor = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
+
+// validate rejects any non-empty color that is not #RGB or #RRGGBB; it walks the fields, so new keys are covered.
+func (t Theme) validate() error {
+	v := reflect.ValueOf(t)
+	for i := 0; i < v.NumField(); i++ {
+		if c := v.Field(i).String(); c != "" && !hexColor.MatchString(c) {
+			return fmt.Errorf("theme.%s %q: want #RGB or #RRGGBB", v.Type().Field(i).Tag.Get("toml"), c)
+		}
+	}
+	return nil
 }
 
 type Provider struct {
@@ -199,6 +218,9 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("%s: action %q: when: %w", p, name, err)
 		}
 	}
+	if err := c.Theme.validate(); err != nil {
+		return nil, fmt.Errorf("%s: %w", p, err)
+	}
 	for key, name := range c.Keymap {
 		if _, ok := c.Action[name]; !ok {
 			return nil, fmt.Errorf("%s: keymap %q -> unknown action %q", p, key, name)
@@ -261,5 +283,5 @@ run = 'glab mr update {{.iid}} --ready'
 # run = 'claude --settings {{.settings}} "/review {{.url}}"'
 
 # [theme]
-# accent = "#A78BFA"
+# accent = "#A78BFA"   # also: ok, warn, bad, info, text, dim, selection
 `

@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/item"
 )
 
@@ -372,5 +373,33 @@ func TestRowAuthorKeepsDimOnSelection(t *testing.T) {
 	}
 	if got := m.row(it, true, 7); !strings.Contains(got, want) {
 		t.Errorf("selected row = %q, want dim author with selection background %q", got, want)
+	}
+}
+
+func TestApplyThemeTextDimSelection(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0) // termenv.TrueColor: render the colors the test compares
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prev)
+		applyTheme(config.Theme{})
+	})
+	render := func() (text, dim, tab string) {
+		return sText.Render("x"), sDim.Render("x"), sTabOn.Render("x")
+	}
+	defText, defDim, defTab := render()
+	applyTheme(config.Theme{Text: "#010203", Dim: "#040506", Selection: "#070809"})
+	text, dim, tab := render()
+	for _, c := range []struct{ name, got, def, want string }{
+		{"text", text, defText, "1;2;3"},
+		{"dim", dim, defDim, "4;5;6"},
+		{"selection", tab, defTab, "7;8;9"},
+	} {
+		if c.got == c.def || !strings.Contains(c.got, c.want) {
+			t.Errorf("%s override not applied: %q (default %q)", c.name, c.got, c.def)
+		}
+	}
+	applyTheme(config.Theme{})
+	if text, dim, tab = render(); text != defText || dim != defDim || tab != defTab {
+		t.Errorf("clearing the overrides should restore the defaults, got %q %q %q", text, dim, tab)
 	}
 }

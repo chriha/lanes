@@ -19,10 +19,10 @@ var (
 	sTitle, sTab, sTabOn, sDim, sText, sID, sMark, sErr, sRule, sKey, sWarn lipgloss.Style
 )
 
-var base [5]lipgloss.AdaptiveColor
+var base [8]lipgloss.AdaptiveColor
 
 func init() {
-	base = [5]lipgloss.AdaptiveColor{cAccent, cOK, cWarn, cBad, cInfo}
+	base = [8]lipgloss.AdaptiveColor{cAccent, cOK, cWarn, cBad, cInfo, cText, cDim, cSelBg}
 	buildStyles()
 }
 
@@ -42,7 +42,7 @@ func buildStyles() {
 
 // applyTheme overrides palette entries from config; empty values keep the default.
 func applyTheme(t config.Theme) {
-	cAccent, cOK, cWarn, cBad, cInfo = base[0], base[1], base[2], base[3], base[4]
+	cAccent, cOK, cWarn, cBad, cInfo, cText, cDim, cSelBg = base[0], base[1], base[2], base[3], base[4], base[5], base[6], base[7]
 	set := func(c *lipgloss.AdaptiveColor, hex string) {
 		if hex != "" {
 			*c = lipgloss.AdaptiveColor{Light: hex, Dark: hex}
@@ -53,6 +53,9 @@ func applyTheme(t config.Theme) {
 	set(&cWarn, t.Warn)
 	set(&cBad, t.Bad)
 	set(&cInfo, t.Info)
+	set(&cText, t.Text)
+	set(&cDim, t.Dim)
+	set(&cSelBg, t.Selection)
 	buildStyles()
 }
 

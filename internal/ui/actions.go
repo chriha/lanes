@@ -246,6 +246,7 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 			}
 			if !s.Dead {
 				if jump {
+					m.marks = map[string]bool{} // like execute(): a jump consumes the marks
 					return m.jumpTo(sname)
 				}
 				skipped++

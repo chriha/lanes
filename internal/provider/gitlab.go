@@ -12,7 +12,11 @@ import (
 )
 
 // GitLab lists open MRs through `glab api graphql`, which reuses glab's auth.
-type GitLab struct{ Project string }
+type GitLab struct {
+	Project string
+	// Run executes glab with args; nil runs the real glab binary.
+	Run func(ctx context.Context, args ...string) ([]byte, error)
+}
 
 const gqlQuery = `query($p:ID!){
   currentUser{username}
@@ -115,7 +119,13 @@ func originPath() (string, error) {
 }
 
 func (g *GitLab) graphql(ctx context.Context, query, proj string, into any) error {
-	out, err := exec.CommandContext(ctx, "glab", "api", "graphql", "-f", "query="+query, "-F", "p="+proj).Output()
+	run := g.Run
+	if run == nil {
+		run = func(ctx context.Context, args ...string) ([]byte, error) {
+			return exec.CommandContext(ctx, "glab", args...).Output()
+		}
+	}
+	out, err := run(ctx, "api", "graphql", "-f", "query="+query, "-F", "p="+proj)
 	if err != nil {
 		return fmt.Errorf("glab: %w", err)
 	}

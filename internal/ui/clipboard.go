@@ -55,11 +55,11 @@ func (m *Model) copyIDs() {
 		cp = systemCopy
 	}
 	if err := cp(strings.Join(ids, " ")); err != nil {
-		m.notice = "copy: " + err.Error()
+		m.say(lvErr, "copy: "+err.Error())
 		return
 	}
-	m.notice = "copied " + ids[0]
+	m.say(lvInfo, "copied "+ids[0])
 	if len(ids) > 1 {
-		m.notice = fmt.Sprintf("copied %d IDs", len(ids))
+		m.say(lvInfo, fmt.Sprintf("copied %d IDs", len(ids)))
 	}
 }

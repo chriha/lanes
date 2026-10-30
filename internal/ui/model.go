@@ -563,7 +563,7 @@ func (m *Model) onTick() tea.Cmd {
 }
 
 // builtinKeys cannot be rebound through [keymap].
-const builtinKeys = "jkgGhlVqRoixtpnNFSyz/:? "
+const builtinKeys = "jkgGhlVqRoixXtpnNFSyz/:? "
 
 // reload re-reads the config (also triggered by saving the file) and refetches, so edits apply live.
 func (m *Model) reload() tea.Cmd {
@@ -696,6 +696,10 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		if m.sess != nil {
 			return m, m.killTargets()
+		}
+	case "X":
+		if m.sess != nil {
+			return m, m.interruptTargets()
 		}
 	case "t":
 		if n > 0 {
@@ -1119,12 +1123,13 @@ func (m *Model) helpLines() []string {
 		{"F", "edit this view's filter expression (saved outside the config)"},
 		{"enter", "jump into the item's newest session"},
 		{"x", "close sessions of marked items / cursor item (confirms if running)"},
+		{"X", "interrupt the running commands of marked items / cursor item; keeps output (again: SIGKILL)"},
 		{"t", "shell for the cursor item: jump into it (started, or restarted if finished)"},
 		{"i", "item history"},
 		{"N", "edit the item's note in $EDITOR (save empty to delete)"},
 		{"z", "snooze item(s): 2h, 3d, mon, 2026-11-03, empty = until it changes; on a snoozed one: unsnooze"},
 		{"n", "jump into the next session that is asking or waiting"},
-		{"S", "sessions: every session, also of items no longer listed (enter jump, x close)"},
+		{"S", "sessions: every session, also of items no longer listed (enter jump, X interrupt, x close)"},
 		{"p", "toggle preview pane"},
 		{"o / u", "open item in browser"},
 		{"y", "copy the ID of the cursor item / marked items to the clipboard"},

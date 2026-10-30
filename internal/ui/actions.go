@@ -76,7 +76,9 @@ func (m *Model) onSessions(msg sessionsMsg) {
 		prev[s.Name] = s
 	}
 	m.sessByItem = map[string][]session.Info{}
+	alive := map[string]bool{}
 	for _, s := range msg.infos {
+		alive[s.Name] = !s.Dead
 		if p, ok := prev[s.Name]; ok && !m.cfg.Settings.NoNotify {
 			m.maybeNotify(p, s)
 		}
@@ -88,6 +90,11 @@ func (m *Model) onSessions(msg sessionsMsg) {
 			history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: ev, Exit: s.Exit})
 		}
 		m.sessByItem[s.ItemKey] = append(m.sessByItem[s.ItemKey], s)
+	}
+	for name := range m.interrupted {
+		if !alive[name] {
+			delete(m.interrupted, name) // died or gone: a restart under the same name starts with SIGTERM again
+		}
 	}
 	sel := m.selectedSession()
 	m.sessions = msg.infos
@@ -462,6 +469,51 @@ func (m *Model) killSessions(infos []session.Info) tea.Cmd {
 		return kill()
 	}
 	m.ask(fmt.Sprintf("Kill %d running session(s)?", alive), kill)
+	return nil
+}
+
+// interruptTargets interrupts the running sessions of the marked items / the cursor item (the targets of x).
+func (m *Model) interruptTargets() tea.Cmd {
+	var infos []session.Info
+	for _, it := range m.targets() {
+		infos = append(infos, m.sessionsOf(it)...)
+	}
+	return m.interruptSessions(infos)
+}
+
+// interruptSessions stops the commands of the running sessions in infos after a y/n prompt and keeps the
+// sessions with their output; dead ones are skipped. A session interrupted before in this run gets SIGKILL.
+func (m *Model) interruptSessions(infos []session.Info) tea.Cmd {
+	var alive []session.Info
+	for _, s := range infos {
+		if !s.Dead {
+			alive = append(alive, s)
+		}
+	}
+	if len(alive) == 0 {
+		m.notice = "no running sessions here"
+		return nil
+	}
+	mgr := m.sess
+	m.ask(fmt.Sprintf("Interrupt %d running session(s)?", len(alive)), func() tea.Cmd {
+		if m.interrupted == nil {
+			m.interrupted = map[string]bool{}
+		}
+		force := map[string]bool{}
+		for _, s := range alive {
+			force[s.Name] = m.interrupted[s.Name]
+			m.interrupted[s.Name] = true
+		}
+		return func() tea.Msg {
+			for _, s := range alive {
+				if err := mgr.Interrupt(s.Name, force[s.Name]); err != nil {
+					return doneMsg{notice: fmt.Sprintf("✗ interrupt %s: %v", s.Name, err)}
+				}
+				history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: "interrupted"})
+			}
+			return doneMsg{notice: fmt.Sprintf("interrupted %d session(s)", len(alive))}
+		}
+	})
 	return nil
 }
 

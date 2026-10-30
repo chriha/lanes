@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,7 +63,13 @@ func NewManager() (*Manager, error) {
 	if err := os.WriteFile(conf, []byte(body), 0o644); err != nil {
 		return nil, err
 	}
-	m := &Manager{conf: conf}
+	m := &Manager{
+		conf: conf,
+		ps:   func() ([]byte, error) { return exec.Command("ps", "-A", "-o", "pid=,ppid=,pgid=").Output() },
+		signal: func(pgid int, sig syscall.Signal) error {
+			return syscall.Kill(-pgid, sig)
+		},
+	}
 	m.run = func(args ...string) ([]byte, error) {
 		out, err := m.tmux(args...).Output()
 		var ee *exec.ExitError
@@ -81,7 +88,7 @@ func (m *Manager) tmux(args ...string) *exec.Cmd {
 func (m *Manager) List() ([]Info, error) {
 	const sep = "\t"
 	out, err := m.run("list-panes", "-a", "-F",
-		strings.Join([]string{"#{session_name}", "#{pane_dead}", "#{pane_dead_status}", "#{session_created}", "#{pane_current_command}"}, sep))
+		strings.Join([]string{"#{session_name}", "#{pane_dead}", deadStatus, "#{session_created}", "#{pane_current_command}"}, sep))
 	if err != nil {
 		return nil, nil // no server running = no sessions
 	}
@@ -96,7 +103,7 @@ func (m *Manager) List() ([]Info, error) {
 			continue
 		}
 		created, _ := strconv.ParseInt(f[3], 10, 64)
-		exit, _ := strconv.Atoi(f[2])
+		exit := exitCode(f[2])
 		in := Info{Name: f[0], Action: action, ItemKey: key, Dead: f[1] == "1", Exit: exit, Created: time.Unix(created, 0)}
 		if !in.Dead && !isShell(f[4]) {
 			in.Claude = readState(in.Name)
@@ -105,6 +112,25 @@ func (m *Manager) List() ([]Info, error) {
 	}
 	sort.Slice(infos, func(i, j int) bool { return infos[i].Created.After(infos[j].Created) })
 	return infos, nil
+}
+
+// deadStatus is a dead pane's exit status, or "sig<signal>" when a signal ended it (tmux leaves the status
+// empty then).
+const deadStatus = "#{?pane_dead_signal,sig#{pane_dead_signal},#{pane_dead_status}}"
+
+// exitCode turns a deadStatus value into an exit code; a signal counts as 128+number, like a shell does.
+func exitCode(s string) int {
+	sig, ok := strings.CutPrefix(s, "sig")
+	if !ok {
+		n, _ := strconv.Atoi(s)
+		return n
+	}
+	if n, err := strconv.Atoi(sig); err == nil {
+		return 128 + n
+	}
+	// ponytail: the signals that end commands in practice; any other still reads as failed (128)
+	nums := map[string]int{"hup": 1, "int": 2, "quit": 3, "abrt": 6, "kill": 9, "segv": 11, "pipe": 13, "term": 15}
+	return 128 + nums[strings.ToLower(sig)]
 }
 
 // isShell reports whether cmd (a pane's current command) is a shell, i.e. nothing but a shell is left in the
@@ -142,9 +168,52 @@ func (m *Manager) Kill(name string) error {
 	return err
 }
 
-// Interrupt stops the command running in the session and keeps the session: SIGTERM, or SIGKILL with force.
+// Interrupt stops the command running in the session and keeps the session (remain-on-exit), so its output
+// and exit status stay: SIGTERM, or SIGKILL with force. The pane runs an interactive shell, which ignores
+// SIGTERM, so the signal goes to the process group of each of its children (with job control each job leads
+// its own group). Without children the pane runs the command itself and its own group is signalled.
+// A dead pane, or a process that is gone by the time it is signalled, is not an error.
 func (m *Manager) Interrupt(name string, force bool) error {
-	return nil
+	out, err := m.run("display-message", "-p", "-t", "="+name+":", "#{pane_dead} #{pane_pid}")
+	if err != nil {
+		return fmt.Errorf("tmux: %s", strings.TrimSpace(string(out)))
+	}
+	dead, pidStr, _ := strings.Cut(strings.TrimSpace(string(out)), " ")
+	if dead == "1" {
+		return nil
+	}
+	pane, err := strconv.Atoi(pidStr)
+	if err != nil || pane <= 1 {
+		return fmt.Errorf("tmux: bad pane pid %q", pidStr)
+	}
+	ps, err := m.ps()
+	if err != nil {
+		return fmt.Errorf("ps: %w", err)
+	}
+	var groups []int
+	for _, line := range strings.Split(string(ps), "\n") {
+		f := strings.Fields(line)
+		if len(f) != 3 || f[1] != strconv.Itoa(pane) {
+			continue
+		}
+		if g, err := strconv.Atoi(f[2]); err == nil && g > 1 && !slices.Contains(groups, g) {
+			groups = append(groups, g)
+		}
+	}
+	if len(groups) == 0 {
+		groups = []int{pane}
+	}
+	sig := syscall.SIGTERM
+	if force {
+		sig = syscall.SIGKILL
+	}
+	var first error
+	for _, g := range groups {
+		if err := m.signal(g, sig); err != nil && !errors.Is(err, syscall.ESRCH) && first == nil {
+			first = fmt.Errorf("signal %d: %w", g, err)
+		}
+	}
+	return first
 }
 
 // Prune kills the dead sessions of a fresh listing (with failedOnly, only those with a non-zero exit) and

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -135,6 +136,11 @@ func TestList(t *testing.T) {
 			"fix~1\t1\t3\t100\tzsh\nreview~2\t0\t0\t200\tclaude\n", nil,
 			[]Info{{Name: "review~2", Action: "review", ItemKey: "2", Created: time.Unix(200, 0)},
 				{Name: "fix~1", Action: "fix", ItemKey: "1", Dead: true, Exit: 3, Created: time.Unix(100, 0)}}},
+		{"killed by a signal fails with 128+n",
+			"fix~1\t1\tsigterm\t1\tzsh\nfix~2\t1\tsig9\t2\tzsh\nfix~3\t1\tsigusr1\t3\tzsh\n", nil,
+			[]Info{{Name: "fix~3", Action: "fix", ItemKey: "3", Dead: true, Exit: 128, Created: time.Unix(3, 0)},
+				{Name: "fix~2", Action: "fix", ItemKey: "2", Dead: true, Exit: 137, Created: time.Unix(2, 0)},
+				{Name: "fix~1", Action: "fix", ItemKey: "1", Dead: true, Exit: 143, Created: time.Unix(1, 0)}}},
 		{"item key keeps later tildes", "fix~a~b\t0\t0\t1\tclaude\n", nil,
 			[]Info{{Name: "fix~a~b", Action: "fix", ItemKey: "a~b", Created: time.Unix(1, 0)}}},
 	}
@@ -529,6 +535,58 @@ func TestUsage(t *testing.T) {
 			}
 			if tt.want != "" && at.Unix() != tt.wantAt {
 				t.Errorf("at = %d, want %d", at.Unix(), tt.wantAt)
+			}
+		})
+	}
+}
+
+func TestInterrupt(t *testing.T) {
+	// pane shell 100; its children 200 (own group) and 300+301 (one group 300); 400 is unrelated
+	const ps = "  1     0     1\n100     1   100\n200   100   200\n300   100   300\n301   100   300\n400     1   400\n"
+	type sent struct {
+		pgid int
+		sig  syscall.Signal
+	}
+	tests := []struct {
+		name     string
+		pane     string // display-message output: "<dead> <pid>"
+		tmuxErr  error
+		ps       string
+		psErr    error
+		sigErr   error
+		force    bool
+		wantSent []sent
+		wantErr  bool
+	}{
+		{"terms each child's group once", "0 100", nil, ps, nil, nil, false, []sent{{200, syscall.SIGTERM}, {300, syscall.SIGTERM}}, false},
+		{"force kills", "0 100", nil, ps, nil, nil, true, []sent{{200, syscall.SIGKILL}, {300, syscall.SIGKILL}}, false},
+		{"no children: the pane runs the command itself", "0 400", nil, ps, nil, nil, false, []sent{{400, syscall.SIGTERM}}, false},
+		{"dead pane is left alone", "1 100", nil, ps, nil, nil, false, nil, false},
+		{"tmux error surfaced", "", errors.New("no such session"), ps, nil, nil, false, nil, true},
+		{"bad pane pid", "0 abc", nil, ps, nil, nil, false, nil, true},
+		{"ps error surfaced", "0 100", nil, "", errors.New("ps failed"), nil, false, nil, true},
+		{"signal error surfaced", "0 100", nil, ps, nil, syscall.EPERM, false, []sent{{200, syscall.SIGTERM}, {300, syscall.SIGTERM}}, true},
+		{"already gone is no error", "0 100", nil, ps, nil, syscall.ESRCH, false, []sent{{200, syscall.SIGTERM}, {300, syscall.SIGTERM}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var calls [][]string
+			m := fakeRun(&calls, func([]string) ([]byte, error) { return []byte(tt.pane + "\n"), tt.tmuxErr })
+			m.ps = func() ([]byte, error) { return []byte(tt.ps), tt.psErr }
+			var got []sent
+			m.signal = func(pgid int, sig syscall.Signal) error {
+				got = append(got, sent{pgid, sig})
+				return tt.sigErr
+			}
+			err := m.Interrupt("fix~1", tt.force)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("err = %v, want error %v", err, tt.wantErr)
+			}
+			if !slices.Equal(got, tt.wantSent) {
+				t.Errorf("signals = %v, want %v", got, tt.wantSent)
+			}
+			if len(calls) != 1 || !slices.Equal(calls[0], []string{"display-message", "-p", "-t", "=fix~1:", "#{pane_dead} #{pane_pid}"}) {
+				t.Errorf("tmux calls = %q", calls)
 			}
 		})
 	}

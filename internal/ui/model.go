@@ -100,6 +100,7 @@ type Model struct {
 	cmdline  textinput.Model
 	pendingG bool
 	notice   string
+	level    level
 	clip     func(string) error // nil: the system clipboard (tests fake it)
 	open     func(string) error // nil: the system opener (tests fake it)
 
@@ -597,6 +598,18 @@ func (m *Model) fetchStale(interval time.Duration) tea.Cmd {
 
 // builtinKeys cannot be rebound through [keymap].
 const builtinKeys = "jkgGhlVqRoixXtpnNFSyz/:? "
+
+type level int
+
+const (
+	lvInfo level = iota
+	lvWarn
+	lvErr
+)
+
+func (l level) style() lipgloss.Style { return sText }
+
+func (m *Model) say(l level, text string) { m.notice = text }
 
 // reload re-reads the config (also triggered by saving the file) and refetches, so edits apply live.
 func (m *Model) reload() tea.Cmd {

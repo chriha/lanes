@@ -62,7 +62,7 @@ func (s Store) Delete(id string) error { return s.Set(id, "") }
 // ponytail: last writer wins across lanes instances; re-read under a file lock if that ever bites.
 func (s Store) save() error {
 	dir := filepath.Dir(path())
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, app.DirMode); err != nil {
 		return err
 	}
 	if _, err := Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {

@@ -13,6 +13,20 @@ import (
 
 const Name = "lanes"
 
+// Modes of everything lanes writes under its config, state and cache dirs: the data is the user's alone.
+const (
+	FileMode os.FileMode = 0o600
+	DirMode  os.FileMode = 0o700
+)
+
+// WriteFile writes b to path as FileMode, also tightening a file an older version left more open.
+func WriteFile(path string, b []byte) error {
+	if err := os.WriteFile(path, b, FileMode); err != nil {
+		return err
+	}
+	return os.Chmod(path, FileMode)
+}
+
 // scope separates the state of different projects (history, sessions, cache, tmux socket).
 var scope string
 

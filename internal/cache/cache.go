@@ -26,8 +26,8 @@ func Load(name string) []item.Item {
 
 func Save(name string, items []item.Item) {
 	b, err := json.Marshal(items)
-	if err != nil || os.MkdirAll(app.CacheDir(), 0o755) != nil {
+	if err != nil || os.MkdirAll(app.CacheDir(), app.DirMode) != nil {
 		return
 	}
-	_ = os.WriteFile(path(name), b, 0o644)
+	_ = app.WriteFile(path(name), b)
 }

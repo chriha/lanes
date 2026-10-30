@@ -184,10 +184,10 @@ func (c Config) Poll() time.Duration {
 func Load() (*Config, error) {
 	p := Path()
 	if _, err := os.Stat(p); os.IsNotExist(err) {
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(p), app.DirMode); err != nil {
 			return nil, err
 		}
-		if err := os.WriteFile(p, []byte(Default), 0o644); err != nil {
+		if err := app.WriteFile(p, []byte(Default)); err != nil {
 			return nil, err
 		}
 	}

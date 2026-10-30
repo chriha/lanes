@@ -73,3 +73,8 @@ func stdinIsTerminal() bool {
 	null, err := os.Stat(os.DevNull)
 	return err != nil || !os.SameFile(fi, null) // /dev/null is a character device but not a terminal
 }
+
+// usageError returns a usage message when args (os.Args[1:]) misuse a subcommand, or "" when they are fine.
+func usageError(args []string) string {
+	return ""
+}

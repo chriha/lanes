@@ -29,18 +29,20 @@ func (m *Model) openItemURL(raw string) {
 		m.notice = "not opened: only http(s) URLs can be opened"
 		return
 	}
-	if m.open != nil {
-		_ = m.open(raw)
-		return
+	open := m.open
+	if open == nil {
+		open = openURL
 	}
-	openURL(raw)
+	if err := open(raw); err != nil {
+		m.notice = "open failed: " + err.Error()
+	}
 }
 
 // openURL opens a URL in the default browser.
-func openURL(u string) {
+func openURL(u string) error {
 	opener := "xdg-open"
 	if runtime.GOOS == "darwin" {
 		opener = "open"
 	}
-	_ = exec.Command(opener, u).Start()
+	return exec.Command(opener, u).Start()
 }

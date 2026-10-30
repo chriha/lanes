@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -42,6 +43,30 @@ func TestOpenKeyOnlyOpensWebURLs(t *testing.T) {
 			}
 			if !strings.Contains(m.notice, "not opened") {
 				t.Errorf("notice %q lacks reason", m.notice)
+			}
+		})
+	}
+}
+
+func TestOpenKeyReportsOpenerFailure(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantNotice string
+	}{
+		{"fails", errors.New(`exec: "xdg-open": not found`), `open failed: exec: "xdg-open": not found`},
+		{"succeeds", nil, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, _ := busyModel(t)
+			m.views[m.cur].items[0].URL = "https://example.com"
+			m.cursor = 0
+			m.notice = ""
+			m.open = func(string) error { return tt.err }
+			press(m, "o")
+			if m.notice != tt.wantNotice {
+				t.Errorf("notice %q, want %q", m.notice, tt.wantNotice)
 			}
 		})
 	}

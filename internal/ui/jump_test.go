@@ -136,3 +136,47 @@ func TestRunningItemsKeepTheirMark(t *testing.T) {
 		t.Errorf("marks = %v, want only the running item 1", m.marks)
 	}
 }
+
+func TestJumpMarks(t *testing.T) {
+	run := &session.Info{Name: "review~1", Action: "review", ItemKey: "1"}
+	tests := []struct {
+		name string
+		do   func(m *Model) tea.Cmd
+		want map[string]bool
+	}{
+		{name: "action jump into a running item clears its mark",
+			do: func(m *Model) tea.Cmd {
+				m.marks["1"] = true
+				return m.runAction("review", config.Action{Run: "echo review", Jump: true})
+			},
+			want: map[string]bool{}},
+		{name: "plain jump keeps the marks",
+			do: func(m *Model) tea.Cmd {
+				m.marks["1"], m.marks["2"] = true, true
+				return m.jump(m.items()[m.cursor])
+			},
+			want: map[string]bool{"1": true, "2": true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, _ := busyModel(t)
+			fakeTmux(t)
+			mgr, err := session.NewManager()
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.sess = mgr
+			m.sessions = []session.Info{*run}
+			m.sessByItem["1"] = m.sessions
+			settle(m, tt.do(m))
+			if len(m.marks) != len(tt.want) {
+				t.Fatalf("marks = %v, want %v", m.marks, tt.want)
+			}
+			for id := range tt.want {
+				if !m.marks[id] {
+					t.Errorf("marks = %v, want %v", m.marks, tt.want)
+				}
+			}
+		})
+	}
+}

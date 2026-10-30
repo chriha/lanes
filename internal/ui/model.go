@@ -41,7 +41,15 @@ type view struct {
 	err    error
 	items  []item.Item
 	sort   []item.SortKey
-	edited bool // filter overridden from inside the TUI
+	edited bool             // filter overridden from inside the TUI
+	groups []*filter.Filter // compiled cfg.Groups, same order
+	heads  []head           // non-empty groups, in items order; nil without groups
+}
+
+// head is a group header in the list: items[at:at+n] belong to the group name.
+type head struct {
+	at, n int
+	name  string
 }
 
 type fetchedMsg struct {
@@ -194,7 +202,15 @@ func (m *Model) applyConfig(cfg *config.Config) {
 		if err == nil {
 			err = serr
 		}
-		m.views = append(m.views, &view{cfg: vc, filter: f, err: err, sort: keys, edited: edited})
+		var groups []*filter.Filter
+		for _, g := range vc.Groups {
+			gf, gerr := filter.Compile(g.Filter)
+			if gerr != nil && err == nil {
+				err = fmt.Errorf("group %q: %w", g.Name, gerr)
+			}
+			groups = append(groups, gf)
+		}
+		m.views = append(m.views, &view{cfg: vc, filter: f, err: err, sort: keys, edited: edited, groups: groups})
 		if vc.Name == prev {
 			m.cur = i
 		}
@@ -207,7 +223,7 @@ func (m *Model) rebuild() {
 	selected := m.selectedID()
 	q := strings.ToLower(m.query)
 	for i, v := range m.views {
-		v.items = v.items[:0]
+		v.items, v.heads = v.items[:0], nil
 		if v.err != nil {
 			continue
 		}
@@ -227,8 +243,54 @@ func (m *Model) rebuild() {
 			v.items = append(v.items, it)
 		}
 		item.Sort(v.items, v.sort)
+		if v.err == nil && len(v.groups) > 0 {
+			if err := v.group(); err != nil {
+				v.err, v.items = err, v.items[:0]
+			}
+		}
 	}
 	m.restoreCursor(selected)
+}
+
+// group reorders the sorted items by their first matching group, ungrouped ones last, and records the headers.
+func (v *view) group() error {
+	buckets := make([][]item.Item, len(v.groups)+1) // last: ungrouped
+	for _, it := range v.items {
+		b, env := len(v.groups), it.Env()
+		for i, f := range v.groups {
+			ok, err := f.Match(env)
+			if err != nil {
+				return fmt.Errorf("group %q: %w", v.cfg.Groups[i].Name, err)
+			}
+			if ok {
+				b = i
+				break
+			}
+		}
+		buckets[b] = append(buckets[b], it)
+	}
+	v.items = v.items[:0]
+	for i, b := range buckets {
+		if i < len(v.groups) && len(b) > 0 {
+			v.heads = append(v.heads, head{at: len(v.items), n: len(b), name: v.cfg.Groups[i].Name})
+		}
+		v.items = append(v.items, b...)
+	}
+	return nil
+}
+
+// lines maps list lines to items: an item index, or -1-k for header k. Without groups line i is item i.
+func (v *view) lines() []int {
+	out := make([]int, 0, len(v.items)+len(v.heads))
+	k := 0
+	for i := range v.items {
+		if k < len(v.heads) && v.heads[k].at == i {
+			out = append(out, -1-k)
+			k++
+		}
+		out = append(out, i)
+	}
+	return out
 }
 
 func matches(it item.Item, q string) bool {
@@ -827,11 +889,23 @@ func (m *Model) list() string {
 	h := m.listHeight()
 	items := m.items()
 	v := m.views[m.cur]
-	if m.cursor < m.offset {
-		m.offset = m.cursor
+	lines := v.lines()
+	// offset counts lines; the cursor's line is the cursor plus the headers above it
+	cl := m.cursor
+	for _, hd := range v.heads {
+		if hd.at <= m.cursor {
+			cl++
+		}
 	}
-	if m.cursor >= m.offset+h {
-		m.offset = m.cursor - h + 1
+	top := cl
+	if cl > 0 && cl-1 < len(lines) && lines[cl-1] < 0 {
+		top = cl - 1 // on a group's first item, keep its header in view
+	}
+	if top < m.offset {
+		m.offset = top
+	}
+	if cl >= m.offset+h {
+		m.offset = cl - h + 1
 	}
 	var rows []string
 	if len(items) == 0 {
@@ -853,8 +927,13 @@ func (m *Model) list() string {
 		}
 	}
 	idW := idColWidth(items)
-	for i := m.offset; i < len(items) && len(rows) < h; i++ {
-		rows = append(rows, m.row(items[i], i == m.cursor, idW))
+	for l := m.offset; l < len(lines) && len(rows) < h; l++ {
+		if i := lines[l]; i >= 0 {
+			rows = append(rows, m.row(items[i], i == m.cursor, idW))
+		} else {
+			hd := v.heads[-1-i]
+			rows = append(rows, "  "+sDim.Render(fmt.Sprintf("── %s (%d) ──", hd.name, hd.n)))
+		}
 	}
 	for len(rows) < h {
 		rows = append(rows, "")

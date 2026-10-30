@@ -31,6 +31,7 @@ you what each session is doing (running, working, asking a question, waiting for
   - [Views](#views)
   - [Filters](#filters)
   - [Sorting](#sorting)
+  - [Groups](#groups)
   - [Navigation and selection](#navigation-and-selection)
   - [Searching](#searching)
   - [The command line](#the-command-line)
@@ -272,6 +273,26 @@ sort = "-open_threads,title"
 ```
 
 An unknown field name is not an error (fields come from the provider); an empty key (`"a,,b"`) is.
+
+### Groups
+
+A view can split its items into named groups, each with a filter (the same expressions as view filters). An item
+goes into the first group it matches; items matching no group are listed below the groups without a header.
+
+```toml
+[[view]]
+name = "queue"
+provider = "gitlab"
+groups = [
+  { name = "mine",   filter = 'author == me' },
+  { name = "urgent", filter = '"urgent" in labels' },
+]
+```
+
+Each non-empty group shows under a `── <name> (<count>) ──` header, in config order; empty groups are hidden. The
+view's `sort` applies inside each group and in the ungrouped tail. The cursor skips headers, so navigation, marks,
+actions, search and the tab count work as in a flat view. A group without a name, or with a filter that does not
+compile, is a config error. Groups are set in the config only (global or project), not with `:filter`/`:newview`.
 
 ### Navigation and selection
 
@@ -797,6 +818,7 @@ name     = "review"
 provider = "<name>"
 filter   = '<expression>'   # empty = everything
 sort     = "-field,field"    # "-" = descending; empty = provider order
+groups   = [{ name = "<name>", filter = '<expression>' }]   # first match wins; the rest stay ungrouped below
 
 [keymap]
 <key> = "<action name>"     # single character, e.g. r

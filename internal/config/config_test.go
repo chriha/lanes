@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -273,5 +275,61 @@ run = "echo shell"
 	_, err := Load()
 	if err == nil || !strings.Contains(err.Error(), `action "shell"`) || !strings.Contains(err.Error(), "reserved") {
 		t.Fatalf("err = %v, want it to say action \"shell\" is reserved", err)
+	}
+}
+
+func TestThemeValidation(t *testing.T) {
+	const base = `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+`
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"short hex", "#abc", false},
+		{"long hex", "#A78BFA", false},
+		{"empty", "", false},
+		{"no hash", "A78BFA", true},
+		{"not hex digits", "#ZZZ", true},
+		{"wrong length", "#12345", true},
+		{"color name", "red", true},
+		{"ansi number", "212", true},
+	}
+	fields := reflect.TypeOf(Theme{})
+	for _, scope := range []string{"global", "project"} {
+		for i := 0; i < fields.NumField(); i++ {
+			key := fields.Field(i).Tag.Get("toml")
+			for _, tt := range tests {
+				t.Run(scope+"/"+key+"/"+tt.name, func(t *testing.T) {
+					tmp := t.TempDir()
+					t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+					t.Setenv("HOME", tmp)
+					old, _ := os.Getwd()
+					defer os.Chdir(old)
+					if err := os.Chdir(tmp); err != nil {
+						t.Fatal(err)
+					}
+					theme := "\n[theme]\n" + key + " = " + strconv.Quote(tt.value) + "\n"
+					if scope == "global" {
+						write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), base+theme)
+					} else {
+						write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), base)
+						write(t, filepath.Join(tmp, ".lanes.toml"), theme)
+					}
+					_, err := Load()
+					if (err != nil) != tt.wantErr {
+						t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+					}
+					if err != nil && !strings.Contains(err.Error(), "theme."+key+" "+strconv.Quote(tt.value)) {
+						t.Errorf("error %q does not name the key and value", err)
+					}
+				})
+			}
+		}
 	}
 }

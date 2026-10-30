@@ -815,6 +815,10 @@ accent = "#A78BFA"          # also: ok, warn, bad, info, text, dim, selection
 `lanes` ships an adaptive light/dark palette. Override any of `accent`, `ok`, `warn`, `bad`, `info`, `text` (body), `dim`
 (secondary text) and `selection` (selected row and tab background) with a hex color under `[theme]`. Changes apply live.
 
+Colors must be `#RGB` or `#RRGGBB` (case-insensitive); an empty value keeps the default. Anything else (`A78BFA`,
+`red`, `212`) is a config error: `lanes` refuses to start, keeps the previous config on reload, and
+`lanes doctor` reports a failing `config` line.
+
 ### Where things live
 
 | What                                   | Where (default)                                         |

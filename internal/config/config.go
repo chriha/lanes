@@ -250,5 +250,5 @@ run = 'glab mr update {{.iid}} --ready'
 # run = 'claude --settings {{.settings}} "/review {{.url}}"'
 
 # [theme]
-# accent = "#A78BFA"
+# accent = "#A78BFA"   # also: ok, warn, bad, info, text, dim, selection
 `

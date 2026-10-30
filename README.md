@@ -806,13 +806,13 @@ refresh = false
 when    = '<expression>'    # only run on items it matches; empty = every item
 
 [theme]
-accent = "#A78BFA"          # also: ok, warn, bad, info
+accent = "#A78BFA"          # also: ok, warn, bad, info, text, dim, selection
 ```
 
 ### Theme
 
-`lanes` ships an adaptive light/dark palette. Override any of `accent`, `ok`, `warn`, `bad`, `info` with a hex
-color under `[theme]`. Changes apply live.
+`lanes` ships an adaptive light/dark palette. Override any of `accent`, `ok`, `warn`, `bad`, `info`, `text` (body), `dim`
+(secondary text) and `selection` (selected row and tab background) with a hex color under `[theme]`. Changes apply live.
 
 ### Where things live
 

@@ -19,6 +19,7 @@ import (
 
 type Settings struct {
 	PollInterval string `toml:"poll_interval"`
+	PollBlurred  string `toml:"poll_interval_blurred"` // poll interval while the terminal is unfocused
 	Preview      bool   `toml:"preview"` // show the detail pane at startup (toggle with p)
 	NoNotify     bool   `toml:"no_notify"`
 	ClaudeDir    string `toml:"claude_dir"` // Claude config dir whose usage the footer shows, e.g. ~/.claude
@@ -177,6 +178,11 @@ func (c Config) Poll() time.Duration {
 		return 30 * time.Second
 	}
 	return d
+}
+
+// PollBlurred is the poll interval while the terminal is unfocused.
+func (c Config) PollBlurred() time.Duration {
+	return 0
 }
 
 // Load reads the global config (writing a default on first run) and overlays the project config:

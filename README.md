@@ -859,6 +859,25 @@ accent = "#A78BFA"          # also: ok, warn, bad, info, text, dim, selection
 `lanes` ships an adaptive light/dark palette. Override any of `accent`, `ok`, `warn`, `bad`, `info`, `text` (body), `dim`
 (secondary text) and `selection` (selected row and tab background) with a hex color under `[theme]`. Changes apply live.
 
+`mode` picks the palette: `system` (the default) follows the terminal background as detected at start, `light` and
+`dark` force that palette. Forcing a mode helps when detection is slow or wrong, for example inside tmux or over SSH.
+
+The flat `[theme]` keys apply to both modes. `[theme.light]` and `[theme.dark]` take the same color keys for one mode
+only. Per key, the active mode's table wins over the flat `[theme]` value, which wins over the built-in default:
+
+```toml
+[theme]
+mode = "system"        # system | light | dark
+accent = "#A78BFA"     # both modes
+[theme.light]
+accent = "#6C3FD1"     # light mode only; wins over the flat accent
+[theme.dark]
+selection = "#2E2A4F"  # dark mode only
+```
+
+Global config and `.lanes.toml` merge per field, also within `[theme.light]` and `[theme.dark]`. An invalid `mode` is a
+config error, like an invalid color.
+
 Colors must be `#RGB` or `#RRGGBB` (case-insensitive); an empty value keeps the default. Anything else (`A78BFA`,
 `red`, `212`) is a config error: `lanes` refuses to start, keeps the previous config on reload, and
 `lanes doctor` reports a failing `config` line.

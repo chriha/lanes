@@ -306,5 +306,10 @@ run = 'glab mr update {{.iid}} --ready'
 # run = 'claude --settings {{.settings}} "/review {{.url}}"'
 
 # [theme]
-# accent = "#A78BFA"   # also: ok, warn, bad, info, text, dim, selection
+# mode = "system"      # system (default): follow the terminal background | light | dark
+# accent = "#A78BFA"   # both modes; also: ok, warn, bad, info, text, dim, selection
+# [theme.light]        # same color keys, light mode only; they win over the flat [theme] keys
+# accent = "#6C3FD1"
+# [theme.dark]         # same color keys, dark mode only
+# accent = "#A78BFA"
 `

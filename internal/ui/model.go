@@ -82,6 +82,8 @@ type Model struct {
 	provErr     map[string]error
 	fails       map[string]int       // consecutive failed fetches per provider
 	retryAt     map[string]time.Time // no refetch before this
+	// blurred is set while the terminal reports it lost focus; providers then poll at poll_interval_blurred
+	blurred bool
 	// refetchAfter marks providers whose in-flight fetch started before a refresh run ended: when it lands, fetch again
 	refetchAfter map[string]bool
 	busy         map[string]busyState // by session.Key of the item
@@ -449,6 +451,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.rebuild()
 		return m, again
+	case tea.BlurMsg:
+		m.blurred = true
+	case tea.FocusMsg:
+		m.blurred = false
+		return m, m.fetchStale(m.cfg.Poll())
 	case tickMsg:
 		if m.wake(time.Time(msg), nil) {
 			m.rebuild()
@@ -570,8 +577,18 @@ func (m *Model) onTick() tea.Cmd {
 	if config.Mtime().After(m.cfgMod) {
 		cmds = append(cmds, m.reload())
 	}
+	interval := m.cfg.Poll()
+	if m.blurred {
+		interval = m.cfg.PollBlurred()
+	}
+	return tea.Batch(append(cmds, m.fetchStale(interval))...)
+}
+
+// fetchStale fetches every provider whose data is older than interval and that is not waiting out a failure.
+func (m *Model) fetchStale(interval time.Duration) tea.Cmd {
+	var cmds []tea.Cmd
 	for name := range m.providers {
-		if time.Since(m.fetchedAt[name]) >= m.cfg.Poll() && time.Now().After(m.retryAt[name]) {
+		if time.Since(m.fetchedAt[name]) >= interval && time.Now().After(m.retryAt[name]) {
 			cmds = append(cmds, m.fetch(name))
 		}
 	}

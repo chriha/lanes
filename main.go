@@ -45,7 +45,7 @@ func runTUI() int {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)
 		return 1
 	}
-	if _, err := tea.NewProgram(ui.New(cfg), tea.WithAltScreen()).Run(); err != nil {
+	if _, err := tea.NewProgram(ui.New(cfg), tea.WithAltScreen(), tea.WithReportFocus()).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)
 		return 1
 	}

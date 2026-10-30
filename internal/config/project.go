@@ -155,6 +155,7 @@ const projectTail = `
 # Theme: hex colors overriding the adaptive palette (merged per field).
 # ---------------------------------------------------------------------------------------------------------
 # [theme]
+# mode = "system"      # system (default): follow the terminal background | light | dark
 # accent = "#A78BFA"
 # ok = "#4ADE80"
 # warn = "#FBBF24"
@@ -163,4 +164,8 @@ const projectTail = `
 # text = "#E6E8EE"
 # dim = "#6B7280"
 # selection = "#3A3560"
+# [theme.light]        # same color keys, light mode only; they win over the flat [theme] keys
+# accent = "#6C3FD1"
+# [theme.dark]         # same color keys, dark mode only
+# accent = "#A78BFA"
 `

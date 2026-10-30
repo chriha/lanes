@@ -152,7 +152,8 @@ const projectTail = `
 # jump = false               # session type only: on one item, attach once started, or if running (default false)
 
 # ---------------------------------------------------------------------------------------------------------
-# Theme: hex colors overriding the adaptive palette (merged per field).
+# Theme: hex colors overriding the adaptive palette (merged per field, also in [theme.light] / [theme.dark]).
+# Per key: the active mode's table > the flat [theme] key > the built-in default.
 # ---------------------------------------------------------------------------------------------------------
 # [theme]
 # mode = "system"      # system (default): follow the terminal background | light | dark

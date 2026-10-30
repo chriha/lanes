@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/chriha/lanes/internal/app"
 )
@@ -47,6 +48,46 @@ func Hash(path string) (string, error) {
 	}
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+// HashRoot is the hex SHA-256 over every .lanes.toml under root (relative path and content, in path order), or ""
+// when there is none. Unlike Hash of the cwd's nearest file it does not depend on where lanes was started, so one
+// trust entry covers every cwd in the root, and a change to any of those files still changes the hash.
+func HashRoot(root string) (string, error) {
+	var files []string
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if n := d.Name(); p != root && (n == ".git" || n == "node_modules") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Name() == ".lanes.toml" && d.Type().IsRegular() {
+			files = append(files, p)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(files) == 0 {
+		return "", nil
+	}
+	sort.Strings(files) // WalkDir is lexical per directory, not across a flat path list
+	h := sha256.New()
+	for _, p := range files {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return "", err
+		}
+		rel, _ := filepath.Rel(root, p)
+		fmt.Fprintf(h, "%s\x00%d\x00", filepath.ToSlash(rel), len(b))
+		h.Write(b)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // path is global, not per project scope: trust is looked up before the scope exists.
@@ -93,7 +134,7 @@ func Trust(root, hash string) error {
 		return err
 	}
 	dir := filepath.Dir(path())
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, app.DirMode); err != nil {
 		return err
 	}
 	// CreateTemp makes the file 0600, which the rename keeps.

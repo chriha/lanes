@@ -72,7 +72,9 @@ an env var).
   (always confirms), `X` interrupt the session's command and keep its output (confirm; again: SIGKILL), `R` refresh, `i` item history, `n` jump to the next session asking/waiting (asking first, oldest
   first, cycles), `S` sessions screen (every session, also of items no longer listed; jump / close), `q` quit.
 - Live: background poll (default 30s) diffs into the list, preserving cursor + marks. First paint from disk
-  cache (stale-while-revalidate).
+  cache (stale-while-revalidate). Terminal focus reporting (`tea.WithReportFocus`) slows the poll to
+  `poll_interval_blurred` (default 5m) while blurred; focus-in fetches every provider older than `poll_interval`.
+  lanes starts focused, so terminals without focus events poll as before.
 - Jump into a session: `tmux display-popup` / `switch-client` when inside tmux, `attach` otherwise.
 
 ## Config (`~/.config/lanes/config.toml`, hot reloaded)

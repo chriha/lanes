@@ -198,3 +198,20 @@ func TestUnreadableFileIsNotBackedUp(t *testing.T) {
 		t.Fatal("a read error moved snoozes.json aside as if it were corrupt")
 	}
 }
+
+func TestSaveDirIsPrivate(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	app.Init(t.TempDir())
+	s, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Set(Entry{}, "a"); err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]os.FileMode{filepath.Dir(path()): 0o700, path(): 0o600} {
+		if fi, err := os.Stat(p); err != nil || fi.Mode().Perm() != want {
+			t.Errorf("%s = %v, %v; want %o", p, fi, err, want)
+		}
+	}
+}

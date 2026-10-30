@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/chriha/lanes/internal/item"
 )
@@ -16,9 +18,20 @@ type GitHub struct {
 	Project string // owner/repo; detected from the origin remote when empty
 	// Run executes gh with args; nil runs the real gh binary.
 	Run func(ctx context.Context, args ...string) ([]byte, error)
+
+	mu      sync.Mutex
+	authors map[string]string // review thread id -> login of its first commenter; a thread's first author never changes
 }
 
-// ponytail: one query including review threads; split into a Quick pass like gitlab if threads make it slow.
+// ghThreadAuthorsQuery looks up the first commenter of review threads by id (1 point per batch).
+const ghThreadAuthorsQuery = `query($ids:[ID!]!){
+  nodes(ids:$ids){ ... on PullRequestReviewThread{ id comments(first:1){nodes{author{login}}} } }
+}`
+
+// ghAuthorBatch is the most ids one nodes(ids:) lookup accepts.
+const ghAuthorBatch = 100
+
+// ponytail: review threads carry only id and isResolved here; first-comment authors are looked up once per thread.
 const ghQuery = `query($owner:String!,$name:String!){
   viewer{login}
   repository(owner:$owner,name:$name){ pullRequests(states:OPEN,first:100,orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{
@@ -29,7 +42,7 @@ const ghQuery = `query($owner:String!,$name:String!){
     labels(first:50){nodes{name}}
     latestReviews(first:50){nodes{state author{login}}}
     commits(last:1){nodes{commit{statusCheckRollup{state}}}}
-    reviewThreads(first:100){nodes{isResolved comments(first:1){nodes{author{login}}}}}
+    reviewThreads(first:100){nodes{id isResolved}}
   }}}
 }`
 
@@ -57,8 +70,8 @@ type ghPR struct {
 		Commit struct{ StatusCheckRollup *struct{ State string } }
 	}]
 	ReviewThreads nodes[struct {
+		ID         string
 		IsResolved bool
-		Comments   nodes[struct{ Author ghUser }]
 	}]
 }
 
@@ -88,10 +101,86 @@ func (g *GitHub) Fetch(ctx context.Context) ([]item.Item, error) {
 	me := r.Data.Viewer.Login
 	prs := r.Data.Repository.PullRequests.Nodes
 	items := make([]item.Item, 0, len(prs))
+	authors := g.threadAuthors(ctx, prs)
 	for _, pr := range prs {
-		items = append(items, ghToItem(pr, me))
+		it := ghToItem(pr, me, authors)
+		for _, t := range pr.ReviewThreads.Nodes {
+			if _, ok := authors[t.ID]; !t.IsResolved && !ok {
+				it.Pending = []string{"open_thread_by_me"} // inherit the previous value, like gitlab's Quick
+				break
+			}
+		}
+		items = append(items, it)
 	}
 	return items, nil
+}
+
+// threadAuthors returns the cached first-comment authors, first fetching those of open threads not cached yet.
+// A failed lookup is not an error: the threads stay unknown and the caller marks their items pending.
+func (g *GitHub) threadAuthors(ctx context.Context, prs []ghPR) map[string]string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.authors == nil {
+		g.authors = map[string]string{}
+	}
+	var missing []string
+	queued := map[string]bool{}
+	for _, pr := range prs {
+		for _, t := range pr.ReviewThreads.Nodes {
+			if _, ok := g.authors[t.ID]; !t.IsResolved && !ok && !queued[t.ID] {
+				queued[t.ID] = true
+				missing = append(missing, t.ID)
+			}
+		}
+	}
+	for len(missing) > 0 {
+		n := min(len(missing), ghAuthorBatch)
+		if !g.lookupAuthors(ctx, missing[:n]) {
+			break
+		}
+		missing = missing[n:]
+	}
+	return maps.Clone(g.authors)
+}
+
+// lookupAuthors fetches the authors of ids into the cache, reporting whether the lookup succeeded.
+func (g *GitHub) lookupAuthors(ctx context.Context, ids []string) bool {
+	args := []string{"api", "graphql", "-f", "query=" + ghThreadAuthorsQuery}
+	for _, id := range ids {
+		args = append(args, "-f", "ids[]="+id)
+	}
+	out, err := ghRunner(g.Run)(ctx, args...)
+	if err != nil {
+		return false
+	}
+	var r struct {
+		Data struct {
+			Nodes []*struct {
+				ID       string
+				Comments nodes[struct{ Author ghUser }]
+			}
+		}
+		Errors []struct{ Message string }
+	}
+	if json.Unmarshal(out, &r) != nil || len(r.Errors) > 0 {
+		return false
+	}
+	for _, n := range r.Data.Nodes {
+		if n != nil && len(n.Comments.Nodes) > 0 {
+			g.authors[n.ID] = n.Comments.Nodes[0].Author.Login
+		}
+	}
+	return true
+}
+
+// ghRunner returns run, or a runner of the real gh binary when run is nil.
+func ghRunner(run func(context.Context, ...string) ([]byte, error)) func(context.Context, ...string) ([]byte, error) {
+	if run != nil {
+		return run
+	}
+	return func(ctx context.Context, args ...string) ([]byte, error) {
+		return exec.CommandContext(ctx, "gh", args...).Output()
+	}
 }
 
 // ghGraphQL runs query through gh for the owner/repo in *project, which is detected from the origin remote
@@ -108,12 +197,7 @@ func ghGraphQL(ctx context.Context, typ string, project *string, run func(contex
 	if !ok || owner == "" || name == "" || strings.Contains(name, "/") {
 		return nil, fmt.Errorf("%s: project %q is not owner/repo", typ, *project)
 	}
-	if run == nil {
-		run = func(ctx context.Context, args ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, "gh", args...).Output()
-		}
-	}
-	out, err := run(ctx, "api", "graphql", "-f", "query="+query, "-f", "owner="+owner, "-f", "name="+name)
+	out, err := ghRunner(run)(ctx, "api", "graphql", "-f", "query="+query, "-f", "owner="+owner, "-f", "name="+name)
 	if err != nil {
 		return nil, fmt.Errorf("gh: %w", err)
 	}
@@ -121,7 +205,7 @@ func ghGraphQL(ctx context.Context, typ string, project *string, run func(contex
 }
 
 // ghToItem maps a PR onto gitlab's MR shape so both providers share fields and badges.
-func ghToItem(pr ghPR, me string) item.Item {
+func ghToItem(pr ghPR, me string, authors map[string]string) item.Item {
 	mr := gqlMR{
 		IID:                      strconv.Itoa(pr.Number),
 		Title:                    pr.Title,
@@ -168,7 +252,7 @@ func ghToItem(pr ghPR, me string) item.Item {
 			continue
 		}
 		ti.open++
-		if len(t.Comments.Nodes) > 0 && t.Comments.Nodes[0].Author.Login == me {
+		if a, ok := authors[t.ID]; ok && a == me {
 			ti.byMe = true
 		}
 	}

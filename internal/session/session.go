@@ -54,13 +54,13 @@ func NewManager() (*Manager, error) {
 		return nil, errors.New("tmux not found in PATH")
 	}
 	dir := app.StateDir()
-	if err := os.MkdirAll(filepath.Join(dir, "sessions"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "sessions"), app.DirMode); err != nil {
 		return nil, err
 	}
 	// exit-empty off keeps the server (and thus remain-on-exit) alive between sessions.
 	conf := filepath.Join(dir, "tmux.conf")
 	body := "set -g remain-on-exit on\nset -g exit-empty off\nset -g status-right ' detach: C-b d '\nset -g mouse on\n"
-	if err := os.WriteFile(conf, []byte(body), 0o644); err != nil {
+	if err := app.WriteFile(conf, []byte(body)); err != nil {
 		return nil, err
 	}
 	m := &Manager{

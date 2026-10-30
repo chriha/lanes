@@ -9,7 +9,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chriha/lanes/internal/config"
+	"github.com/chriha/lanes/internal/history"
 	"github.com/chriha/lanes/internal/item"
+	"github.com/chriha/lanes/internal/session"
 )
 
 func TestPreviewShowsIdentifier(t *testing.T) {
@@ -177,6 +179,47 @@ func TestPreviewShowsRelations(t *testing.T) {
 				if strings.Contains(got, a) {
 					t.Errorf("preview has %q:\n%s", a, got)
 				}
+			}
+		})
+	}
+}
+
+func TestPreviewKeepsSessionAndLastRunLines(t *testing.T) {
+	full := map[string]any{
+		"number": 7, "branch": "feat/x", "labels": []string{"bug"}, "reviewers": []string{"r"}, "assignees": []string{"me"},
+		"blocked_by": []string{"#1"}, "blocking": []string{"#2"}, "related": []string{"#3"},
+	}
+	tests := []struct {
+		name    string
+		fields  map[string]any
+		session bool
+		run     bool
+		want    []string
+	}{
+		{"all relations, session and run", full, true, true, []string{"session", "last run"}},
+		{"all relations, session only", full, true, false, []string{"session"}},
+		{"all relations, run only", full, false, true, []string{"last run"}},
+		{"few fields", map[string]any{"number": 7}, true, true, []string{"session", "last run"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newNotesModel(t)
+			m.data["p"] = []item.Item{{ID: "a", Fields: tt.fields}}
+			m.rebuild()
+			if tt.session {
+				m.sessByItem[session.Key("a")] = []session.Info{{Name: "s", ItemKey: session.Key("a"), Created: time.Now()}}
+			}
+			if tt.run {
+				history.Append(history.Event{Item: session.Key("a"), Action: "work", Event: "finished"})
+			}
+			got := ansi.Strip(m.preview())
+			for _, w := range tt.want {
+				if !strings.Contains(got, w) {
+					t.Errorf("preview lacks %q:\n%s", w, got)
+				}
+			}
+			if n := strings.Count(got, "\n"); n != previewH {
+				t.Errorf("preview has %d rows, want %d:\n%s", n, previewH, got)
 			}
 		})
 	}

@@ -157,3 +157,46 @@ func mustWrite(t *testing.T, p, s string) {
 		t.Fatal(err)
 	}
 }
+
+func TestHashRootIndependentOfCwd(t *testing.T) {
+	top := t.TempDir()
+	mustMkdir(t, filepath.Join(top, ".git"))
+	mustMkdir(t, filepath.Join(top, "sub", "deep"))
+	mustWrite(t, filepath.Join(top, ".lanes.toml"), "a = 1\n")
+	mustWrite(t, filepath.Join(top, "sub", ".lanes.toml"), "b = 2\n")
+	mustWrite(t, filepath.Join(top, ".git", ".lanes.toml"), "ignored = true\n")
+
+	h, err := HashRoot(Root(filepath.Join(top, "sub", "deep")))
+	if err != nil || len(h) != 64 {
+		t.Fatalf("HashRoot = %q, %v; want 64 hex chars", h, err)
+	}
+	if again, _ := HashRoot(Root(top)); again != h {
+		t.Errorf("hash from root %q != hash from subdirectory %q", again, h)
+	}
+
+	mustWrite(t, filepath.Join(top, "sub", ".lanes.toml"), "b = 3\n")
+	if changed, _ := HashRoot(top); changed == h {
+		t.Error("changed subdirectory .lanes.toml kept the same hash")
+	}
+	mustWrite(t, filepath.Join(top, "sub", ".lanes.toml"), "b = 2\n")
+	mustWrite(t, filepath.Join(top, ".lanes.toml"), "a = 2\n")
+	if changed, _ := HashRoot(top); changed == h {
+		t.Error("changed root .lanes.toml kept the same hash")
+	}
+
+	if h, err := HashRoot(t.TempDir()); h != "" || err != nil {
+		t.Errorf("HashRoot without files = %q, %v; want \"\", nil", h, err)
+	}
+}
+
+func TestTrustFileIsPrivate(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	if err := Trust("/r", "h"); err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]os.FileMode{filepath.Dir(path()): 0o700, path(): 0o600} {
+		if fi, err := os.Stat(p); err != nil || fi.Mode().Perm() != want {
+			t.Errorf("%s = %v, %v; want %o", p, fi, err, want)
+		}
+	}
+}

@@ -203,7 +203,7 @@ func checkViews(cfg *config.Config, ov *config.Overrides, line func(status, name
 }
 
 func writable(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, app.DirMode); err != nil {
 		return err
 	}
 	f, err := os.CreateTemp(dir, ".doctor-*")

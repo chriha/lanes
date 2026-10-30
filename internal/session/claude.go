@@ -64,8 +64,11 @@ func RunHook(event string) {
 		return
 	}
 	b, _ := json.Marshal(map[string]any{"state": state, "at": time.Now().Unix()})
-	_ = os.WriteFile(hookStatePath(name), b, 0o644)
+	_ = app.WriteFile(hookStatePath(name), b)
 }
+
+// hookCommand is the shell command Claude runs for a hook event.
+func hookCommand(exe, event string) string { return shq(exe) + " hook " + event }
 
 // SettingsFile writes the Claude settings (hooks only) that actions pass via `claude --settings`.
 func SettingsFile() (string, error) {
@@ -74,7 +77,7 @@ func SettingsFile() (string, error) {
 		return "", err
 	}
 	hook := func(event string) []map[string]any {
-		return []map[string]any{{"hooks": []map[string]any{{"type": "command", "command": "'" + exe + "' hook " + event}}}}
+		return []map[string]any{{"hooks": []map[string]any{{"type": "command", "command": hookCommand(exe, event)}}}}
 	}
 	settings := map[string]any{"hooks": map[string]any{
 		"UserPromptSubmit": hook("UserPromptSubmit"),
@@ -85,10 +88,10 @@ func SettingsFile() (string, error) {
 	}}
 	b, _ := json.MarshalIndent(settings, "", "  ")
 	p := filepath.Join(app.StateDir(), "claude-settings.json")
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), app.DirMode); err != nil {
 		return "", err
 	}
-	return p, os.WriteFile(p, b, 0o644)
+	return p, app.WriteFile(p, b)
 }
 
 // UsageFile is what a Claude Code mod writes into a Claude config dir: the statusline's usage text and when.

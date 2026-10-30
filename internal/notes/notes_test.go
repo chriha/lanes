@@ -146,3 +146,26 @@ func TestSaveOverCorruptFileKeepsBackup(t *testing.T) {
 		t.Fatal("note not saved")
 	}
 }
+
+func TestSaveIsPrivate(t *testing.T) {
+	setup(t)
+	if err := os.MkdirAll(filepath.Dir(file()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file(), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := load(t).Set("a", "x"); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(file()); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("rewritten file = %v, %v; want 0600", fi, err)
+	}
+	setup(t)
+	if err := load(t).Set("a", "x"); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(filepath.Dir(file())); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Errorf("new dir = %v, %v; want 0700", fi, err)
+	}
+}

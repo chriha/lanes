@@ -36,9 +36,9 @@ func LoadOverrides() (*Overrides, error) {
 }
 
 func (o *Overrides) Save() error {
-	if err := os.MkdirAll(filepath.Dir(overridesPath()), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(overridesPath()), app.DirMode); err != nil {
 		return err
 	}
 	b, _ := json.MarshalIndent(o, "", "  ")
-	return os.WriteFile(overridesPath(), b, 0o644)
+	return app.WriteFile(overridesPath(), b)
 }

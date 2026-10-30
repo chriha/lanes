@@ -48,3 +48,22 @@ func TestLoadMissingOrCorrupt(t *testing.T) {
 		}
 	}
 }
+
+func TestSaveIsPrivate(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := os.MkdirAll(filepath.Dir(path("a")), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path("a"), []byte("[]"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	Save("a", []item.Item{{ID: "1"}})
+	if fi, err := os.Stat(path("a")); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("rewritten file = %v, %v; want 0600", fi, err)
+	}
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	Save("b", []item.Item{{ID: "1"}})
+	if fi, err := os.Stat(filepath.Dir(path("b"))); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Errorf("new dir = %v, %v; want 0700", fi, err)
+	}
+}

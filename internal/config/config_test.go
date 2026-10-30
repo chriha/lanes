@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func write(t *testing.T, path, body string) {
@@ -485,5 +486,65 @@ provider = "gl"
 				}
 			})
 		}
+	}
+}
+
+func TestPollBlurred(t *testing.T) {
+	tests := []struct {
+		name          string
+		poll, blurred string
+		want          time.Duration
+	}{
+		{"unset defaults to 5m", "", "", 5 * time.Minute},
+		{"valid value is kept", "30s", "2m", 2 * time.Minute},
+		{"unparseable falls back to 5m", "30s", "soon", 5 * time.Minute},
+		{"below poll_interval is raised to it", "1m", "45s", time.Minute},
+		{"zero is raised to poll_interval", "1m", "0s", time.Minute},
+		{"equal to poll_interval is kept", "1m", "1m", time.Minute},
+		{"default below a long poll_interval is raised to it", "10m", "", 10 * time.Minute},
+		{"below the invalid-poll fallback is raised to 30s", "1s", "10s", 30 * time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Config{Settings: Settings{PollInterval: tt.poll, PollBlurred: tt.blurred}}
+			if got := c.PollBlurred(); got != tt.want {
+				t.Errorf("PollBlurred() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPollBlurredProjectOverlay(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+	t.Setenv("HOME", tmp)
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[settings]
+poll_interval = "45s"
+poll_interval_blurred = "10m"
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+`)
+	write(t, filepath.Join(tmp, ".lanes.toml"), `
+[settings]
+poll_interval_blurred = "3m"
+`)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Poll(); got != 45*time.Second {
+		t.Errorf("Poll() = %v, want 45s kept from the global config", got)
+	}
+	if got := c.PollBlurred(); got != 3*time.Minute {
+		t.Errorf("PollBlurred() = %v, want 3m from the project config", got)
 	}
 }

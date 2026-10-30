@@ -15,6 +15,9 @@ func (m *Model) withSnooze(it item.Item) item.Item {
 	if _, ok := m.snoozes[it.ID]; !ok {
 		return it
 	}
+	if _, ok := it.Fields["snoozed"]; ok {
+		return it // a provider field called snoozed wins, as with note
+	}
 	f := make(map[string]any, len(it.Fields)+1)
 	maps.Copy(f, it.Fields)
 	f["snoozed"] = true
@@ -65,19 +68,22 @@ func (m *Model) snoozeTargets(input string) {
 		m.notice = "no item to snooze"
 		return
 	}
-	var ids []string
-	for _, it := range ts {
-		e := snooze.Entry{Until: until}
+	ids := make([]string, len(ts))
+	for i, it := range ts {
+		ids[i] = it.ID
 		if until.IsZero() {
-			e.Fingerprint = fingerprint(it)
+			m.snoozes[it.ID] = snooze.Entry{Fingerprint: fingerprint(it)} // per item: saved below
 		}
-		// ponytail: one write per item (change snoozes differ per item); batch if marking hundreds gets slow
-		if err := m.snoozes.Set(e, it.ID); err != nil {
-			m.notice = "saving snoozes: " + err.Error()
-			m.rebuild()
-			return
-		}
-		ids = append(ids, it.ID)
+	}
+	if until.IsZero() {
+		err = m.snoozes.Delete() // no IDs: just writes the entries set above
+	} else {
+		err = m.snoozes.Set(snooze.Entry{Until: until}, ids...)
+	}
+	if err != nil {
+		m.notice = "saving snoozes: " + err.Error()
+		m.rebuild()
+		return
 	}
 	m.marks = map[string]bool{}
 	m.notice = "snoozed " + targetsLabel(ids) + " until it changes"
@@ -98,15 +104,15 @@ func targetsLabel(ids []string) string {
 // change ones whose item came back with a different fingerprint. It reports whether any woke.
 // ponytail: a change snooze on an item that never comes back stays in snoozes.json; prune by age if it grows.
 func (m *Model) wake(now time.Time, fetched []item.Item) bool {
-	fps := make(map[string]string, len(fetched))
-	for _, it := range fetched {
-		fps[it.ID] = fingerprint(it)
-	}
 	var woke []string
 	for id, e := range m.snoozes {
-		fp, seen := fps[id]
-		if !e.Until.IsZero() && e.Awake(now, "") || e.Until.IsZero() && seen && e.Awake(now, fp) {
+		if !e.Until.IsZero() && e.Awake(now, "") {
 			woke = append(woke, id)
+		}
+	}
+	for _, it := range fetched {
+		if e, ok := m.snoozes[it.ID]; ok && e.Until.IsZero() && e.Awake(now, fingerprint(it)) {
+			woke = append(woke, it.ID)
 		}
 	}
 	if len(woke) == 0 {

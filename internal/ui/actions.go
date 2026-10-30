@@ -407,13 +407,13 @@ func (m *Model) executeRun(action string, jobs []job, refresh bool, busy int, sk
 			}
 		}
 		note := fmt.Sprintf("✓ %s done on %d item(s)", action, len(jobs))
+		if len(bad) > 0 {
+			note = fmt.Sprintf("✗ %s failed on %d/%d — %s", action, len(bad), len(jobs), bad[0])
+		}
 		if busy > 0 {
 			note += fmt.Sprintf(", %d busy", busy)
 		}
 		note = withNote(note, skippedWhen)
-		if len(bad) > 0 {
-			note = fmt.Sprintf("✗ %s failed on %d/%d — %s", action, len(bad), len(jobs), bad[0])
-		}
 		return doneMsg{notice: note, refresh: refresh, keys: keys, ok: len(bad) == 0}
 	}
 }

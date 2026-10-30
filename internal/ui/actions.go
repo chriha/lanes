@@ -438,7 +438,7 @@ func (m *Model) killTargets() tea.Cmd {
 	return m.killSessions(infos)
 }
 
-// killSessions closes infos: dead ones right away, after a y/n prompt when any is still running.
+// killSessions closes infos after a y/n prompt: finished sessions still hold their output.
 func (m *Model) killSessions(infos []session.Info) tea.Cmd {
 	alive := 0
 	for _, s := range infos {
@@ -458,10 +458,11 @@ func (m *Model) killSessions(infos []session.Info) tea.Cmd {
 			return doneMsg{notice: fmt.Sprintf("closed %d session(s)", len(infos))}
 		}
 	}
-	if alive == 0 {
-		return kill()
+	prompt := fmt.Sprintf("Close %d session(s)?", len(infos))
+	if alive > 0 {
+		prompt = fmt.Sprintf("Close %d session(s) (%d running)?", len(infos), alive)
 	}
-	m.ask(fmt.Sprintf("Kill %d running session(s)?", alive), kill)
+	m.ask(prompt, kill)
 	return nil
 }
 

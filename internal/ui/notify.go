@@ -20,6 +20,15 @@ func notify(title, body string) {
 	}
 }
 
+// openItemURL opens an item's URL with m.open, or the system opener when unset.
+func (m *Model) openItemURL(u string) {
+	if m.open != nil {
+		_ = m.open(u)
+		return
+	}
+	openURL(u)
+}
+
 // openURL opens a URL in the default browser.
 func openURL(url string) {
 	opener := "xdg-open"

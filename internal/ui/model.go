@@ -97,6 +97,7 @@ type Model struct {
 	pendingG bool
 	notice   string
 	clip     func(string) error // nil: the system clipboard (tests fake it)
+	open     func(string) error // nil: the system opener (tests fake it)
 
 	sess       *session.Manager
 	settings   string
@@ -693,7 +694,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.refreshAll()
 	case "o":
 		if n > 0 {
-			openURL(m.items()[m.cursor].URL)
+			m.openItemURL(m.items()[m.cursor].URL)
 		}
 	case "y":
 		m.copyIDs()

@@ -485,6 +485,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.pollSessions()
 	case editorDone:
+		if msg.project { // the user wrote it through lanes: trust its new content
+			if err := trustProject(); err != nil {
+				m.notice = "trust: " + err.Error()
+				return m, nil
+			}
+		}
 		return m, m.reload()
 	case noteEdited:
 		if msg.err != nil {
@@ -600,6 +606,14 @@ const builtinKeys = "jkgGhlVqRoixXtpnNFSyz/:? "
 
 // reload re-reads the config (also triggered by saving the file) and refetches, so edits apply live.
 func (m *Model) reload() tea.Cmd {
+	if ok, err := projectTrusted(); !ok {
+		m.notice = ".lanes.toml changed — restart lanes to trust it"
+		if err != nil {
+			m.notice = "trust: " + err.Error()
+		}
+		m.cfgMod = config.Mtime() // do not retry the same untrusted file every tick
+		return nil
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		m.notice = "config: " + err.Error()

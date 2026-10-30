@@ -531,7 +531,11 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				running++
 			}
 		}
-		m.ask(fmt.Sprintf("quit lanes? (%d sessions keep running) [y/N]", running), func() tea.Cmd { return tea.Quit })
+		keep := "sessions keep"
+		if running == 1 {
+			keep = "session keeps"
+		}
+		m.ask(fmt.Sprintf("quit lanes? (%d %s running) [y/N]", running, keep), func() tea.Cmd { return tea.Quit })
 	case "j", "down":
 		m.cursor++
 	case "k", "up":

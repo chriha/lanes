@@ -96,11 +96,11 @@ func TestProjectTemplateOverlayKeepsGlobal(t *testing.T) {
 // Every field of the schema is documented, so adding one without updating the template fails here.
 func TestProjectTemplateDocumentsEveryField(t *testing.T) {
 	tmpl := ProjectTemplate("", "")
-	for _, s := range []any{Settings{}, Provider{}, View{}, Action{}, Theme{}} {
+	for _, s := range []any{Settings{}, Provider{}, View{}, Action{}, Theme{}, Colors{}} {
 		typ := reflect.TypeOf(s)
 		for i := 0; i < typ.NumField(); i++ {
 			tag, _, _ := strings.Cut(typ.Field(i).Tag.Get("toml"), ",")
-			if tag == "" || tag == "-" {
+			if tag == "" || tag == "-" || typ.Field(i).Type.Kind() == reflect.Struct { // subtables: checked as sections below
 				continue
 			}
 			if !regexp.MustCompile(`(?m)^#? ?` + regexp.QuoteMeta(tag) + ` +=`).MatchString(tmpl) {
@@ -108,7 +108,7 @@ func TestProjectTemplateDocumentsEveryField(t *testing.T) {
 			}
 		}
 	}
-	for _, section := range []string{"[settings]", "[provider.", "[[view]]", "[keymap]", "[action.", "[theme]"} {
+	for _, section := range []string{"[settings]", "[provider.", "[[view]]", "[keymap]", "[action.", "[theme]", "[theme.light]", "[theme.dark]"} {
 		if !strings.Contains(tmpl, section) {
 			t.Errorf("section %s is not in the project template", section)
 		}

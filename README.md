@@ -31,6 +31,7 @@ you what each session is doing (running, working, asking a question, waiting for
   - [Views](#views)
   - [Filters](#filters)
   - [Sorting](#sorting)
+  - [Groups](#groups)
   - [Navigation and selection](#navigation-and-selection)
   - [Searching](#searching)
   - [The command line](#the-command-line)
@@ -201,6 +202,7 @@ Useful building blocks:
 | `a == b`, `a != b`             | equality                                   |
 | `&&`, `\|\|`, `!`, `( )`         | and, or, not, grouping                     |
 | `"x" in labels`                | list membership                            |
+| `hasNone(labels, "needs-info", "triage", "planning")` | none of these are in the list (also `hasAny`, `hasAll`) |
 | `title contains "fix"`         | substring (also `startsWith`, `endsWith`)  |
 | `title matches "^feat"`        | regular expression                         |
 | `len(reviewers) >= 2`          | list length                                |
@@ -242,6 +244,9 @@ ci == "failed" && author == me                                 # my MRs with a r
 ticket startsWith "ABC-" && open_threads > 0                   # open threads on one ticket prefix
 ```
 
+`hasAny`, `hasNone` and `hasAll` take a list field and any number of values; a missing field counts as an empty
+list. `["a", "b"] in labels` is rejected: use `hasAny(labels, "a", "b")` or `hasNone(...)`.
+
 If a filter has a syntax error it is rejected when you edit it (in-app) or shown in the view (config); a
 runtime error (e.g. comparing a missing field) shows as a message in the list instead of silently hiding items.
 
@@ -269,6 +274,26 @@ sort = "-open_threads,title"
 
 An unknown field name is not an error (fields come from the provider); an empty key (`"a,,b"`) is.
 
+### Groups
+
+A view can split its items into named groups, each with a filter (the same expressions as view filters). An item
+goes into the first group it matches; items matching no group are listed below the groups without a header.
+
+```toml
+[[view]]
+name = "queue"
+provider = "gitlab"
+groups = [
+  { name = "mine",   filter = 'author == me' },
+  { name = "urgent", filter = '"urgent" in labels' },
+]
+```
+
+Each non-empty group shows under a `── <name> (<count>) ──` header, in config order; empty groups are hidden. The
+view's `sort` applies inside each group and in the ungrouped tail. The cursor skips headers, so navigation, marks,
+actions, search and the tab count work as in a flat view. A group without a name, or with a filter that does not
+compile, is a config error. Groups are set in the config only (global or project), not with `:filter`/`:newview`.
+
 ### Navigation and selection
 
 | Key                 | Action                                             |
@@ -281,6 +306,7 @@ An unknown field name is not an error (fields come from the provider); an empty 
 | `esc`               | clear marks and the search                         |
 | `enter`             | jump into the item's newest session (opens the URL if it has none) |
 | `o`                 | open the item's URL in the browser                 |
+| `y`                 | copy the item's ID to the clipboard (all marked IDs, space-separated, if any are marked) |
 | `x`                 | close the item's sessions (asks if any is still running) |
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
 | `i`                 | show the item's history                            |
@@ -792,6 +818,7 @@ name     = "review"
 provider = "<name>"
 filter   = '<expression>'   # empty = everything
 sort     = "-field,field"    # "-" = descending; empty = provider order
+groups   = [{ name = "<name>", filter = '<expression>' }]   # first match wins; the rest stay ungrouped below
 
 [keymap]
 <key> = "<action name>"     # single character, e.g. r
@@ -806,13 +833,17 @@ refresh = false
 when    = '<expression>'    # only run on items it matches; empty = every item
 
 [theme]
-accent = "#A78BFA"          # also: ok, warn, bad, info
+accent = "#A78BFA"          # also: ok, warn, bad, info, text, dim, selection
 ```
 
 ### Theme
 
-`lanes` ships an adaptive light/dark palette. Override any of `accent`, `ok`, `warn`, `bad`, `info` with a hex
-color under `[theme]`. Changes apply live.
+`lanes` ships an adaptive light/dark palette. Override any of `accent`, `ok`, `warn`, `bad`, `info`, `text` (body), `dim`
+(secondary text) and `selection` (selected row and tab background) with a hex color under `[theme]`. Changes apply live.
+
+Colors must be `#RGB` or `#RRGGBB` (case-insensitive); an empty value keeps the default. Anything else (`A78BFA`,
+`red`, `212`) is a config error: `lanes` refuses to start, keeps the previous config on reload, and
+`lanes doctor` reports a failing `config` line.
 
 ### Where things live
 

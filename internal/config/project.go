@@ -119,12 +119,15 @@ const projectTail = `
 #   https://github.com/chriha/lanes#filters
 # sort: comma-separated fields, "-" prefix = descending; empty = provider order.
 #   https://github.com/chriha/lanes#sorting
+# groups: named filters; each item is listed under the first group it matches, items matching none follow
+#   the groups without a header. Empty groups are hidden; sort applies inside each group.
 # ---------------------------------------------------------------------------------------------------------
 # [[view]]
 # name = "payments-review"
 # provider = "forge"
 # filter = '"needs-review" in labels && author != me'
 # sort = "-open_threads,title"
+# groups = [{ name = "mine", filter = 'author == me' }, { name = "urgent", filter = '"urgent" in labels' }]
 
 # ---------------------------------------------------------------------------------------------------------
 # Keymap: <single character> = "<action name>". Built-in keys win over the keymap (? shows the bindings).
@@ -152,9 +155,17 @@ const projectTail = `
 # Theme: hex colors overriding the adaptive palette (merged per field).
 # ---------------------------------------------------------------------------------------------------------
 # [theme]
+# mode = "system"      # system (default): follow the terminal background | light | dark
 # accent = "#A78BFA"
 # ok = "#4ADE80"
 # warn = "#FBBF24"
 # bad = "#F87171"
 # info = "#60A5FA"
+# text = "#E6E8EE"
+# dim = "#6B7280"
+# selection = "#3A3560"
+# [theme.light]        # same color keys, light mode only; they win over the flat [theme] keys
+# accent = "#6C3FD1"
+# [theme.dark]         # same color keys, dark mode only
+# accent = "#A78BFA"
 `

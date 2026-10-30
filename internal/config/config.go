@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -22,13 +24,53 @@ type Settings struct {
 	ClaudeDir    string `toml:"claude_dir"` // Claude config dir whose usage the footer shows, e.g. ~/.claude
 }
 
-// Theme overrides the default adaptive palette; values are hex colors like "#A78BFA".
-type Theme struct {
+// Colors are hex colors like "#A78BFA" overriding the default adaptive palette.
+type Colors struct {
 	Accent string `toml:"accent"`
 	OK     string `toml:"ok"`
 	Warn   string `toml:"warn"`
 	Bad    string `toml:"bad"`
 	Info   string `toml:"info"`
+
+	Text      string `toml:"text"`
+	Dim       string `toml:"dim"`
+	Selection string `toml:"selection"`
+}
+
+// Theme holds the [theme] table: the flat color keys apply to both modes, [theme.light] / [theme.dark] to one.
+type Theme struct {
+	Colors
+	Mode  string `toml:"mode"` // system (default, the terminal background) | light | dark
+	Light Colors `toml:"light"`
+	Dark  Colors `toml:"dark"`
+}
+
+var hexColor = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
+
+// validate rejects any non-empty color that is not #RGB or #RRGGBB; it walks the fields, so new keys are covered.
+func (c Colors) validate(prefix string) error {
+	v := reflect.ValueOf(c)
+	for i := 0; i < v.NumField(); i++ {
+		if s := v.Field(i).String(); s != "" && !hexColor.MatchString(s) {
+			return fmt.Errorf("%s%s %q: want #RGB or #RRGGBB", prefix, v.Type().Field(i).Tag.Get("toml"), s)
+		}
+	}
+	return nil
+}
+
+func (t Theme) validate() error {
+	switch t.Mode {
+	case "", "system", "light", "dark":
+	default:
+		return fmt.Errorf("theme.mode %q: want system, light or dark", t.Mode)
+	}
+	if err := t.Colors.validate("theme."); err != nil {
+		return err
+	}
+	if err := t.Light.validate("theme.light."); err != nil {
+		return err
+	}
+	return t.Dark.validate("theme.dark.")
 }
 
 type Provider struct {
@@ -40,10 +82,17 @@ type Provider struct {
 }
 
 type View struct {
-	Name     string `toml:"name"`
-	Provider string `toml:"provider"`
-	Filter   string `toml:"filter"`
-	Sort     string `toml:"sort"` // comma-separated fields, "-" prefix = descending; empty = provider order
+	Name     string  `toml:"name"`
+	Provider string  `toml:"provider"`
+	Filter   string  `toml:"filter"`
+	Sort     string  `toml:"sort"`   // comma-separated fields, "-" prefix = descending; empty = provider order
+	Groups   []Group `toml:"groups"` // named filters; an item goes into the first group it matches, the rest stay ungrouped
+}
+
+// Group is a named filter inside a view.
+type Group struct {
+	Name   string `toml:"name"`
+	Filter string `toml:"filter"`
 }
 
 type Action struct {
@@ -169,6 +218,14 @@ func Load() (*Config, error) {
 		if _, err := item.ParseSort(v.Sort); err != nil {
 			return nil, fmt.Errorf("%s: view %q: %w", p, v.Name, err)
 		}
+		for i, g := range v.Groups {
+			if g.Name == "" {
+				return nil, fmt.Errorf("%s: view %q: group %d needs a name", p, v.Name, i+1)
+			}
+			if _, err := filter.Compile(g.Filter); err != nil {
+				return nil, fmt.Errorf("%s: view %q: group %q: %w", p, v.Name, g.Name, err)
+			}
+		}
 	}
 	for name, a := range c.Action {
 		if strings.Contains(name, "~") || a.Run == "" || (a.Type != "" && a.Type != "session" && a.Type != "run") {
@@ -183,6 +240,9 @@ func Load() (*Config, error) {
 		if _, err := filter.Compile(a.When); err != nil {
 			return nil, fmt.Errorf("%s: action %q: when: %w", p, name, err)
 		}
+	}
+	if err := c.Theme.validate(); err != nil {
+		return nil, fmt.Errorf("%s: %w", p, err)
 	}
 	for key, name := range c.Keymap {
 		if _, ok := c.Action[name]; !ok {
@@ -246,5 +306,5 @@ run = 'glab mr update {{.iid}} --ready'
 # run = 'claude --settings {{.settings}} "/review {{.url}}"'
 
 # [theme]
-# accent = "#A78BFA"
+# accent = "#A78BFA"   # also: ok, warn, bad, info, text, dim, selection
 `

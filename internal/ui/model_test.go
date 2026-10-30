@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/chriha/lanes/internal/cache"
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/item"
 )
@@ -401,5 +403,46 @@ func TestApplyThemeTextDimSelection(t *testing.T) {
 	applyTheme(config.Theme{})
 	if text, dim, tab = render(); text != defText || dim != defDim || tab != defTab {
 		t.Errorf("clearing the overrides should restore the defaults, got %q %q %q", text, dim, tab)
+	}
+}
+
+// dirtyProv returns items carrying terminal control sequences from both Quick and Fetch.
+type dirtyProv struct{}
+
+func (dirtyProv) dirty() []item.Item {
+	return []item.Item{{ID: "1", Title: "a\x1b[2Jb\nc", Author: "x\x07", Fields: map[string]any{"f": "\x1b]52;c;aGk=\x07"}}}
+}
+func (p dirtyProv) Fetch(context.Context) ([]item.Item, error) { return p.dirty(), nil }
+func (p dirtyProv) Quick(context.Context) ([]item.Item, error) { return p.dirty(), nil }
+
+func TestFetchStripsControlSequences(t *testing.T) {
+	m := newBackoffModel(t)
+	m.providers["p"] = dirtyProv{}
+	msgs := runCmd(m.fetch("p"))
+	if len(msgs) != 2 {
+		t.Fatalf("got %d messages, want quick and full", len(msgs))
+	}
+	for i, msg := range msgs {
+		fm, ok := msg.(fetchedMsg)
+		if !ok {
+			t.Fatalf("message %d is %T", i, msg)
+		}
+		it := fm.items[0]
+		if it.Title != "a[2Jb c" || it.Author != "x" || it.Fields["f"] != "]52;c;aGk=" {
+			t.Errorf("message %d (partial=%v) reached the model unsanitized: %#v", i, fm.partial, it)
+		}
+	}
+}
+
+func TestCachedItemsAreSanitized(t *testing.T) {
+	m := newBackoffModel(t)
+	cache.Save("p", dirtyProv{}.dirty())
+	m.data = map[string][]item.Item{}
+	m.applyConfig(&config.Config{Provider: map[string]config.Provider{"p": {Type: "command", Command: "true"}},
+		View: []config.View{{Name: "v", Provider: "p", Filter: "true"}},
+	})
+	got := m.data["p"]
+	if len(got) != 1 || got[0].Title != "a[2Jb c" || got[0].Fields["f"] != "]52;c;aGk=" {
+		t.Errorf("cached items reached the model unsanitized: %#v", got)
 	}
 }

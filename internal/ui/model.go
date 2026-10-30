@@ -181,7 +181,7 @@ func (m *Model) applyConfig(cfg *config.Config) {
 		delete(m.fullFetched, name) // a rebuilt provider has no snapshot: show the partial result first again
 		delete(m.provErr, name)     // built again: drop the stale build error until the next fetch
 		if _, ok := m.data[name]; !ok {
-			m.data[name] = cache.Load(name)
+			m.data[name] = item.Sanitize(cache.Load(name))
 		}
 	}
 	for k, b := range m.busy {
@@ -379,7 +379,7 @@ func (m *Model) fetch(name string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		items, err := p.Fetch(ctx)
-		return fetchedMsg{name: name, items: items, err: err}
+		return fetchedMsg{name: name, items: item.Sanitize(items), err: err}
 	}
 	q, ok := p.(provider.Quicker)
 	if !ok || m.fullFetched[name] {
@@ -389,7 +389,7 @@ func (m *Model) fetch(name string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		items, err := q.Quick(ctx)
-		return fetchedMsg{name: name, items: items, err: err, partial: true}
+		return fetchedMsg{name: name, items: item.Sanitize(items), err: err, partial: true}
 	}
 	return tea.Sequence(quick, full)
 }

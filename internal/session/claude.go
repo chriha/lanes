@@ -67,6 +67,9 @@ func RunHook(event string) {
 	_ = app.WriteFile(hookStatePath(name), b)
 }
 
+// hookCommand is the shell command Claude runs for a hook event.
+func hookCommand(exe, event string) string { return "'" + exe + "' hook " + event }
+
 // SettingsFile writes the Claude settings (hooks only) that actions pass via `claude --settings`.
 func SettingsFile() (string, error) {
 	exe, err := os.Executable()
@@ -74,7 +77,7 @@ func SettingsFile() (string, error) {
 		return "", err
 	}
 	hook := func(event string) []map[string]any {
-		return []map[string]any{{"hooks": []map[string]any{{"type": "command", "command": "'" + exe + "' hook " + event}}}}
+		return []map[string]any{{"hooks": []map[string]any{{"type": "command", "command": hookCommand(exe, event)}}}}
 	}
 	settings := map[string]any{"hooks": map[string]any{
 		"UserPromptSubmit": hook("UserPromptSubmit"),

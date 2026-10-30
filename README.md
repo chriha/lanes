@@ -118,6 +118,17 @@ go install github.com/chriha/lanes@latest
 
 This puts a `lanes` binary in `$(go env GOPATH)/bin` (usually `~/go/bin`; make sure it is on your `PATH`).
 
+From a release: download the archive for your platform (darwin or linux, amd64 or arm64) from the
+[releases page](https://github.com/chriha/lanes/releases), check it against `checksums.txt`, and put the `lanes`
+binary on your `PATH`:
+
+```sh
+tar -xzf lanes_<version>_<os>_<arch>.tar.gz
+sha256sum -c --ignore-missing checksums.txt   # on macOS: shasum -a 256 -c --ignore-missing checksums.txt
+install lanes ~/.local/bin/
+lanes --version                                # prints the release tag
+```
+
 From a clone:
 
 ```sh

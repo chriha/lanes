@@ -187,9 +187,10 @@ func TestSessionsClose(t *testing.T) {
 		cmd     bool // a kill command is returned
 		confirm bool // the screen asks first
 	}{
-		{"dead closes directly", true, "", true, false},
+		{"dead asks, yes closes", true, "y", true, true},
+		{"dead asks, no keeps", true, "n", false, true},
 		{"running asks, yes kills", false, "y", true, true},
-		{"running asks, no keeps", false, "n", false, true},
+		{"running asks, no keeps", false, "esc", false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -199,8 +200,12 @@ func TestSessionsClose(t *testing.T) {
 				t.Fatalf("asked = %v, want %v", asked, tt.confirm)
 			}
 			if tt.confirm {
-				if !strings.Contains(m.confirm.prompt, "Kill 1 running session") {
-					t.Errorf("prompt = %q", m.confirm.prompt)
+				want := "Close 1 session(s)?"
+				if !tt.dead {
+					want = "Close 1 session(s) (1 running)?"
+				}
+				if m.confirm.prompt != want {
+					t.Errorf("prompt = %q, want %q", m.confirm.prompt, want)
 				}
 				cmd = press(m, tt.answer)
 			}
@@ -209,6 +214,50 @@ func TestSessionsClose(t *testing.T) {
 			}
 			if m.mode != modeSessions {
 				t.Errorf("mode = %d, want back on the sessions screen", m.mode)
+			}
+		})
+	}
+}
+
+func TestListClose(t *testing.T) {
+	tests := []struct {
+		name   string
+		marked []string
+		keys   []string // after x
+		prompt string   // "" = no prompt
+		notice string
+		cmd    bool // a kill command is returned
+	}{
+		{"finished only, yes closes", nil, []string{"y"}, "Close 1 session(s)?", "", true},
+		{"finished only, enter closes", nil, []string{"enter"}, "Close 1 session(s)?", "", true},
+		{"finished only, no keeps", nil, []string{"n"}, "Close 1 session(s)?", "cancelled", false},
+		{"marked mixed counts running", []string{"1", "2"}, []string{"y"}, "Close 3 session(s) (1 running)?", "", true},
+		{"no sessions asks nothing", []string{"3"}, nil, "", "no sessions here", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := sessModel(t)
+			m.views[0].items = []item.Item{{ID: "1"}, {ID: "2"}, {ID: "3"}}
+			m.sessByItem["1"] = []session.Info{{Name: "fix~1", ItemKey: "1", Dead: true}}
+			m.sessByItem["2"] = []session.Info{{Name: "fix~2", ItemKey: "2"}, {Name: "rev~2", ItemKey: "2", Dead: true}}
+			for _, id := range tt.marked {
+				m.marks[id] = true
+			}
+			cmd := press(m, "x")
+			if asked := m.mode == modeConfirm; asked != (tt.prompt != "") {
+				t.Fatalf("asked = %v, want %v", asked, tt.prompt != "")
+			}
+			if tt.prompt != "" && m.confirm.prompt != tt.prompt {
+				t.Errorf("prompt = %q, want %q", m.confirm.prompt, tt.prompt)
+			}
+			if tt.keys != nil {
+				cmd = press(m, tt.keys...)
+			}
+			if (cmd != nil) != tt.cmd {
+				t.Errorf("kill command returned = %v, want %v", cmd != nil, tt.cmd)
+			}
+			if m.notice != tt.notice {
+				t.Errorf("notice = %q, want %q", m.notice, tt.notice)
 			}
 		})
 	}

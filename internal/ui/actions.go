@@ -414,13 +414,13 @@ func (m *Model) executeRun(action string, jobs []job, refresh bool, busy int, sk
 			}
 		}
 		note := fmt.Sprintf("✓ %s done on %d item(s)", action, len(jobs))
+		if len(bad) > 0 {
+			note = fmt.Sprintf("✗ %s failed on %d/%d — %s", action, len(bad), len(jobs), bad[0])
+		}
 		if busy > 0 {
 			note += fmt.Sprintf(", %d busy", busy)
 		}
 		note = withNote(note, skippedWhen)
-		if len(bad) > 0 {
-			note = fmt.Sprintf("✗ %s failed on %d/%d — %s", action, len(bad), len(jobs), bad[0])
-		}
 		return doneMsg{notice: note, refresh: refresh, keys: keys, ok: len(bad) == 0}
 	}
 }
@@ -445,7 +445,7 @@ func (m *Model) killTargets() tea.Cmd {
 	return m.killSessions(infos)
 }
 
-// killSessions closes infos: dead ones right away, after a y/n prompt when any is still running.
+// killSessions closes infos after a y/n prompt: finished sessions still hold their output.
 func (m *Model) killSessions(infos []session.Info) tea.Cmd {
 	alive := 0
 	for _, s := range infos {
@@ -465,10 +465,11 @@ func (m *Model) killSessions(infos []session.Info) tea.Cmd {
 			return doneMsg{notice: fmt.Sprintf("closed %d session(s)", len(infos))}
 		}
 	}
-	if alive == 0 {
-		return kill()
+	prompt := fmt.Sprintf("Close %d session(s)?", len(infos))
+	if alive > 0 {
+		prompt = fmt.Sprintf("Close %d session(s) (%d running)?", len(infos), alive)
 	}
-	m.ask(fmt.Sprintf("Kill %d running session(s)?", alive), kill)
+	m.ask(prompt, kill)
 	return nil
 }
 

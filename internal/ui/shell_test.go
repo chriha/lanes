@@ -28,7 +28,7 @@ func TestShellKey(t *testing.T) {
 			want: []string{"kill-session -t =shell~1", "new-session -d -s shell~1", attach}},
 		{name: "marks ignored: cursor item only", keys: []string{"t"}, marked: []string{"2", "3"},
 			want: []string{"new-session -d -s shell~1", attach}},
-		{name: "x closes the shell", keys: []string{"x"},
+		{name: "x closes the shell after confirming", keys: []string{"x", "y"},
 			sess: &session.Info{Name: "shell~1", Action: "shell", ItemKey: "1", Dead: true},
 			want: []string{"kill-session -t =shell~1"}},
 	}

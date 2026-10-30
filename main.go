@@ -17,6 +17,10 @@ import (
 var version = "dev"
 
 func main() {
+	if msg := usageError(os.Args[1:]); msg != "" {
+		fmt.Fprintln(os.Stderr, msg)
+		os.Exit(2)
+	}
 	if len(os.Args) == 3 && os.Args[1] == "hook" {
 		session.RunHook(os.Args[2])
 		return
@@ -72,4 +76,20 @@ func stdinIsTerminal() bool {
 	}
 	null, err := os.Stat(os.DevNull)
 	return err != nil || !os.SameFile(fi, null) // /dev/null is a character device but not a terminal
+}
+
+// usageError returns a usage message when args (os.Args[1:]) misuse a subcommand, or "" when they are fine.
+func usageError(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	want := map[string]int{"hook": 1, "doctor": 0, "init": 0, "status": 0, "version": 0, "--version": 0}
+	n, ok := want[args[0]]
+	if !ok || len(args)-1 == n {
+		return ""
+	}
+	if args[0] == "hook" {
+		return "usage: " + app.Name + " hook <event>"
+	}
+	return "usage: " + app.Name + " " + args[0]
 }

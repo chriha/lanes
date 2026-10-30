@@ -1130,7 +1130,7 @@ func (m *Model) helpLines() []string {
 		{"/", "search items in view (enter keeps, esc clears)"},
 		{"F", "edit this view's filter expression (saved outside the config)"},
 		{"enter", "jump into the item's newest session"},
-		{"x", "close sessions of marked items / cursor item (confirms if running)"},
+		{"x", "close sessions of marked items / cursor item (after confirming)"},
 		{"X", "interrupt the running commands of marked items / cursor item; keeps output (again: SIGKILL)"},
 		{"t", "shell for the cursor item: jump into it (started, or restarted if finished)"},
 		{"i", "item history"},

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -51,6 +52,24 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+// env holds what run touches, so tests can see that nothing reads the project before it is trusted.
+type env struct {
+	wd             string
+	isTTY          bool
+	stdout, stderr io.Writer
+	projectPath    func() string                   // the .lanes.toml that config would load ("" = none)
+	ask            func(root string) (bool, error) // the trust dialog
+	initApp        func(dir string)                // app.Init: runs git in the project
+	hook           func(event string)
+	status         func()
+	doctor         func() int
+	init           func() int // writes .lanes.toml
+	tui            func() int // loads the config and runs the TUI
+}
+
+// run dispatches args (os.Args[1:], already checked by usageError) and returns the exit code.
+func run(args []string, e env) int { return 0 }
 
 // runStatus prints the cwd project's sessions that need input, for tmux status bars and shell prompts.
 // Errors (tmux missing, no server, state dir not writable) print nothing: a status bar must not show them.

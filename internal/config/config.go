@@ -29,6 +29,10 @@ type Theme struct {
 	Warn   string `toml:"warn"`
 	Bad    string `toml:"bad"`
 	Info   string `toml:"info"`
+
+	Text      string `toml:"text"`
+	Dim       string `toml:"dim"`
+	Selection string `toml:"selection"`
 }
 
 type Provider struct {
@@ -246,5 +250,5 @@ run = 'glab mr update {{.iid}} --ready'
 # run = 'claude --settings {{.settings}} "/review {{.url}}"'
 
 # [theme]
-# accent = "#A78BFA"
+# accent = "#A78BFA"   # also: ok, warn, bad, info, text, dim, selection
 `

@@ -45,6 +45,8 @@ run = "echo x"
 [theme]
 accent = "#111111"
 ok = "#222222"
+text = "#444444"
+dim = "#555555"
 `)
 	write(t, filepath.Join(tmp, "proj", ProjectFile), `
 [settings]
@@ -63,6 +65,8 @@ s = "y"
 run = "echo y"
 [theme]
 ok = "#333333"
+dim = "#666666"
+selection = "#777777"
 `)
 	if err := os.MkdirAll(proj, 0o755); err != nil {
 		t.Fatal(err)
@@ -89,7 +93,8 @@ ok = "#333333"
 	if len(c.Action) != 2 {
 		t.Errorf("actions should merge by name: %+v", c.Action)
 	}
-	if c.Theme.Accent != "#111111" || c.Theme.OK != "#333333" {
+	if c.Theme.Accent != "#111111" || c.Theme.OK != "#333333" ||
+		c.Theme.Text != "#444444" || c.Theme.Dim != "#666666" || c.Theme.Selection != "#777777" {
 		t.Errorf("theme should merge per field: %+v", c.Theme)
 	}
 }

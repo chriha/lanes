@@ -300,7 +300,7 @@ provider = "gl"
 		{"color name", "red", true},
 		{"ansi number", "212", true},
 	}
-	fields := reflect.TypeOf(Theme{})
+	fields := reflect.TypeOf(Colors{})
 	for _, scope := range []string{"global", "project"} {
 		for i := 0; i < fields.NumField(); i++ {
 			key := fields.Field(i).Tag.Get("toml")

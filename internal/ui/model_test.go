@@ -387,7 +387,7 @@ func TestApplyThemeTextDimSelection(t *testing.T) {
 		return sText.Render("x"), sDim.Render("x"), sTabOn.Render("x")
 	}
 	defText, defDim, defTab := render()
-	applyTheme(config.Theme{Text: "#010203", Dim: "#040506", Selection: "#070809"})
+	applyTheme(config.Theme{Colors: config.Colors{Text: "#010203", Dim: "#040506", Selection: "#070809"}})
 	text, dim, tab := render()
 	for _, c := range []struct{ name, got, def, want string }{
 		{"text", text, defText, "1;2;3"},

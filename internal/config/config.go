@@ -24,8 +24,8 @@ type Settings struct {
 	ClaudeDir    string `toml:"claude_dir"` // Claude config dir whose usage the footer shows, e.g. ~/.claude
 }
 
-// Theme overrides the default adaptive palette; values are hex colors like "#A78BFA".
-type Theme struct {
+// Colors are hex colors like "#A78BFA" overriding the default adaptive palette.
+type Colors struct {
 	Accent string `toml:"accent"`
 	OK     string `toml:"ok"`
 	Warn   string `toml:"warn"`
@@ -37,17 +37,29 @@ type Theme struct {
 	Selection string `toml:"selection"`
 }
 
+// Theme holds the [theme] table: the flat color keys apply to both modes, [theme.light] / [theme.dark] to one.
+type Theme struct {
+	Colors
+	Mode  string `toml:"mode"` // system (default, the terminal background) | light | dark
+	Light Colors `toml:"light"`
+	Dark  Colors `toml:"dark"`
+}
+
 var hexColor = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
 // validate rejects any non-empty color that is not #RGB or #RRGGBB; it walks the fields, so new keys are covered.
-func (t Theme) validate() error {
-	v := reflect.ValueOf(t)
+func (c Colors) validate(prefix string) error {
+	v := reflect.ValueOf(c)
 	for i := 0; i < v.NumField(); i++ {
-		if c := v.Field(i).String(); c != "" && !hexColor.MatchString(c) {
-			return fmt.Errorf("theme.%s %q: want #RGB or #RRGGBB", v.Type().Field(i).Tag.Get("toml"), c)
+		if s := v.Field(i).String(); s != "" && !hexColor.MatchString(s) {
+			return fmt.Errorf("%s%s %q: want #RGB or #RRGGBB", prefix, v.Type().Field(i).Tag.Get("toml"), s)
 		}
 	}
 	return nil
+}
+
+func (t Theme) validate() error {
+	return t.Colors.validate("theme.")
 }
 
 type Provider struct {

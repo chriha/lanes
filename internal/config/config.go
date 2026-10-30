@@ -40,10 +40,17 @@ type Provider struct {
 }
 
 type View struct {
-	Name     string `toml:"name"`
-	Provider string `toml:"provider"`
-	Filter   string `toml:"filter"`
-	Sort     string `toml:"sort"` // comma-separated fields, "-" prefix = descending; empty = provider order
+	Name     string  `toml:"name"`
+	Provider string  `toml:"provider"`
+	Filter   string  `toml:"filter"`
+	Sort     string  `toml:"sort"`   // comma-separated fields, "-" prefix = descending; empty = provider order
+	Groups   []Group `toml:"groups"` // named filters; an item goes into the first group it matches, the rest stay ungrouped
+}
+
+// Group is a named filter inside a view.
+type Group struct {
+	Name   string `toml:"name"`
+	Filter string `toml:"filter"`
 }
 
 type Action struct {

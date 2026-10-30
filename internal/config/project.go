@@ -119,12 +119,15 @@ const projectTail = `
 #   https://github.com/chriha/lanes#filters
 # sort: comma-separated fields, "-" prefix = descending; empty = provider order.
 #   https://github.com/chriha/lanes#sorting
+# groups: named filters; each item is listed under the first group it matches, items matching none follow
+#   the groups without a header. Empty groups are hidden; sort applies inside each group.
 # ---------------------------------------------------------------------------------------------------------
 # [[view]]
 # name = "payments-review"
 # provider = "forge"
 # filter = '"needs-review" in labels && author != me'
 # sort = "-open_threads,title"
+# groups = [{ name = "mine", filter = 'author == me' }, { name = "urgent", filter = '"urgent" in labels' }]
 
 # ---------------------------------------------------------------------------------------------------------
 # Keymap: <single character> = "<action name>". Built-in keys win over the keymap (? shows the bindings).

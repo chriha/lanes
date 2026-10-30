@@ -88,7 +88,7 @@ look at a list, press a key, and the work starts in the background in a session 
   detach. Your shell, your environment.
 - **Live session status** — running / working / asking / waiting / finished / failed, per item, in the list.
   For Claude Code sessions the state comes from Claude's own hooks.
-- **Confirmations** — destructive or bulk operations (closing running sessions, multi-item runs) ask first.
+- **Confirmations** — destructive or bulk operations (closing sessions, multi-item runs) ask first.
 - **Headless actions** — `type = "run"` actions (e.g. mark MR as ready) run in the background; the result is
   shown in the footer.
 - **In-app filter editing** — change a view's filter, or create/delete views, without leaving the UI.
@@ -309,7 +309,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `enter`             | jump into the item's newest session (opens the URL if it has none) |
 | `o`                 | open the item's URL in the browser                 |
 | `y`                 | copy the item's ID to the clipboard (all marked IDs, space-separated, if any are marked) |
-| `x`                 | close the item's sessions (asks if any is still running) |
+| `x`                 | close the item's sessions (asks first)             |
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
 | `i`                 | show the item's history                            |
 | `N`                 | edit the item's note in `$VISUAL` / `$EDITOR` (save it empty to delete it) |
@@ -463,7 +463,7 @@ lanes attaches once tmux has started it, or attaches to the running one instead 
 `type = "run"` action is a config error.
 
 When the command exits the session stays around (tmux `remain-on-exit`), showing `✓` or `✗ (exit code)`, so you
-can still read the output. Close it with `x`.
+can still read the output. Close it with `x` (it asks first).
 
 ### Shell sessions
 
@@ -561,12 +561,13 @@ provider sets it in its fields, if at all).
 - **Next needing you** — `n` jumps into the next live session that is asking or waiting, across all views:
   asking before waiting, oldest first. Pressing `n` again goes to the next one and wraps around; with none,
   the footer says `nothing needs you`.
-- **Close** — `x` closes the sessions of the marked items, or of the item under the cursor. Running sessions are
-  confirmed first (`Kill 2 running session(s)?`); finished ones are removed immediately.
+- **Close** — `x` closes the sessions of the marked items, or of the item under the cursor. It always asks
+  first (`Close 3 session(s) (1 running)?`, the running part only when one is still running): a finished session
+  still holds its output.
 - **Sessions screen** — `S` (or `:sessions`) lists every session on the `lanes` tmux server, newest first:
   item ID and title (or the item key when no provider returns the item any more), status badge and age.
   Sessions whose item is in no view — filtered out, or merged/closed — are marked `(not in any view)`. `enter`
-  jumps in, `x` closes (running ones are confirmed first), `j`/`k`, `gg`/`G` move, `q` / `esc` / `S` go back.
+  jumps in, `x` closes (after confirming), `j`/`k`, `gg`/`G` move, `q` / `esc` / `S` go back.
 - **Quit** — `q` asks first (`y`/`enter` quits, any other key cancels); `ctrl-c` and `:quit` leave at once. Sessions keep running and reappear when you start it again.
 - **Status** — shown as row badges and in the header summary, refreshed every second.
 

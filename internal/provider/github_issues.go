@@ -16,7 +16,7 @@ type GitHubIssues struct {
 	Run func(ctx context.Context, args ...string) ([]byte, error)
 }
 
-// ponytail: first 100 open issues (and 20 blockers each); paginate if a repo needs more.
+// ponytail: first 100 open issues (and 20 blockers, blocked issues and sub-issues each); paginate if a repo needs more.
 const ghIssuesQuery = `query($owner:String!,$name:String!){
   viewer{login}
   repository(owner:$owner,name:$name){ issues(states:OPEN,first:100,orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{
@@ -25,6 +25,9 @@ const ghIssuesQuery = `query($owner:String!,$name:String!){
     assignees(first:20){nodes{login}}
     labels(first:50){nodes{name}}
     blockedBy(first:20){nodes{number state}}
+    blocking(first:20){nodes{number state}}
+    parent{number state}
+    subIssues(first:20){nodes{number state}}
   }}}
 }`
 
@@ -35,10 +38,16 @@ type ghIssue struct {
 	Author    *ghUser // null for deleted users
 	Assignees nodes[ghUser]
 	Labels    nodes[struct{ Name string }]
-	BlockedBy nodes[struct {
-		Number int
-		State  string
-	}]
+	BlockedBy nodes[ghRef]
+	Blocking  nodes[ghRef]
+	Parent    *ghRef // null without a parent
+	SubIssues nodes[ghRef]
+}
+
+// ghRef is a linked issue.
+type ghRef struct {
+	Number int
+	State  string
 }
 
 type ghIssuesResp struct {
@@ -83,12 +92,22 @@ func ghIssueToItem(is ghIssue, me string) item.Item {
 	for _, l := range is.Labels.Nodes {
 		labels = append(labels, l.Name)
 	}
-	blockedBy := []string{}
+	links := newRelLinks()
+	add := func(rel string, r ghRef) { links.add(rel, "#"+strconv.Itoa(r.Number), r.State == "OPEN") }
 	for _, b := range is.BlockedBy.Nodes {
-		if b.State == "OPEN" {
-			blockedBy = append(blockedBy, "#"+strconv.Itoa(b.Number))
-		}
+		add("blocked_by", b)
 	}
+	for _, b := range is.Blocking.Nodes {
+		add("blocking", b)
+	}
+	// GitHub has no "related" relation; the parent and sub-issues are the closest equivalent.
+	if is.Parent != nil {
+		add("related", *is.Parent)
+	}
+	for _, c := range is.SubIssues.Nodes {
+		add("related", c)
+	}
+	blockedBy := links.blockedBy
 	var badges []item.Badge
 	if len(blockedBy) > 0 {
 		badges = append(badges, item.Badge{Text: "blocked", Kind: "bad"})
@@ -103,9 +122,9 @@ func ghIssueToItem(is ghIssue, me string) item.Item {
 		URL:    is.URL,
 		Author: author,
 		Badges: badges,
-		Fields: map[string]any{
+		Fields: links.fields(map[string]any{
 			"kind": "ticket", "number": is.Number, "status": "open", "assignees": assignees, "labels": labels,
-			"blocked": len(blockedBy) > 0, "blocked_by": blockedBy, "priority": 0, "me": me,
-		},
+			"blocked": len(blockedBy) > 0, "priority": 0, "me": me,
+		}),
 	}
 }

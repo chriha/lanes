@@ -14,7 +14,7 @@ import (
 
 const previewH = 9
 
-var preferred = []string{"iid", "number", "key", "branch", "target", "ticket", "labels", "reviewers", "assignees", "approved_by", "ci", "diverged", "open_threads"}
+var preferred = []string{"iid", "number", "key", "branch", "target", "ticket", "labels", "reviewers", "assignees", "blocked_by", "blocking", "related", "approved_by", "ci", "diverged", "open_threads"}
 
 func fmtVal(v any) string {
 	switch x := v.(type) {
@@ -28,6 +28,35 @@ func fmtVal(v any) string {
 		return strings.Join(parts, ", ")
 	}
 	return fmt.Sprint(v)
+}
+
+var relationKeys = map[string]bool{"blocked_by": true, "blocking": true, "related": true}
+
+// relationLine renders a relation's open ids, then its closed ones (from closed_links, "<relation>:<id>") dimmed
+// with a ✓ suffix; it is empty when there are none, or when rel is not a relation field.
+func relationLine(it item.Item, rel string) string {
+	if !relationKeys[rel] {
+		return ""
+	}
+	var parts []string
+	if v := fmtVal(it.Fields[rel]); v != "" {
+		parts = append(parts, sText.Render(v))
+	}
+	var closed []string
+	switch x := it.Fields["closed_links"].(type) {
+	case []string:
+		closed = x
+	case []any: // decoded from JSON (cache, command provider)
+		for _, e := range x {
+			closed = append(closed, fmt.Sprint(e))
+		}
+	}
+	for _, c := range closed {
+		if id, ok := strings.CutPrefix(c, rel+":"); ok {
+			parts = append(parts, sDim.Render(id+" ✓"))
+		}
+	}
+	return strings.Join(parts, sText.Render(", "))
 }
 
 // preview renders exactly previewH lines of detail for the item under the cursor.
@@ -63,6 +92,13 @@ func (m *Model) preview() string {
 		for _, k := range keys {
 			if k == "note" && cur.Fields[k] == any(note) {
 				continue // shown above
+			}
+			if rel := relationLine(cur, k); rel != "" {
+				lines = append(lines, " "+sDim.Render(fmt.Sprintf("%-12s", k))+rel)
+				continue
+			}
+			if relationKeys[k] {
+				continue // no open or closed ids
 			}
 			if v := fmtVal(cur.Fields[k]); v != "" && v != "[]" && v != "0" {
 				lines = append(lines, " "+sDim.Render(fmt.Sprintf("%-12s", k))+sText.Render(v))

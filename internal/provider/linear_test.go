@@ -23,10 +23,17 @@ const linearResponse = `{"data":{"viewer":{"displayName":"me"},"issues":{"nodes"
  "inverseRelations":{"nodes":[
   {"type":"blocks","issue":{"identifier":"ENG-3","state":{"type":"started"}}},
   {"type":"blocks","issue":{"identifier":"ENG-4","state":{"type":"completed"}}},
-  {"type":"related","issue":{"identifier":"ENG-5","state":{"type":"unstarted"}}}]}},
+  {"type":"related","issue":{"identifier":"ENG-5","state":{"type":"unstarted"}}}]},
+ "relations":{"nodes":[
+  {"type":"blocks","relatedIssue":{"identifier":"ENG-7","state":{"type":"backlog"}}},
+  {"type":"blocks","relatedIssue":{"identifier":"ENG-8","state":{"type":"canceled"}}},
+  {"type":"related","relatedIssue":{"identifier":"ENG-9","state":{"type":"started"}}},
+  {"type":"related","relatedIssue":{"identifier":"ENG-10","state":{"type":"completed"}}},
+  {"type":"duplicate","relatedIssue":{"identifier":"ENG-11","state":{"type":"started"}}}]}},
 {"identifier":"ENG-2","title":"Idea","url":"https://linear.app/acme/issue/ENG-2","priority":0,
  "creator":null,"assignee":null,"state":{"name":"Todo"},
  "labels":{"nodes":[]},
+ "relations":{"nodes":[]},
  "inverseRelations":{"nodes":[{"type":"blocks","issue":{"identifier":"ENG-6","state":{"type":"canceled"}}}]}}
 ]}}}`
 
@@ -75,7 +82,7 @@ func TestLinearFetch(t *testing.T) {
 		t.Errorf("variables = %v, want team ENG", req["variables"])
 	}
 	query, _ := req["query"].(string)
-	for _, want := range []string{"viewer", "issues(", "inverseRelations", `nin:["completed","canceled"]`} {
+	for _, want := range []string{"viewer", "issues(", "inverseRelations", "relations(first:50)", `nin:["completed","canceled"]`} {
 		if !strings.Contains(query, want) {
 			t.Errorf("query missing %q:\n%s", want, query)
 		}
@@ -85,11 +92,14 @@ func TestLinearFetch(t *testing.T) {
 		{ID: "ENG-1", Title: "Add a thing", URL: "https://linear.app/acme/issue/ENG-1", Author: "alex",
 			Badges: []item.Badge{{Text: "blocked", Kind: "bad"}, {Text: "in progress", Kind: "info"}},
 			Fields: map[string]any{"kind": "ticket", "key": "ENG-1", "status": "in progress", "assignees": []string{"me"},
-				"labels": []string{"feature", "planning"}, "blocked": true, "blocked_by": []string{"ENG-3"}, "priority": 2, "me": "me"}},
+				"labels": []string{"feature", "planning"}, "blocked": true, "blocked_by": []string{"ENG-3"}, "blocking": []string{"ENG-7"},
+				"related": []string{"ENG-5", "ENG-9"}, "closed_links": []string{"blocked_by:ENG-4", "blocking:ENG-8", "related:ENG-10"},
+				"priority": 2, "me": "me"}},
 		{ID: "ENG-2", Title: "Idea", URL: "https://linear.app/acme/issue/ENG-2",
 			Badges: []item.Badge{{Text: "todo", Kind: "info"}},
 			Fields: map[string]any{"kind": "ticket", "key": "ENG-2", "status": "todo", "assignees": []string{},
-				"labels": []string{}, "blocked": false, "blocked_by": []string{}, "priority": 0, "me": "me"}},
+				"labels": []string{}, "blocked": false, "blocked_by": []string{}, "blocking": []string{}, "related": []string{},
+				"closed_links": []string{"blocked_by:ENG-6"}, "priority": 0, "me": "me"}},
 	}
 	if !reflect.DeepEqual(items, want) {
 		t.Errorf("items:\n got %#v\nwant %#v", items, want)

@@ -18,13 +18,17 @@ const ghIssuesResponse = `{"data":{"viewer":{"login":"me"},"repository":{"issues
 {"number":7,"title":"Add a thing","url":"https://github.com/o/r/issues/7","author":{"login":"alex"},
  "assignees":{"nodes":[{"login":"me"},{"login":"sam"}]},
  "labels":{"nodes":[{"name":"feature"},{"name":"planning"}]},
- "blockedBy":{"nodes":[{"number":3,"state":"OPEN"},{"number":4,"state":"CLOSED"}]}},
+ "blockedBy":{"nodes":[{"number":3,"state":"OPEN"},{"number":4,"state":"CLOSED"}]},
+ "blocking":{"nodes":[{"number":10,"state":"OPEN"},{"number":11,"state":"CLOSED"}]},
+ "parent":{"number":1,"state":"OPEN"},
+ "subIssues":{"nodes":[{"number":12,"state":"OPEN"},{"number":13,"state":"CLOSED"}]}},
 {"number":8,"title":"Fix a bug","url":"https://github.com/o/r/issues/8","author":{"login":"me"},
  "assignees":{"nodes":[{"login":"me"}]},
  "labels":{"nodes":[{"name":"bug"}]},
- "blockedBy":{"nodes":[{"number":5,"state":"CLOSED"}]}},
+ "blockedBy":{"nodes":[{"number":5,"state":"CLOSED"}]},"blocking":{"nodes":[]},
+ "parent":{"number":2,"state":"CLOSED"},"subIssues":{"nodes":[]}},
 {"number":9,"title":"Idea","url":"https://github.com/o/r/issues/9","author":null,
- "assignees":{"nodes":[]},"labels":{"nodes":[]},"blockedBy":{"nodes":[]}}
+ "assignees":{"nodes":[]},"labels":{"nodes":[]},"blockedBy":{"nodes":[]},"blocking":{"nodes":[]},"parent":null,"subIssues":{"nodes":[]}}
 ]}}}}`
 
 func TestGitHubIssuesFetch(t *testing.T) {
@@ -34,7 +38,7 @@ func TestGitHubIssuesFetch(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(args, " ")
-	for _, want := range []string{"api graphql", "owner=o", "name=r", "issues(states:OPEN", "blockedBy"} {
+	for _, want := range []string{"api graphql", "owner=o", "name=r", "issues(states:OPEN", "blockedBy", "blocking(", "parent{", "subIssues("} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("gh args %q missing %q", joined, want)
 		}
@@ -44,13 +48,17 @@ func TestGitHubIssuesFetch(t *testing.T) {
 		{ID: "#7", Title: "Add a thing", URL: "https://github.com/o/r/issues/7", Author: "alex",
 			Badges: []item.Badge{{Text: "blocked", Kind: "bad"}},
 			Fields: map[string]any{"kind": "ticket", "number": 7, "status": "open", "assignees": []string{"me", "sam"},
-				"labels": []string{"feature", "planning"}, "blocked": true, "blocked_by": []string{"#3"}, "priority": 0, "me": "me"}},
+				"labels": []string{"feature", "planning"}, "blocked": true, "blocked_by": []string{"#3"}, "blocking": []string{"#10"},
+				"related": []string{"#1", "#12"}, "closed_links": []string{"blocked_by:#4", "blocking:#11", "related:#13"},
+				"priority": 0, "me": "me"}},
 		{ID: "#8", Title: "Fix a bug", URL: "https://github.com/o/r/issues/8", Author: "me",
 			Fields: map[string]any{"kind": "ticket", "number": 8, "status": "open", "assignees": []string{"me"},
-				"labels": []string{"bug"}, "blocked": false, "blocked_by": []string{}, "priority": 0, "me": "me"}},
+				"labels": []string{"bug"}, "blocked": false, "blocked_by": []string{}, "blocking": []string{}, "related": []string{},
+				"closed_links": []string{"blocked_by:#5", "related:#2"}, "priority": 0, "me": "me"}},
 		{ID: "#9", Title: "Idea", URL: "https://github.com/o/r/issues/9",
 			Fields: map[string]any{"kind": "ticket", "number": 9, "status": "open", "assignees": []string{},
-				"labels": []string{}, "blocked": false, "blocked_by": []string{}, "priority": 0, "me": "me"}},
+				"labels": []string{}, "blocked": false, "blocked_by": []string{}, "blocking": []string{}, "related": []string{},
+				"closed_links": []string{}, "priority": 0, "me": "me"}},
 	}
 	if !reflect.DeepEqual(items, want) {
 		t.Errorf("items:\n got %#v\nwant %#v", items, want)

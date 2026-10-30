@@ -7,7 +7,7 @@ var prFields = []string{"approved", "approved_by", "approved_by_me", "assignees"
 	"kind", "labels", "me", "open_thread_by_me", "open_threads", "reviewers", "target", "ticket"}
 
 // ticketFields are the keys of a ticket item; github-issues adds number, linear key.
-var ticketFields = []string{"assignees", "blocked", "blocked_by", "kind", "labels", "me", "priority", "status"}
+var ticketFields = []string{"assignees", "blocked", "blocked_by", "blocking", "closed_links", "kind", "labels", "me", "priority", "related", "status"}
 
 // Fields returns the sorted keys of the fields the items of a built-in provider type carry (the keys filters and
 // action templates can use besides id, title, url, author, draft and note). It returns nil for "command", whose

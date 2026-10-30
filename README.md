@@ -386,7 +386,9 @@ The top right of the screen summarizes live sessions (`◐ 2  ? 1  ● 1`) and w
 ### Preview pane and item history
 
 `p` toggles a pane under the list with the selected item's title, URL, author, your note, the provider's fields
-(the identifier — `iid`, `number` or `key` — then branch, labels, reviewers, CI, …), its sessions and its last run. Set `preview = true` under `[settings]` to start with
+(the identifier — `iid`, `number` or `key` — then branch, labels, reviewers, CI, …), its sessions and its last run.
+Tickets also get `blocked_by`, `blocking` and `related` lines after labels and assignees, listing the open ids
+followed by the closed ones dimmed with a `✓` (e.g. `blocked_by  #7, #9 ✓`); empty relations are skipped. Set `preview = true` under `[settings]` to start with
 it open.
 
 `i` shows the item's **history**: every action started on it, and how it ended (`finished`, `failed (exit n)`,
@@ -657,7 +659,7 @@ type = "github-issues"
 ```
 
 Lists the repository's **open issues** via `gh api graphql` (pull requests are not included), the 100 most
-recently updated, each with its first 20 blockers. The ID is `#<number>`; `author` and `url` are set as usual,
+recently updated, each with its first 20 blockers, blocked issues and sub-issues. The ID is `#<number>`; `author` and `url` are set as usual,
 and a `blocked` badge marks issues with an open blocker.
 
 Ticket fields:
@@ -671,6 +673,9 @@ Ticket fields:
 | `labels`     | []string | label names                                                          |
 | `blocked`    | bool     | an issue it is blocked by (GitHub issue dependencies) is still open  |
 | `blocked_by` | []string | the open blockers, e.g. `["#7"]`                                     |
+| `blocking`   | []string | the open issues it blocks                                            |
+| `related`    | []string | its open parent and sub-issues (GitHub has no "related" relation)    |
+| `closed_links` | []string | closed blockers, blocked and related issues as `<relation>:<id>`, e.g. `["blocked_by:#9"]` |
 | `priority`   | number   | always `0` on GitHub                                                 |
 | `me`         | string   | your login                                                           |
 
@@ -714,6 +719,9 @@ tracker. The differences:
 | `assignees`  | []string | the assignee's display name, or empty                                |
 | `blocked`    | bool     | an issue that blocks it is not completed or canceled                 |
 | `blocked_by` | []string | those blocking issues, e.g. `["ENG-7"]`                              |
+| `blocking`   | []string | the open issues it blocks                                            |
+| `related`    | []string | open issues linked with a `related` relation, in either direction    |
+| `closed_links` | []string | completed or canceled linked issues as `<relation>:<id>`, e.g. `["blocking:ENG-8"]` |
 | `priority`   | number   | `0` none, `1` urgent, `2` high, `3` medium, `4` low                  |
 | `me`         | string   | your display name                                                    |
 

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -268,5 +269,81 @@ run = "echo shell"
 	_, err := Load()
 	if err == nil || !strings.Contains(err.Error(), `action "shell"`) || !strings.Contains(err.Error(), "reserved") {
 		t.Fatalf("err = %v, want it to say action \"shell\" is reserved", err)
+	}
+}
+
+func TestViewGroupsValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		global  string // TOML lines appended to view "a" of the global config
+		project string // project .lanes.toml, empty = none
+		want    []Group
+		wantErr string // substring of the error, empty = no error
+	}{
+		{"absent", "", "", nil, ""},
+		{
+			"inline array",
+			`groups = [{ name = "mine", filter = 'author == me' }, { name = "urgent", filter = '"urgent" in labels' }]`, "",
+			[]Group{{"mine", "author == me"}, {"urgent", `"urgent" in labels`}}, "",
+		},
+		{
+			"array of tables",
+			"[[view.groups]]\nname = \"mine\"\nfilter = 'author == me'", "",
+			[]Group{{"mine", "author == me"}}, "",
+		},
+		{"empty filter matches everything", `groups = [{ name = "all" }]`, "", []Group{{"all", ""}}, ""},
+		{"missing name", `groups = [{ filter = 'draft' }]`, "", nil, `view "a": group 1 needs a name`},
+		{"bad filter", `groups = [{ name = "ok" }, { name = "broken", filter = 'kind ===' }]`, "", nil, `view "a": group "broken"`},
+		{
+			"project view",
+			"",
+			"[[view]]\nname = \"a\"\nprovider = \"gl\"\ngroups = [{ name = \"mine\", filter = 'author == me' }]",
+			[]Group{{"mine", "author == me"}}, "",
+		},
+		{
+			"project bad filter",
+			"",
+			"[[view]]\nname = \"p\"\nprovider = \"gl\"\ngroups = [{ name = \"x\", filter = '(' }]",
+			nil, `view "p": group "x"`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+			t.Setenv("HOME", tmp)
+			proj := filepath.Join(tmp, "proj")
+			if err := os.MkdirAll(proj, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			old, _ := os.Getwd()
+			defer os.Chdir(old)
+			if err := os.Chdir(proj); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+`+tt.global+"\n")
+			if tt.project != "" {
+				write(t, filepath.Join(proj, ProjectFile), tt.project+"\n")
+			}
+			c, err := Load()
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want it to contain %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := c.View[0].Groups; !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("groups = %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 }

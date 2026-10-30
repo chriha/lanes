@@ -176,6 +176,14 @@ func Load() (*Config, error) {
 		if _, err := item.ParseSort(v.Sort); err != nil {
 			return nil, fmt.Errorf("%s: view %q: %w", p, v.Name, err)
 		}
+		for i, g := range v.Groups {
+			if g.Name == "" {
+				return nil, fmt.Errorf("%s: view %q: group %d needs a name", p, v.Name, i+1)
+			}
+			if _, err := filter.Compile(g.Filter); err != nil {
+				return nil, fmt.Errorf("%s: view %q: group %q: %w", p, v.Name, g.Name, err)
+			}
+		}
 	}
 	for name, a := range c.Action {
 		if strings.Contains(name, "~") || a.Run == "" || (a.Type != "" && a.Type != "session" && a.Type != "run") {

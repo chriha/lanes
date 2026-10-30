@@ -281,6 +281,7 @@ An unknown field name is not an error (fields come from the provider); an empty 
 | `esc`               | clear marks and the search                         |
 | `enter`             | jump into the item's newest session (opens the URL if it has none) |
 | `o`                 | open the item's URL in the browser                 |
+| `y`                 | copy the item's ID to the clipboard (all marked IDs, space-separated, if any are marked) |
 | `x`                 | close the item's sessions (asks if any is still running) |
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
 | `i`                 | show the item's history                            |

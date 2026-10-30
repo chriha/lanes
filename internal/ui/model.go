@@ -85,6 +85,7 @@ type Model struct {
 	cmdline  textinput.Model
 	pendingG bool
 	notice   string
+	clip     func(string) error // nil: the system clipboard (tests fake it)
 
 	sess       *session.Manager
 	settings   string
@@ -479,7 +480,7 @@ func (m *Model) onTick() tea.Cmd {
 }
 
 // builtinKeys cannot be rebound through [keymap].
-const builtinKeys = "jkgGhlVqRoixtpnNFS/:? "
+const builtinKeys = "jkgGhlVqRoixtpnNFSy/:? "
 
 // reload re-reads the config (also triggered by saving the file) and refetches, so edits apply live.
 func (m *Model) reload() tea.Cmd {
@@ -603,6 +604,8 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if n > 0 {
 			openURL(m.items()[m.cursor].URL)
 		}
+	case "y":
+		m.copyIDs()
 	case "enter":
 		if n > 0 && m.sess != nil {
 			return m, m.jump(m.items()[m.cursor])
@@ -1000,6 +1003,7 @@ func (m *Model) helpLines() []string {
 		{"S", "sessions: every session, also of items no longer listed (enter jump, x close)"},
 		{"p", "toggle preview pane"},
 		{"o / u", "open item in browser"},
+		{"y", "copy the ID of the cursor item / marked items to the clipboard"},
 		{"R / ctrl-r", "refresh data / reload config"},
 		{"q", "quit after confirming (sessions keep running)"},
 	}

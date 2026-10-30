@@ -119,6 +119,7 @@ confirm = "none"
     session/    tmux backend, status, claude hooks
     history/    per-item log
     notes/      per-item notes (<state>/notes.json)
+    snooze/     snoozed items, until a time or a changed fingerprint (<state>/snoozes.json)
     ui/         bubbletea models: root, list, preview, cmdline, confirm, help; theme
 ```
 

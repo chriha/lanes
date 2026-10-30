@@ -837,6 +837,7 @@ footer shows the error.
 ```toml
 [settings]
 poll_interval = "30s"   # how often lists refresh (minimum 5s)
+poll_interval_blurred = "5m"  # how often lists refresh while the terminal is unfocused (never below poll_interval)
 preview       = false   # open the preview pane at startup
 no_notify     = false   # disable desktop notifications
 claude_dir    = "~/.claude"   # show this Claude profile's usage in the footer (see Claude Code integration)

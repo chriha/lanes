@@ -152,6 +152,7 @@ func (m *Model) applyConfig(cfg *config.Config) {
 			continue
 		}
 		m.providers[name] = p
+		delete(m.provErr, name) // built again: drop the stale build error until the next fetch
 		if _, ok := m.data[name]; !ok {
 			m.data[name] = cache.Load(name)
 		}

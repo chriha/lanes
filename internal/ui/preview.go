@@ -104,7 +104,12 @@ func (m *Model) preview() string {
 				lines = append(lines, " "+sDim.Render(fmt.Sprintf("%-12s", k))+sText.Render(v))
 			}
 		}
-		lines = append(lines, m.previewSessions(cur)...)
+		// the session and last-run lines outrank the field lines: trim the fields to make room
+		extra := m.previewSessions(cur)
+		if room := previewH - len(extra); len(lines) > room {
+			lines = lines[:max(room, 0)]
+		}
+		lines = append(lines, extra...)
 	}
 	for i := range lines {
 		lines[i] = ansi.Truncate(lines[i], m.width, "…")

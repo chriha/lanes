@@ -68,7 +68,7 @@ func RunHook(event string) {
 }
 
 // hookCommand is the shell command Claude runs for a hook event.
-func hookCommand(exe, event string) string { return "'" + exe + "' hook " + event }
+func hookCommand(exe, event string) string { return shq(exe) + " hook " + event }
 
 // SettingsFile writes the Claude settings (hooks only) that actions pass via `claude --settings`.
 func SettingsFile() (string, error) {

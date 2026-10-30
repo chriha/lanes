@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -610,5 +611,17 @@ func TestSettingsFileIsPrivate(t *testing.T) {
 	}
 	if fi, err := os.Stat(p); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("settings = %v, %v; want 0600", fi, err)
+	}
+}
+
+func TestHookCommandQuotesExecutablePath(t *testing.T) {
+	for _, exe := range []string{"/usr/bin/lanes", "/opt/my dir/it's $HOME `x`/lanes"} {
+		out, err := exec.Command("sh", "-c", "printf '%s\\n' "+hookCommand(exe, "Stop")).Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := string(out), exe+"\nhook\nStop\n"; got != want {
+			t.Errorf("exe %q: words = %q, want %q", exe, got, want)
+		}
 	}
 }

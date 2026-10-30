@@ -85,6 +85,7 @@ type Model struct {
 	cmdline  textinput.Model
 	pendingG bool
 	notice   string
+	clip     func(string) error // nil: the system clipboard (tests fake it)
 
 	sess       *session.Manager
 	settings   string

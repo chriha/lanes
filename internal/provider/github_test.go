@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -24,8 +25,8 @@ const ghResponse = `{"data":{"viewer":{"login":"me"},"repository":{"pullRequests
  "latestReviews":{"nodes":[{"state":"APPROVED","author":{"login":"me"}},{"state":"COMMENTED","author":{"login":"kim"}}]},
  "commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"FAILURE"}}}]},
  "reviewThreads":{"nodes":[
-   {"isResolved":false,"comments":{"nodes":[{"author":{"login":"me"}}]}},
-   {"isResolved":true,"comments":{"nodes":[{"author":{"login":"kim"}}]}}]}},
+   {"id":"T1","isResolved":false},
+   {"id":"T2","isResolved":true}]}},
 {"number":13,"title":"wip","url":"https://github.com/o/r/pull/13","isDraft":true,
  "headRefName":"wip","baseRefName":"main","mergeable":"CONFLICTING","mergeStateStatus":"BEHIND",
  "reviewDecision":null,"author":{"login":"me"},
@@ -35,10 +36,145 @@ const ghResponse = `{"data":{"viewer":{"login":"me"},"repository":{"pullRequests
  "reviewThreads":{"nodes":[]}}
 ]}}}}`
 
+// ghThreadAuthors answers the author lookup for the threads in ghResponse.
+const ghThreadAuthors = `{"data":{"nodes":[{"id":"T1","comments":{"nodes":[{"author":{"login":"me"}}]}}]}}`
+
+// fakeGH answers the PR query with out and records its args in gotArgs; author lookups (ids[] args) get
+// ghThreadAuthors.
 func fakeGH(out string, err error, gotArgs *[]string) func(context.Context, ...string) ([]byte, error) {
 	return func(_ context.Context, args ...string) ([]byte, error) {
+		if strings.Contains(strings.Join(args, " "), "ids[]=") {
+			return []byte(ghThreadAuthors), nil
+		}
 		*gotArgs = args
 		return []byte(out), err
+	}
+}
+
+// lookups returns the thread ids of each author lookup in calls.
+func lookups(calls [][]string) [][]string {
+	var out [][]string
+	for _, args := range calls {
+		var ids []string
+		for _, a := range args {
+			if id, ok := strings.CutPrefix(a, "ids[]="); ok {
+				ids = append(ids, id)
+			}
+		}
+		if ids != nil {
+			out = append(out, ids)
+		}
+	}
+	return out
+}
+
+func TestGitHubThreadAuthorsIncremental(t *testing.T) {
+	body := func(threads string) string {
+		return `{"data":{"viewer":{"login":"me"},"repository":{"pullRequests":{"nodes":[{"number":1,"title":"t","url":"u","reviewThreads":{"nodes":[` +
+			threads + `]}}]}}}}`
+	}
+	one := `{"id":"T1","isResolved":false},{"id":"T9","isResolved":true}`
+	two := one + `,{"id":"T3","isResolved":false}`
+
+	var calls [][]string
+	var cur string
+	lookupOut := ghThreadAuthors
+	lookupErr := error(nil)
+	g := &GitHub{Project: "o/r", Run: func(_ context.Context, args ...string) ([]byte, error) {
+		calls = append(calls, args)
+		if strings.Contains(strings.Join(args, " "), "ids[]=") {
+			return []byte(lookupOut), lookupErr
+		}
+		return []byte(cur), nil
+	}}
+	fetch := func(threads string) item.Item {
+		t.Helper()
+		cur = body(threads)
+		calls = nil
+		items, err := g.Fetch(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return items[0]
+	}
+
+	it := fetch(one)
+	if got, want := lookups(calls), [][]string{{"T1"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("first fetch lookups = %v, want %v (resolved T9 must not be looked up)", got, want)
+	}
+	if it.Fields["open_thread_by_me"] != true || it.Fields["open_threads"] != 1 || it.Pending != nil {
+		t.Errorf("first fetch: by_me=%v open=%v pending=%v", it.Fields["open_thread_by_me"], it.Fields["open_threads"], it.Pending)
+	}
+
+	it = fetch(one)
+	if got := lookups(calls); got != nil {
+		t.Errorf("second fetch lookups = %v, want none", got)
+	}
+	if it.Fields["open_thread_by_me"] != true {
+		t.Errorf("second fetch: open_thread_by_me = %v, want true from cache", it.Fields["open_thread_by_me"])
+	}
+
+	lookupOut = `{"data":{"nodes":[{"id":"T3","comments":{"nodes":[{"author":{"login":"kim"}}]}}]}}`
+	it = fetch(two)
+	if got, want := lookups(calls), [][]string{{"T3"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("new thread lookups = %v, want %v", got, want)
+	}
+	if it.Fields["open_threads"] != 2 || it.Fields["open_thread_by_me"] != true {
+		t.Errorf("new thread: open=%v by_me=%v", it.Fields["open_threads"], it.Fields["open_thread_by_me"])
+	}
+}
+
+func TestGitHubThreadAuthorLookupBatches(t *testing.T) {
+	var threads []string
+	for i := range 250 {
+		threads = append(threads, fmt.Sprintf(`{"id":"T%d","isResolved":false}`, i))
+	}
+	prs := `{"data":{"viewer":{"login":"me"},"repository":{"pullRequests":{"nodes":[{"number":1,"title":"t","url":"u","reviewThreads":{"nodes":[` +
+		strings.Join(threads, ",") + `]}}]}}}}`
+	var calls [][]string
+	g := &GitHub{Project: "o/r", Run: func(_ context.Context, args ...string) ([]byte, error) {
+		calls = append(calls, args)
+		if strings.Contains(strings.Join(args, " "), "ids[]=") {
+			return []byte(`{"data":{"nodes":[]}}`), nil
+		}
+		return []byte(prs), nil
+	}}
+	if _, err := g.Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var sizes []int
+	for _, ids := range lookups(calls) {
+		sizes = append(sizes, len(ids))
+	}
+	if want := []int{100, 100, 50}; !reflect.DeepEqual(sizes, want) {
+		t.Errorf("lookup batch sizes = %v, want %v", sizes, want)
+	}
+}
+
+func TestGitHubThreadAuthorLookupFailure(t *testing.T) {
+	for name, lookup := range map[string]func() ([]byte, error){
+		"run error":     func() ([]byte, error) { return nil, errors.New("exit 1") },
+		"graphql error": func() ([]byte, error) { return []byte(`{"errors":[{"message":"boom"}]}`), nil },
+		"bad json":      func() ([]byte, error) { return []byte(`nope`), nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			g := &GitHub{Project: "o/r", Run: func(_ context.Context, args ...string) ([]byte, error) {
+				if strings.Contains(strings.Join(args, " "), "ids[]=") {
+					return lookup()
+				}
+				return []byte(ghResponse), nil
+			}}
+			items, err := g.Fetch(context.Background())
+			if err != nil {
+				t.Fatalf("Fetch err = %v, want the lookup failure swallowed", err)
+			}
+			if len(items) != 2 || !reflect.DeepEqual(items[0].Pending, []string{"open_thread_by_me"}) {
+				t.Errorf("item 0 pending = %v, want [open_thread_by_me]", items[0].Pending)
+			}
+			if items[0].Fields["open_threads"] != 1 || items[1].Pending != nil {
+				t.Errorf("open_threads = %v, item 1 pending = %v", items[0].Fields["open_threads"], items[1].Pending)
+			}
+		})
 	}
 }
 

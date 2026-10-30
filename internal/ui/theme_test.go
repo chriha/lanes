@@ -93,3 +93,32 @@ func TestApplyThemeSystemPrecedence(t *testing.T) {
 		}
 	}
 }
+
+func TestApplyThemeLabelColors(t *testing.T) {
+	trueColorTheme(t)
+	applyTheme(config.Theme{
+		Mode:   "system",
+		Colors: config.Colors{Labels: map[string]string{"bug": "#010101", "Docs": "#020202", "flat-only": "#030303"}},
+		Light:  config.Colors{Labels: map[string]string{"BUG": "#040404", "light-only": "#050505"}},
+		Dark:   config.Colors{Labels: map[string]string{"docs": "#060606"}},
+	})
+	tests := []struct {
+		label string
+		want  lipgloss.AdaptiveColor
+		ok    bool
+	}{
+		{"bug", lipgloss.AdaptiveColor{Light: "#040404", Dark: "#010101"}, true},  // light table, flat on dark
+		{"docs", lipgloss.AdaptiveColor{Light: "#020202", Dark: "#060606"}, true}, // flat on light, dark table
+		{"flat-only", lipgloss.AdaptiveColor{Light: "#030303", Dark: "#030303"}, true},
+		{"light-only", lipgloss.AdaptiveColor{Light: "#050505", Dark: cText.Dark}, true}, // dark falls back to text
+		{"other", lipgloss.AdaptiveColor{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			got, ok := cLabels[tt.label]
+			if ok != tt.ok || got != tt.want {
+				t.Errorf("cLabels[%q] = %+v, %v; want %+v, %v", tt.label, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}

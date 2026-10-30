@@ -166,8 +166,11 @@ const projectTail = `
 # text = "#E6E8EE"
 # dim = "#6B7280"
 # selection = "#3A3560"
+# labels = { bug = "#F87171", needs-info = "#FBBF24" }  # preview label colors by name, case-insensitive
 # [theme.light]        # same color keys, light mode only; they win over the flat [theme] keys
 # accent = "#6C3FD1"
 # [theme.dark]         # same color keys, dark mode only
 # accent = "#A78BFA"
+# [theme.dark.labels]  # also [theme.labels] / [theme.light.labels]; merged per label with the global config
+# bug = "#FCA5A5"
 `

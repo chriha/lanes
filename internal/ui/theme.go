@@ -2,6 +2,7 @@ package ui
 
 import (
 	"cmp"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -22,6 +23,9 @@ var (
 )
 
 var base [8]lipgloss.AdaptiveColor
+
+// cLabels maps a lowercased label name to its resolved color; a label without an entry renders in cText.
+var cLabels map[string]lipgloss.AdaptiveColor
 
 // detectedDark is the terminal background lipgloss detected before the first forced mode; nil = never forced.
 var detectedDark *bool
@@ -55,8 +59,42 @@ func applyTheme(t config.Theme) {
 		pal[i].Dark = cmp.Or(dark[i], flat[i], pal[i].Dark)
 	}
 	cAccent, cOK, cWarn, cBad, cInfo, cText, cDim, cSelBg = pal[0], pal[1], pal[2], pal[3], pal[4], pal[5], pal[6], pal[7]
+	cLabels = labelColors(t)
 	applyMode(t.Mode)
 	buildStyles()
+}
+
+// labelColors resolves each label's color by lowercased name: per side, the [theme.light.labels] /
+// [theme.dark.labels] entry wins over the flat [theme.labels] one, which wins over the resolved text color.
+func labelColors(t config.Theme) map[string]lipgloss.AdaptiveColor {
+	flat, light, dark := lowerKeys(t.Labels), lowerKeys(t.Light.Labels), lowerKeys(t.Dark.Labels)
+	out := map[string]lipgloss.AdaptiveColor{}
+	for _, table := range []map[string]string{flat, light, dark} {
+		for name := range table {
+			out[name] = lipgloss.AdaptiveColor{
+				Light: cmp.Or(light[name], flat[name], cText.Light),
+				Dark:  cmp.Or(dark[name], flat[name], cText.Dark),
+			}
+		}
+	}
+	return out
+}
+
+// lowerKeys copies labels with lowercased names; config validation rejects names that differ only in case.
+func lowerKeys(labels map[string]string) map[string]string {
+	out := make(map[string]string, len(labels))
+	for name, hex := range labels {
+		out[strings.ToLower(name)] = hex
+	}
+	return out
+}
+
+// labelStyle renders a label in its [theme.labels] color, or in the text color without an entry.
+func labelStyle(name string) lipgloss.Style {
+	if c, ok := cLabels[strings.ToLower(name)]; ok {
+		return lipgloss.NewStyle().Foreground(c)
+	}
+	return sText
 }
 
 // hexes lists the colors in base's order.

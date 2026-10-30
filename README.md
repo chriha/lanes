@@ -899,9 +899,22 @@ selection = "#2E2A4F"  # dark mode only
 Global config and `.lanes.toml` merge per field, also within `[theme.light]` and `[theme.dark]`. An invalid `mode` is a
 config error, like an invalid color.
 
-Colors must be `#RGB` or `#RRGGBB` (case-insensitive); an empty value keeps the default. Anything else (`A78BFA`,
-`red`, `212`) is a config error: `lanes` refuses to start, keeps the previous config on reload, and
-`lanes doctor` reports a failing `config` line.
+`[theme.labels]` colors labels in the preview's `labels` line by name. Names match case-insensitively (`Bug` uses the
+key `bug`); a label without an entry keeps the text color. `[theme.light.labels]` and `[theme.dark.labels]` work like
+the other per-mode tables: per label, the active mode's entry wins over `[theme.labels]`, which wins over the text color.
+Global config and `.lanes.toml` merge per label. Two names in one table that differ only in case are a config error:
+
+```toml
+[theme.labels]
+bug = "#F87171"
+needs-info = "#FBBF24"
+[theme.light.labels]
+bug = "#C53030"        # light mode only
+```
+
+Colors must be `#RGB` or `#RRGGBB` (case-insensitive); an empty value keeps the default (a label color cannot be
+empty). Anything else (`A78BFA`, `red`, `212`) is a config error: `lanes` refuses to start, keeps the previous config
+on reload, and `lanes doctor` reports a failing `config` line.
 
 ### Where things live
 

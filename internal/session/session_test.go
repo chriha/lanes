@@ -592,3 +592,23 @@ func TestInterrupt(t *testing.T) {
 		})
 	}
 }
+
+func TestSettingsFileIsPrivate(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	p, err := SettingsFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(filepath.Dir(p)); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Errorf("state dir = %v, %v; want 0700", fi, err)
+	}
+	if err := os.Chmod(p, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SettingsFile(); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(p); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("settings = %v, %v; want 0600", fi, err)
+	}
+}

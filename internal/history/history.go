@@ -25,14 +25,15 @@ func Append(e Event) {
 	if e.Time.IsZero() {
 		e.Time = time.Now()
 	}
-	if os.MkdirAll(filepath.Dir(path()), 0o755) != nil {
+	if os.MkdirAll(filepath.Dir(path()), app.DirMode) != nil {
 		return
 	}
-	f, err := os.OpenFile(path(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, app.FileMode)
 	if err != nil {
 		return
 	}
 	defer f.Close()
+	_ = f.Chmod(app.FileMode) // tighten a file an older version created 0644
 	b, _ := json.Marshal(e)
 	_, _ = f.Write(append(b, '\n'))
 }

@@ -64,7 +64,7 @@ func RunHook(event string) {
 		return
 	}
 	b, _ := json.Marshal(map[string]any{"state": state, "at": time.Now().Unix()})
-	_ = os.WriteFile(hookStatePath(name), b, 0o644)
+	_ = app.WriteFile(hookStatePath(name), b)
 }
 
 // SettingsFile writes the Claude settings (hooks only) that actions pass via `claude --settings`.
@@ -85,10 +85,10 @@ func SettingsFile() (string, error) {
 	}}
 	b, _ := json.MarshalIndent(settings, "", "  ")
 	p := filepath.Join(app.StateDir(), "claude-settings.json")
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), app.DirMode); err != nil {
 		return "", err
 	}
-	return p, os.WriteFile(p, b, 0o644)
+	return p, app.WriteFile(p, b)
 }
 
 // UsageFile is what a Claude Code mod writes into a Claude config dir: the statusline's usage text and when.

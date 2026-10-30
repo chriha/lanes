@@ -450,6 +450,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.usage = msg
 	case sessionsMsg:
 		m.onSessions(msg)
+	case interruptedMsg:
+		if m.interrupted == nil {
+			m.interrupted = map[string]bool{}
+		}
+		for _, n := range msg.names {
+			m.interrupted[n] = true
+		}
+		return m.Update(doneMsg{notice: msg.notice})
 	case doneMsg:
 		m.notice = msg.notice
 		if msg.refresh {

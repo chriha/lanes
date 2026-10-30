@@ -10,15 +10,22 @@ import (
 	"github.com/chriha/lanes/internal/session"
 )
 
-// paneTmux puts a tmux on PATH that logs each call and reports every pane as dead ("1 0"), so Interrupt
-// never looks up or signals a real process; exit is the fake's exit status. It returns the log's path.
+// paneTmux puts a tmux and a ps on PATH: tmux logs each call and reports every pane as alive with pid 4242,
+// ps gives that pane one child in process group 99999999, beyond any pid limit, so the real signal Interrupt
+// sends reaches no process (ESRCH, which counts as gone). exit is the fake tmux's exit status. It returns the
+// tmux log's path.
 func paneTmux(t *testing.T, exit int) string {
 	t.Helper()
 	dir := t.TempDir()
 	log := filepath.Join(dir, "calls")
-	script := "#!/bin/sh\necho \"$*\" >> " + shq(log) + "\necho '1 0'\nexit " + string(rune('0'+exit)) + "\n"
-	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
+	fakes := map[string]string{
+		"tmux": "#!/bin/sh\necho \"$*\" >> " + shq(log) + "\necho '0 4242'\nexit " + string(rune('0'+exit)) + "\n",
+		"ps":   "#!/bin/sh\necho '99999999 4242 99999999'\n",
+	}
+	for name, script := range fakes {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return log
@@ -134,6 +141,9 @@ func TestInterruptError(t *testing.T) {
 	}
 	if evs := history.For("1"); len(evs) != 0 {
 		t.Errorf("history = %+v, want no interrupted event for a failed interrupt", evs)
+	}
+	if m.interrupted["fix~1"] {
+		t.Error("failed interrupt remembered: the next X would send SIGKILL")
 	}
 }
 

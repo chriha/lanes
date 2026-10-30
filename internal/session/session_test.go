@@ -557,16 +557,17 @@ func TestInterrupt(t *testing.T) {
 		force    bool
 		wantSent []sent
 		wantErr  bool
+		wantSig  bool // reported as signalled
 	}{
-		{"terms each child's group once", "0 100", nil, ps, nil, nil, false, []sent{{200, syscall.SIGTERM}, {300, syscall.SIGTERM}}, false},
-		{"force kills", "0 100", nil, ps, nil, nil, true, []sent{{200, syscall.SIGKILL}, {300, syscall.SIGKILL}}, false},
-		{"no children: the pane runs the command itself", "0 400", nil, ps, nil, nil, false, []sent{{400, syscall.SIGTERM}}, false},
-		{"dead pane is left alone", "1 100", nil, ps, nil, nil, false, nil, false},
-		{"tmux error surfaced", "", errors.New("no such session"), ps, nil, nil, false, nil, true},
-		{"bad pane pid", "0 abc", nil, ps, nil, nil, false, nil, true},
-		{"ps error surfaced", "0 100", nil, "", errors.New("ps failed"), nil, false, nil, true},
-		{"signal error surfaced", "0 100", nil, ps, nil, syscall.EPERM, false, []sent{{200, syscall.SIGTERM}, {300, syscall.SIGTERM}}, true},
-		{"already gone is no error", "0 100", nil, ps, nil, syscall.ESRCH, false, []sent{{200, syscall.SIGTERM}, {300, syscall.SIGTERM}}, false},
+		{"terms each child's group once", "0 100", nil, ps, nil, nil, false, []sent{{200, syscall.SIGTERM}, {300, syscall.SIGTERM}}, false, true},
+		{"force kills", "0 100", nil, ps, nil, nil, true, []sent{{200, syscall.SIGKILL}, {300, syscall.SIGKILL}}, false, true},
+		{"no children: the pane runs the command itself", "0 400", nil, ps, nil, nil, false, []sent{{400, syscall.SIGTERM}}, false, true},
+		{"dead pane is left alone", "1 100", nil, ps, nil, nil, false, nil, false, false},
+		{"tmux error surfaced", "", errors.New("no such session"), ps, nil, nil, false, nil, true, false},
+		{"bad pane pid", "0 abc", nil, ps, nil, nil, false, nil, true, false},
+		{"ps error surfaced", "0 100", nil, "", errors.New("ps failed"), nil, false, nil, true, false},
+		{"signal error surfaced", "0 100", nil, ps, nil, syscall.EPERM, false, []sent{{200, syscall.SIGTERM}, {300, syscall.SIGTERM}}, true, false},
+		{"already gone is no error", "0 100", nil, ps, nil, syscall.ESRCH, false, []sent{{200, syscall.SIGTERM}, {300, syscall.SIGTERM}}, false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -578,9 +579,9 @@ func TestInterrupt(t *testing.T) {
 				got = append(got, sent{pgid, sig})
 				return tt.sigErr
 			}
-			err := m.Interrupt("fix~1", tt.force)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("err = %v, want error %v", err, tt.wantErr)
+			sig, err := m.Interrupt("fix~1", tt.force)
+			if (err != nil) != tt.wantErr || sig != tt.wantSig {
+				t.Errorf("signalled %v, err %v; want signalled %v, error %v", sig, err, tt.wantSig, tt.wantErr)
 			}
 			if !slices.Equal(got, tt.wantSent) {
 				t.Errorf("signals = %v, want %v", got, tt.wantSent)

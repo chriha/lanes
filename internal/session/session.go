@@ -172,23 +172,24 @@ func (m *Manager) Kill(name string) error {
 // and exit status stay: SIGTERM, or SIGKILL with force. The pane runs an interactive shell, which ignores
 // SIGTERM, so the signal goes to the process group of each of its children (with job control each job leads
 // its own group). Without children the pane runs the command itself and its own group is signalled.
-// A dead pane, or a process that is gone by the time it is signalled, is not an error.
-func (m *Manager) Interrupt(name string, force bool) error {
+// A dead pane is not signalled and reports signalled false; a process that is gone by the time it is
+// signalled is not an error.
+func (m *Manager) Interrupt(name string, force bool) (signalled bool, err error) {
 	out, err := m.run("display-message", "-p", "-t", "="+name+":", "#{pane_dead} #{pane_pid}")
 	if err != nil {
-		return fmt.Errorf("tmux: %s", strings.TrimSpace(string(out)))
+		return false, fmt.Errorf("tmux: %s", strings.TrimSpace(string(out)))
 	}
 	dead, pidStr, _ := strings.Cut(strings.TrimSpace(string(out)), " ")
 	if dead == "1" {
-		return nil
+		return false, nil
 	}
 	pane, err := strconv.Atoi(pidStr)
 	if err != nil || pane <= 1 {
-		return fmt.Errorf("tmux: bad pane pid %q", pidStr)
+		return false, fmt.Errorf("tmux: bad pane pid %q", pidStr)
 	}
 	ps, err := m.ps()
 	if err != nil {
-		return fmt.Errorf("ps: %w", err)
+		return false, fmt.Errorf("ps: %w", err)
 	}
 	var groups []int
 	for _, line := range strings.Split(string(ps), "\n") {
@@ -213,7 +214,7 @@ func (m *Manager) Interrupt(name string, force bool) error {
 			first = fmt.Errorf("signal %d: %w", g, err)
 		}
 	}
-	return first
+	return first == nil, first
 }
 
 // Prune kills the dead sessions of a fresh listing (with failedOnly, only those with a non-zero exit) and

@@ -496,25 +496,37 @@ func (m *Model) interruptSessions(infos []session.Info) tea.Cmd {
 	}
 	mgr := m.sess
 	m.ask(fmt.Sprintf("Interrupt %d running session(s)?", len(alive)), func() tea.Cmd {
-		if m.interrupted == nil {
-			m.interrupted = map[string]bool{}
-		}
 		force := map[string]bool{}
 		for _, s := range alive {
 			force[s.Name] = m.interrupted[s.Name]
-			m.interrupted[s.Name] = true
 		}
 		return func() tea.Msg {
+			var done []string
+			var first error
 			for _, s := range alive {
-				if err := mgr.Interrupt(s.Name, force[s.Name]); err != nil {
-					return doneMsg{notice: fmt.Sprintf("✗ interrupt %s: %v", s.Name, err)}
+				sig, err := mgr.Interrupt(s.Name, force[s.Name])
+				if err != nil && first == nil {
+					first = fmt.Errorf("%s: %w", s.Name, err)
 				}
-				history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: "interrupted"})
+				if sig {
+					done = append(done, s.Name)
+					history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: "interrupted"})
+				}
 			}
-			return doneMsg{notice: fmt.Sprintf("interrupted %d session(s)", len(alive))}
+			note := fmt.Sprintf("interrupted %d session(s)", len(done))
+			if first != nil {
+				note = "✗ interrupt " + first.Error()
+			}
+			return interruptedMsg{names: done, notice: note}
 		}
 	})
 	return nil
+}
+
+// interruptedMsg reports the sessions an interrupt signalled; the next X on one still alive sends SIGKILL.
+type interruptedMsg struct {
+	names  []string
+	notice string
 }
 
 // shell runs the built-in shell action on it alone (marks are ignored and kept) and jumps into it.

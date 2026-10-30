@@ -26,12 +26,11 @@ func main() {
 	wd, _ := os.Getwd()
 	os.Exit(run(os.Args[1:], env{
 		wd: wd, isTTY: stdinIsTerminal(), stdout: os.Stdout, stderr: os.Stderr,
-		projectPath: config.ProjectPath,
-		ask:         ui.AskTrust,
-		initApp:     app.Init,
-		hook:        session.RunHook,
-		status:      runStatus,
-		doctor:      func() int { return runDoctor(os.Stdout, realDoctorEnv()) },
+		ask:     ui.AskTrust,
+		initApp: app.Init,
+		hook:    session.RunHook,
+		status:  runStatus,
+		doctor:  func() int { return runDoctor(os.Stdout, realDoctorEnv()) },
 		init: func() int {
 			return runInit(os.Stdin, stdinIsTerminal(), os.Stdout, os.Stderr, wd, provider.OriginForge)
 		},
@@ -57,7 +56,6 @@ type env struct {
 	wd             string
 	isTTY          bool
 	stdout, stderr io.Writer
-	projectPath    func() string                   // the .lanes.toml that config would load ("" = none)
 	ask            func(root string) (bool, error) // the trust dialog
 	initApp        func(dir string)                // app.Init: runs git in the project
 	hook           func(event string)
@@ -79,7 +77,7 @@ func run(args []string, e env) int {
 	}
 	// Nothing below may run git, load the config or start a provider before the project is trusted.
 	root := trust.Root(e.wd)
-	hash, err := trust.Hash(e.projectPath())
+	hash, err := trust.HashRoot(root)
 	trusted := false
 	if err == nil {
 		trusted, err = trust.IsTrusted(root, hash)
@@ -126,7 +124,7 @@ func run(args []string, e env) int {
 	case "init":
 		code := e.init()
 		// the user wrote .lanes.toml through lanes: trust its new content
-		if hash, err := trust.Hash(e.projectPath()); err != nil {
+		if hash, err := trust.HashRoot(root); err != nil {
 			fmt.Fprintf(e.stderr, "%s: %v\n", app.Name, err)
 		} else if err := trust.Trust(root, hash); err != nil {
 			fmt.Fprintf(e.stderr, "%s: %v\n", app.Name, err)

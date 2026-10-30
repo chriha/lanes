@@ -248,3 +248,36 @@ func TestDoctor(t *testing.T) {
 		})
 	}
 }
+
+func TestDoctorBadThemeColor(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+	t.Setenv("HOME", tmp)
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	cfgDir := filepath.Join(tmp, "cfg", "lanes")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "[provider.gl]\ntype = \"gitlab\"\n[[view]]\nname = \"a\"\nprovider = \"gl\"\n[theme]\naccent = \"A78BFA\"\n"
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e := doctorEnv{
+		lookPath:  func(name string) (string, error) { return "/usr/bin/" + name, nil },
+		run:       func(string, ...string) (string, error) { return "tmux 3.4\n", nil },
+		getenv:    func(string) string { return "" },
+		load:      config.Load,
+		overrides: func() (*config.Overrides, error) { return &config.Overrides{Filters: map[string]string{}}, nil },
+	}
+	var b bytes.Buffer
+	if code := runDoctor(&b, e); code != 1 {
+		t.Errorf("exit %d, want 1\n%s", code, b.String())
+	}
+	if want := `theme.accent "A78BFA"`; !strings.Contains(b.String(), "fail  config:") || !strings.Contains(b.String(), want) {
+		t.Errorf("output lacks a failing config line with %q\n%s", want, b.String())
+	}
+}

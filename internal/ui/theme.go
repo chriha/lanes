@@ -16,7 +16,7 @@ var (
 	cInfo   = lipgloss.AdaptiveColor{Light: "#2B6CB0", Dark: "#60A5FA"}
 	cSelBg  = lipgloss.AdaptiveColor{Light: "#DDD6F5", Dark: "#3A3560"}
 
-	sTitle, sTab, sTabOn, sDim, sText, sID, sMark, sErr, sRule, sKey, sSelected, sWarn lipgloss.Style
+	sTitle, sTab, sTabOn, sDim, sText, sID, sMark, sErr, sRule, sKey, sWarn lipgloss.Style
 )
 
 var base [5]lipgloss.AdaptiveColor
@@ -37,7 +37,6 @@ func buildStyles() {
 	sErr = lipgloss.NewStyle().Foreground(cBad)
 	sRule = lipgloss.NewStyle().Foreground(cDim)
 	sKey = lipgloss.NewStyle().Foreground(cAccent).Bold(true)
-	sSelected = lipgloss.NewStyle().Background(cSelBg)
 	sWarn = lipgloss.NewStyle().Foreground(cWarn).Bold(true)
 }
 

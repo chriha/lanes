@@ -15,7 +15,6 @@ import (
 
 	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/config"
-	"github.com/chriha/lanes/internal/filter"
 	"github.com/chriha/lanes/internal/history"
 	"github.com/chriha/lanes/internal/item"
 	"github.com/chriha/lanes/internal/session"
@@ -121,9 +120,12 @@ func (m *Model) targets() []item.Item {
 // matchWhen splits its into the items the action's when expression matches and the ones it skips.
 // An expression that fails on an item counts as no match; the first such error is returned.
 func matchWhen(act config.Action, its []item.Item) (match, skip []item.Item, err error) {
-	f, err := filter.Compile(act.When) // validated at config load; an error here skips everything
-	if err != nil {
-		return nil, its, err
+	f := act.WhenFilter // compiled once at config load
+	if f == nil {
+		if act.When != "" { // never compiled: fail closed rather than run on items the expression would exclude
+			return nil, its, fmt.Errorf("when %q was not compiled", act.When)
+		}
+		return its, nil, nil
 	}
 	for _, it := range its {
 		ok, merr := f.Match(it.Env())

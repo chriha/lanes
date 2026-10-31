@@ -229,6 +229,9 @@ run = "echo work"
 			if got := c.Action["work"].When; got != want {
 				t.Errorf("when = %q, want %q", got, want)
 			}
+			if c.Action["work"].WhenFilter == nil {
+				t.Error("WhenFilter is nil after load, want the compiled when")
+			}
 		})
 	}
 }
@@ -720,6 +723,65 @@ bug = "#444444"
 			}
 			if !reflect.DeepEqual(c.Theme.Dark.Labels, tt.wantDk) {
 				t.Errorf("theme.dark.labels = %v, want %v", c.Theme.Dark.Labels, tt.wantDk)
+			}
+		})
+	}
+}
+
+func TestActionWhenFilterSurvivesProjectOverlay(t *testing.T) {
+	tmp := t.TempDir()
+	proj := filepath.Join(tmp, "proj")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+	t.Setenv("HOME", tmp)
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(proj); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[action.shared]
+run = "echo shared"
+when = 'kind == "ticket"'
+[action.over]
+run = "echo global"
+when = 'kind == "ticket"'
+`)
+	write(t, filepath.Join(proj, ProjectFile), `
+[action.over]
+run = "echo project"
+when = 'kind == "pr"'
+`)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		action string
+		kind   string
+		want   bool
+	}{
+		{"shared", "ticket", true},
+		{"shared", "pr", false},
+		{"over", "pr", true},
+		{"over", "ticket", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.action+"/"+tt.kind, func(t *testing.T) {
+			f := c.Action[tt.action].WhenFilter
+			if f == nil {
+				t.Fatal("WhenFilter is nil")
+			}
+			got, err := f.Match(map[string]any{"kind": tt.kind})
+			if err != nil || got != tt.want {
+				t.Errorf("Match(kind=%s) = %v, %v; want %v", tt.kind, got, err, tt.want)
 			}
 		})
 	}

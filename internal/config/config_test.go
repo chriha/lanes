@@ -669,6 +669,8 @@ bug = "#111111"
 docs = "#222222"
 [theme.dark.labels]
 bug = "#333333"
+[theme.light.labels]
+bug = "#444444"
 `
 	tests := []struct {
 		name    string
@@ -681,6 +683,10 @@ bug = "#333333"
 			map[string]string{"Bug": "#aaaaaa", "docs": "#222222"}, map[string]string{"bug": "#333333"}, ""},
 		{"same for a mode table", "[theme.dark.labels]\nBUG = \"#aaaaaa\"\n",
 			map[string]string{"bug": "#111111", "docs": "#222222"}, map[string]string{"BUG": "#aaaaaa"}, ""},
+		{"light table", "[theme.light.labels]\nBug = \"#aaaaaa\"\n",
+			map[string]string{"bug": "#111111", "docs": "#222222"}, map[string]string{"bug": "#333333"}, ""},
+		{"exact match still overrides", "[theme.labels]\nbug = \"#aaaaaa\"\n",
+			map[string]string{"bug": "#aaaaaa", "docs": "#222222"}, map[string]string{"bug": "#333333"}, ""},
 		{"two keys in the project table still conflict", "[theme.labels]\nBug = \"#aaaaaa\"\nBUG = \"#bbbbbb\"\n",
 			nil, nil, "labels.Bug: same label as theme.labels.BUG"},
 	}
@@ -689,8 +695,11 @@ bug = "#333333"
 			tmp := t.TempDir()
 			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
 			t.Setenv("HOME", tmp)
-			old, _ := os.Getwd()
-			defer os.Chdir(old)
+			old, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chdir(old) })
 			if err := os.Chdir(tmp); err != nil {
 				t.Fatal(err)
 			}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/config"
+	"github.com/chriha/lanes/internal/trust"
 )
 
 func TestNoticeLevels(t *testing.T) {
@@ -22,19 +23,64 @@ func TestNoticeLevels(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	project := func(t *testing.T) string {
+		t.Helper()
+		dir, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, config.ProjectFile), []byte("# a\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		hash, err := trust.HashRoot(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := trust.Trust(dir, hash); err != nil {
+			t.Fatal(err)
+		}
+		old, _ := os.Getwd()
+		t.Cleanup(func() { os.Chdir(old) })
+		if err := os.Chdir(dir); err != nil {
+			t.Fatal(err)
+		}
+		return dir
+	}
 	tests := []struct {
 		name string
 		do   func(t *testing.T, m *Model)
 		want level
 	}{
 		{"config error", func(t *testing.T, m *Model) {
+			project(t)
 			cfgFile(t, "not [valid")
 			m.reload()
+		}, lvErr},
+		{"untrusted project change", func(t *testing.T, m *Model) {
+			dir := project(t)
+			if err := os.WriteFile(filepath.Join(dir, config.ProjectFile), []byte("# b\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			m.reload()
+			if !strings.Contains(m.notice, "restart lanes to trust it") {
+				t.Fatalf("notice = %q", m.notice)
+			}
+		}, lvWarn},
+		{"trust state unreadable", func(t *testing.T, m *Model) {
+			project(t)
+			if err := os.WriteFile(filepath.Join(app.StateRoot(), "trust.json"), []byte("not json"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			m.reload()
+			if !strings.HasPrefix(m.notice, "trust: ") {
+				t.Fatalf("notice = %q", m.notice)
+			}
 		}, lvErr},
 		{"tmux unavailable", func(t *testing.T, m *Model) { m.sess = nil; m.runCommand("prune") }, lvWarn},
 		{"unknown command", func(t *testing.T, m *Model) { m.runCommand("bogus") }, lvWarn},
 		{"built-in key ignored on reload", func(t *testing.T, m *Model) {
-			cfgFile(t, "[action.quick]\ntype = \"run\"\nrun = \"true\"\n[keymap]\nj = \"quick\"\n")
+			project(t)
+			cfgFile(t, "[provider.p]\ntype = \"command\"\ncommand = \"true\"\n[[view]]\nname = \"v\"\nprovider = \"p\"\n[action.quick]\ntype = \"run\"\nrun = \"true\"\n[keymap]\nj = \"quick\"\n")
 			m.reload()
 			if !strings.Contains(m.notice, "built in and ignored") {
 				t.Fatalf("notice = %q", m.notice)

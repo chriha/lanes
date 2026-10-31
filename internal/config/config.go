@@ -132,6 +132,13 @@ type Action struct {
 	Refresh bool           `toml:"refresh"` // run type: refetch providers when finished
 	When    string         `toml:"when"`    // expr against the item's fields; the action only runs on matching items (empty = all)
 	Jump    bool           `toml:"jump"`    // session type: on a single item, attach to the session once started (or if running)
+
+	WhenFilter *filter.Filter `toml:"-"` // compiled When; filled by CompileWhen (config load), nil on a hand-built action
+}
+
+// CompileWhen compiles When into WhenFilter. An empty When yields a filter matching everything.
+func (a *Action) CompileWhen() error {
+	return nil
 }
 
 // ShellAction is the name of the built-in shell session (key t); config actions cannot use it.

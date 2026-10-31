@@ -100,6 +100,7 @@ type Model struct {
 	cmdline  textinput.Model
 	pendingG bool
 	notice   string
+	level    level              // how the footer draws notice
 	clip     func(string) error // nil: the system clipboard (tests fake it)
 	open     func(string) error // nil: the system opener (tests fake it)
 
@@ -148,16 +149,16 @@ func New(cfg *config.Config) *Model {
 	m.search.PromptStyle, m.cmdline.PromptStyle = sKey, sKey
 	var err error
 	if m.ov, err = config.LoadOverrides(); err != nil {
-		m.notice = err.Error()
+		m.say(lvErr, err.Error())
 	}
 	if m.sess, err = session.NewManager(); err != nil {
-		m.notice = strings.TrimSpace(m.notice + " " + err.Error())
+		m.say(lvErr, strings.TrimSpace(m.notice+" "+err.Error()))
 	}
 	if m.notes, err = notes.Load(); err != nil {
-		m.notice = strings.TrimSpace(m.notice + " notes: " + err.Error())
+		m.say(lvErr, strings.TrimSpace(m.notice+" notes: "+err.Error()))
 	}
 	if m.snoozes, err = snooze.Load(); err != nil {
-		m.notice = strings.TrimSpace(m.notice + " snoozes: " + err.Error())
+		m.say(lvErr, strings.TrimSpace(m.notice+" snoozes: "+err.Error()))
 	}
 	m.settings, _ = session.SettingsFile()
 	m.sessByItem = map[string][]session.Info{}
@@ -180,7 +181,7 @@ func (m *Model) applyConfig(cfg *config.Config) {
 		delete(m.fullFetched, name) // a rebuilt provider has no snapshot: show the partial result first again
 		delete(m.provErr, name)     // built again: drop the stale build error until the next fetch
 		if _, ok := m.data[name]; !ok {
-			m.data[name] = cache.Load(name)
+			m.data[name] = item.Sanitize(cache.Load(name))
 		}
 	}
 	for k, b := range m.busy {
@@ -378,7 +379,7 @@ func (m *Model) fetch(name string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		items, err := p.Fetch(ctx)
-		return fetchedMsg{name: name, items: items, err: err}
+		return fetchedMsg{name: name, items: item.Sanitize(items), err: err}
 	}
 	q, ok := p.(provider.Quicker)
 	if !ok || m.fullFetched[name] {
@@ -388,7 +389,7 @@ func (m *Model) fetch(name string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		items, err := q.Quick(ctx)
-		return fetchedMsg{name: name, items: items, err: err, partial: true}
+		return fetchedMsg{name: name, items: item.Sanitize(items), err: err, partial: true}
 	}
 	return tea.Sequence(quick, full)
 }
@@ -472,9 +473,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, n := range msg.names {
 			m.interrupted[n] = true
 		}
-		return m.Update(doneMsg{notice: msg.notice})
+		return m.Update(doneMsg{notice: msg.notice, level: msg.level})
 	case doneMsg:
-		m.notice = msg.notice
+		m.say(msg.level, msg.notice)
 		if msg.refresh {
 			m.holdUntilRefetched(msg.keys, msg.ok)
 			return m, tea.Batch(m.pollSessions(), m.refreshAll())
@@ -494,7 +495,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.reload()
 	case noteEdited:
 		if msg.err != nil {
-			m.notice = "note: " + msg.err.Error()
+			m.say(lvErr, "note: "+msg.err.Error())
 			return m, nil
 		}
 		m.setNote(msg.id, msg.text)
@@ -604,6 +605,28 @@ func (m *Model) fetchStale(interval time.Duration) tea.Cmd {
 // builtinKeys cannot be rebound through [keymap].
 const builtinKeys = "jkgGhlVqRoixXtpnNFSyz/:? "
 
+// level is how severe a footer notice is: it picks the notice's colour.
+type level int
+
+const (
+	lvInfo level = iota // plain text
+	lvWarn              // the request was not fully carried out: theme warn
+	lvErr               // something failed: theme bad
+)
+
+func (l level) style() lipgloss.Style {
+	switch l {
+	case lvErr:
+		return sErr
+	case lvWarn:
+		return sWarn
+	}
+	return sText
+}
+
+// say sets the footer notice. Set it only through say, so every notice has an explicit level.
+func (m *Model) say(l level, text string) { m.notice, m.level = text, l }
+
 // reload re-reads the config (also triggered by saving the file) and refetches, so edits apply live.
 func (m *Model) reload() tea.Cmd {
 	if ok, err := projectTrusted(); !ok {
@@ -616,15 +639,15 @@ func (m *Model) reload() tea.Cmd {
 	}
 	cfg, err := config.Load()
 	if err != nil {
-		m.notice = "config: " + err.Error()
+		m.say(lvErr, "config: "+err.Error())
 		m.cfgMod = config.Mtime() // do not retry the same broken file every tick
 		return nil
 	}
 	m.applyConfig(cfg)
-	m.notice = fmt.Sprintf("config reloaded: %d views, %d actions", len(m.views), len(cfg.Action))
+	m.say(lvInfo, fmt.Sprintf("config reloaded: %d views, %d actions", len(m.views), len(cfg.Action)))
 	for k := range cfg.Keymap {
 		if len(k) == 1 && strings.Contains(builtinKeys, k) {
-			m.notice += fmt.Sprintf(" · key %q is built in and ignored", k)
+			m.say(lvWarn, m.notice+fmt.Sprintf(" · key %q is built in and ignored", k))
 		}
 	}
 	return m.refreshAll()
@@ -728,7 +751,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "?":
 		m.mode, m.helpOff = modeHelp, 0
 	case "R":
-		m.notice = "refreshing…"
+		m.say(lvInfo, "refreshing…")
 		return m, m.refreshAll()
 	case "o":
 		if n > 0 {
@@ -773,7 +796,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		name, ok := nextAttention(m.sessions, m.lastAttn)
 		if !ok {
-			m.notice = "nothing needs you"
+			m.say(lvWarn, "nothing needs you")
 			break
 		}
 		m.lastAttn = name
@@ -1040,9 +1063,9 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 		return s
 	}
 	plain := st(lipgloss.NewStyle())
-	mark := plain.Render("  ")
+	mark := plain.Render(" ")
 	if m.marks[it.ID] {
-		mark = st(sMark).Render("● ")
+		mark = st(sMark).Render("▌")
 	}
 	var badges []string
 	var all []item.Badge
@@ -1067,7 +1090,7 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	right := strings.Join(badges, plain.Render("  "))
 	const authW = 16
 	id := st(sID).Render(fmt.Sprintf("%-*s", idW, ansi.Truncate(it.ID, idW, "…")))
-	fixed := 1 + 2 + idW + 1 + 1 + rightW + 1
+	fixed := 1 + 1 + idW + 1 + 1 + rightW + 1
 	cellW := m.width - fixed // title, author and padding share this cell
 	authText := ansi.Truncate(it.Author, authW, "…")
 	authCellW := 0
@@ -1109,12 +1132,8 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	if pad := cellW - used; pad > 0 {
 		title += plain.Render(strings.Repeat(" ", pad))
 	}
-	cur := plain.Render(" ")
-	if selected {
-		cur = st(sMark).Render("▸")
-	}
 	sp := plain.Render(" ")
-	line := cur + mark + id + sp + title + sp + right
+	line := mark + sp + id + sp + title + sp + right
 	if selected {
 		return plain.Width(m.width).Render(line)
 	}
@@ -1133,7 +1152,7 @@ func (m *Model) footer() string {
 	left := ""
 	switch {
 	case m.notice != "":
-		left = sText.Render(" " + strings.SplitN(m.notice, "\n", 2)[0])
+		left = m.level.style().Render(" " + strings.SplitN(m.notice, "\n", 2)[0])
 	case len(m.marks) > 0:
 		left = sMark.Render(fmt.Sprintf(" %d marked", len(m.marks)))
 	case m.query != "":

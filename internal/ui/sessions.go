@@ -133,9 +133,6 @@ func (m *Model) sessionsView() string {
 			return s
 		}
 		cur := st(lipgloss.NewStyle()).Render("  ")
-		if i == m.sessCursor {
-			cur = st(sMark).Render("▸ ")
-		}
 		sp := st(lipgloss.NewStyle()).Render("  ")
 		badge := r.info.Badge()
 		right := st(badgeStyle(badge.Kind)).Render(badge.Text) + sp + st(sDim).Render(age(time.Since(r.info.Created)))
@@ -155,7 +152,7 @@ func (m *Model) sessionsView() string {
 	case m.mode == modeConfirm:
 		b.WriteString(" " + sWarn.Render(m.confirm.prompt) + sDim.Render("  y/enter yes · n/esc no"))
 	case m.notice != "":
-		b.WriteString(sText.Render(" " + strings.SplitN(m.notice, "\n", 2)[0]))
+		b.WriteString(m.level.style().Render(" " + strings.SplitN(m.notice, "\n", 2)[0]))
 	default:
 		b.WriteString(sDim.Render(" j/k move · enter jump · x close · q back"))
 	}

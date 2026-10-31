@@ -214,6 +214,14 @@ func TestDoctor(t *testing.T) {
 					return c, nil
 				}
 			}},
+		{name: "run placeholder inside single quotes", code: 1, want: []string{"fail  action ready", "single quotes"},
+			edit: func(e *doctorEnv) {
+				e.load = func() (*config.Config, error) {
+					c := cfg()
+					c.Action["ready"] = config.Action{Run: "echo '{{.iid}}'"}
+					return c, nil
+				}
+			}},
 		{name: "bad action cwd template", code: 1, want: []string{"fail  action ready"},
 			edit: func(e *doctorEnv) {
 				e.load = func() (*config.Config, error) {

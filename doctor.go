@@ -93,7 +93,7 @@ func runDoctor(w io.Writer, e doctorEnv) int {
 			a := cfg.Action[n]
 			if _, err := ui.ParseTemplate(a.Run); err != nil {
 				line("fail", "action "+n, "run: "+err.Error())
-			} else if _, err := ui.ParseTemplate(a.Cwd); err != nil {
+			} else if _, err := ui.ParseCwdTemplate(a.Cwd); err != nil {
 				line("fail", "action "+n, "cwd: "+err.Error())
 			} else {
 				line("ok", "action "+n, "template parses")

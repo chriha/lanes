@@ -11,9 +11,9 @@ you what each session is doing (running, working, asking a question, waiting for
 ```
  lanes   review 4  mine 3  drafts 1                                      ◐ 1  ? 1   updated 12s ago
  ─────────────────────────────────────────────────────────────────────────────────────────────────
- ▸  !1948   feat: prune entries missing from the provider   alex   ✓ ci  ⚑ 7  ✔ approved
- ●  !1957   fix: clear the change detector by id   sam    ✗ ci  ⚑ 2  ◐ review: working
-    !1961   chore: bump dependencies                                 lee    ✓ ci        ? review: asking
+   !1948   feat: prune entries missing from the provider   alex   ✓ ci  ⚑ 7  ✔ approved
+ ▌ !1957   fix: clear the change detector by id   sam    ✗ ci  ⚑ 2  ◐ review: working
+   !1961   chore: bump dependencies                                 lee    ✓ ci        ? review: asking
  ─────────────────────────────────────────────────────────────────────────────────────────────────
  2 marked                       j/k move · h/l view · space mark · enter jump · x close · ? help
 ```
@@ -877,6 +877,9 @@ accent = "#A78BFA"          # also: ok, warn, bad, info, text, dim, selection
 `lanes` ships an adaptive light/dark palette. Override any of `accent`, `ok`, `warn`, `bad`, `info`, `text` (body), `dim`
 (secondary text) and `selection` (selected row and tab background) with a hex color under `[theme]`. Changes apply live.
 
+The footer draws errors in the `bad` color and warnings (a request that was not fully carried out, such as
+`tmux unavailable` or a skipped item) in `warn`; other messages stay plain.
+
 `mode` picks the palette: `system` (the default) follows the terminal background as detected at start, `light` and
 `dark` force that palette. Forcing a mode helps when detection is slow or wrong, for example inside tmux or over SSH.
 
@@ -896,9 +899,22 @@ selection = "#2E2A4F"  # dark mode only
 Global config and `.lanes.toml` merge per field, also within `[theme.light]` and `[theme.dark]`. An invalid `mode` is a
 config error, like an invalid color.
 
-Colors must be `#RGB` or `#RRGGBB` (case-insensitive); an empty value keeps the default. Anything else (`A78BFA`,
-`red`, `212`) is a config error: `lanes` refuses to start, keeps the previous config on reload, and
-`lanes doctor` reports a failing `config` line.
+`[theme.labels]` colors labels in the preview's `labels` line by name. Names match case-insensitively (`Bug` uses the
+key `bug`); a label without an entry keeps the text color. `[theme.light.labels]` and `[theme.dark.labels]` work like
+the other per-mode tables: per label, the active mode's entry wins over `[theme.labels]`, which wins over the text color.
+Global config and `.lanes.toml` merge per label. Two names in one table that differ only in case are a config error:
+
+```toml
+[theme.labels]
+bug = "#F87171"
+needs-info = "#FBBF24"
+[theme.light.labels]
+bug = "#C53030"        # light mode only
+```
+
+Colors must be `#RGB` or `#RRGGBB` (case-insensitive); an empty value keeps the default (a label color cannot be
+empty). Anything else (`A78BFA`, `red`, `212`) is a config error: `lanes` refuses to start, keeps the previous config
+on reload, and `lanes doctor` reports a failing `config` line.
 
 ### Where things live
 

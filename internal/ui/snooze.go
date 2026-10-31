@@ -46,11 +46,11 @@ func (m *Model) toggleSnooze() bool {
 		ids[i] = it.ID
 	}
 	if err := m.snoozes.Delete(ids...); err != nil {
-		m.notice = "unsnooze: " + err.Error()
+		m.say(lvErr, "unsnooze: "+err.Error())
 		return false
 	}
 	m.marks = map[string]bool{}
-	m.notice = "unsnoozed " + targetsLabel(ids)
+	m.say(lvInfo, "unsnoozed "+targetsLabel(ids))
 	m.rebuild()
 	return false
 }
@@ -60,12 +60,12 @@ func (m *Model) toggleSnooze() bool {
 func (m *Model) snoozeTargets(input string) {
 	until, err := snooze.Parse(input, time.Now())
 	if err != nil {
-		m.notice = err.Error()
+		m.say(lvErr, err.Error())
 		return
 	}
 	ts := m.targets()
 	if len(ts) == 0 {
-		m.notice = "no item to snooze"
+		m.say(lvWarn, "no item to snooze")
 		return
 	}
 	ids := make([]string, len(ts))
@@ -81,14 +81,14 @@ func (m *Model) snoozeTargets(input string) {
 		err = m.snoozes.Set(snooze.Entry{Until: until}, ids...)
 	}
 	if err != nil {
-		m.notice = "saving snoozes: " + err.Error()
+		m.say(lvErr, "saving snoozes: "+err.Error())
 		m.rebuild()
 		return
 	}
 	m.marks = map[string]bool{}
-	m.notice = "snoozed " + targetsLabel(ids) + " until it changes"
+	m.say(lvInfo, "snoozed "+targetsLabel(ids)+" until it changes")
 	if !until.IsZero() {
-		m.notice = "snoozed " + targetsLabel(ids) + " until " + until.Format("Mon 2006-01-02 15:04")
+		m.say(lvInfo, "snoozed "+targetsLabel(ids)+" until "+until.Format("Mon 2006-01-02 15:04"))
 	}
 	m.rebuild()
 }
@@ -119,7 +119,7 @@ func (m *Model) wake(now time.Time, fetched []item.Item) bool {
 		return false
 	}
 	if err := m.snoozes.Delete(woke...); err != nil {
-		m.notice = "saving snoozes: " + err.Error()
+		m.say(lvErr, "saving snoozes: "+err.Error())
 	}
 	return true
 }

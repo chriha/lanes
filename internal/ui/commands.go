@@ -267,5 +267,8 @@ func (m *Model) saveViews(ok string) {
 		return
 	}
 	m.applyConfig(m.cfg)
+	if bak := m.ov.BackedUp(); bak != "" {
+		ok += "; the unreadable views.json was kept as " + bak
+	}
 	m.say(lvInfo, ok)
 }

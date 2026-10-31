@@ -312,7 +312,7 @@ func TestIDColumn(t *testing.T) {
 			m := newNotesModel(t)
 			for i, want := range map[int]string{0: tt.wantID, len(its) - 1: tt.wantEnd} {
 				line := ansi.Strip(m.row(its[i], false, tt.wantW))
-				if !strings.HasPrefix(line[3:], want) {
+				if !strings.HasPrefix(line[2:], want) {
 					t.Errorf("row %d = %q, want ID cell %q", i, line, want)
 				}
 				// the title column absorbs the ID width: rows keep the width of the 7-wide layout
@@ -337,7 +337,7 @@ func TestRowAuthorFollowsTitle(t *testing.T) {
 		{"short title", "fix it", "alice", []item.Badge{{Text: "ok"}}, "fix it  alice  "},
 		{"no author", "fix it", "", []item.Badge{{Text: "ok"}}, "fix it   "},
 		{"long author is cut", "fix it", long, nil, "fix it  " + strings.Repeat("a", 15) + "…"},
-		{"title cut first", strings.Repeat("t", 200), "alice", []item.Badge{{Text: "ok"}}, strings.Repeat("t", 57) + "…  alice "},
+		{"title cut first", strings.Repeat("t", 200), "alice", []item.Badge{{Text: "ok"}}, strings.Repeat("t", 58) + "…  alice "},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -345,7 +345,7 @@ func TestRowAuthorFollowsTitle(t *testing.T) {
 			m.width = 80
 			it := item.Item{ID: "!1", Title: tt.title, Author: tt.author, Badges: tt.badges, Fields: map[string]any{}}
 			line := ansi.Strip(m.row(it, false, 7))
-			cell := line[3+7+1:]
+			cell := line[2+7+1:]
 			if !strings.HasPrefix(cell, tt.wantPrefix) {
 				t.Errorf("row = %q, want %q after the ID", line, tt.wantPrefix)
 			}

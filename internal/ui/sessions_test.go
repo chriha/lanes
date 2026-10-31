@@ -363,19 +363,19 @@ func TestSessionsViewHighlightsCursorRow(t *testing.T) {
 		for i := range infos {
 			line := rowLine(m, i)
 			if i != cursor {
-				if strings.Contains(line, bg) || strings.Contains(line, "▸") {
+				if strings.Contains(line, bg) {
 					t.Errorf("cursor %d: row %d = %q, want no highlight", cursor, i, line)
 				}
 				continue
-			}
-			if !strings.Contains(line, "▸ ") {
-				t.Errorf("cursor %d: row %d = %q, lost the marker", cursor, i, line)
 			}
 			// every visible chunk (text between resets) must carry the background
 			for _, chunk := range strings.Split(line, "\x1b[0m") {
 				if ansi.Strip(chunk) != "" && !strings.Contains(chunk, bg) {
 					t.Errorf("cursor %d: chunk %q of %q has no background", cursor, chunk, line)
 				}
+			}
+			if strings.Contains(line, "▸") {
+				t.Errorf("cursor %d: row %d = %q, has a cursor glyph", cursor, i, line)
 			}
 			other := rowLine(m, 1-i)
 			if got, want := ansi.StringWidth(line), ansi.StringWidth(other); got != want {

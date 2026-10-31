@@ -60,8 +60,8 @@ an env var).
 ```
  lanes   [review] mine  drafts                         ⟳ 12s ago
  ─────────────────────────────────────────────────────────────────
- ▸ ● !1234  ABC-901 Fix result import      alex   ✗ci  💬2   ◐ review: working
-   ○ !1229  ABC-888 Speed up search        sam    ✓ci        
+ ▌ !1234  ABC-901 Fix result import      alex   ✗ci  💬2   ◐ review: working
+   !1229  ABC-888 Speed up search        sam    ✓ci        
  ─────────────────────────────────────────────────────────────────
  preview / history / sessions panel (DONE: `p`, `i`, `S`)
  : command line      / filter      ? help

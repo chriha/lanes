@@ -22,6 +22,12 @@ func whenModel(t *testing.T) *Model {
 		"anyx": {Type: "run", Run: "true"},
 		"oops": {Type: "run", Run: "true", When: `kind + 1 == 2`}, // errors at runtime on a string kind
 	}
+	for name, a := range m.cfg.Action {
+		if err := a.CompileWhen(); err != nil {
+			t.Fatal(err)
+		}
+		m.cfg.Action[name] = a
+	}
 	m.cfg.Keymap = map[string]string{"T": "tkt", "P": "prx", "A": "anyx"}
 	items := mkItems("1", "2", "3")
 	for i, kind := range []string{"ticket", "pr", "ticket"} {
@@ -167,5 +173,23 @@ func TestHelpListsActionsMatchingCursorItem(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMatchWhenUsesStoredFilter(t *testing.T) {
+	act := config.Action{When: `kind == "ticket"`}
+	if err := act.CompileWhen(); err != nil {
+		t.Fatal(err)
+	}
+	act.When = `kind ===` // would fail to compile; matchWhen must use the stored filter instead
+	its := mkItems("1", "2")
+	its[0].Fields["kind"] = "ticket"
+	its[1].Fields["kind"] = "pr"
+	match, skip, err := matchWhen(act, its)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(match) != 1 || match[0].ID != "1" || len(skip) != 1 || skip[0].ID != "2" {
+		t.Errorf("match = %v, skip = %v; want item 1 matched and 2 skipped", match, skip)
 	}
 }

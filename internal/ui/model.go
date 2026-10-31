@@ -1063,9 +1063,9 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 		return s
 	}
 	plain := st(lipgloss.NewStyle())
-	mark := plain.Render("  ")
+	mark := plain.Render(" ")
 	if m.marks[it.ID] {
-		mark = st(sMark).Render("● ")
+		mark = st(sMark).Render("▌")
 	}
 	var badges []string
 	var all []item.Badge
@@ -1090,7 +1090,7 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	right := strings.Join(badges, plain.Render("  "))
 	const authW = 16
 	id := st(sID).Render(fmt.Sprintf("%-*s", idW, ansi.Truncate(it.ID, idW, "…")))
-	fixed := 1 + 2 + idW + 1 + 1 + rightW + 1
+	fixed := 1 + 1 + idW + 1 + 1 + rightW + 1
 	cellW := m.width - fixed // title, author and padding share this cell
 	authText := ansi.Truncate(it.Author, authW, "…")
 	authCellW := 0
@@ -1132,12 +1132,8 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	if pad := cellW - used; pad > 0 {
 		title += plain.Render(strings.Repeat(" ", pad))
 	}
-	cur := plain.Render(" ")
-	if selected {
-		cur = st(sMark).Render("▸")
-	}
 	sp := plain.Render(" ")
-	line := cur + mark + id + sp + title + sp + right
+	line := mark + sp + id + sp + title + sp + right
 	if selected {
 		return plain.Width(m.width).Render(line)
 	}

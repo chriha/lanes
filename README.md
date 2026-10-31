@@ -11,9 +11,9 @@ you what each session is doing (running, working, asking a question, waiting for
 ```
  lanes   review 4  mine 3  drafts 1                                      ◐ 1  ? 1   updated 12s ago
  ─────────────────────────────────────────────────────────────────────────────────────────────────
- ▸  !1948   feat: prune entries missing from the provider   alex   ✓ ci  ⚑ 7  ✔ approved
- ●  !1957   fix: clear the change detector by id   sam    ✗ ci  ⚑ 2  ◐ review: working
-    !1961   chore: bump dependencies                                 lee    ✓ ci        ? review: asking
+   !1948   feat: prune entries missing from the provider   alex   ✓ ci  ⚑ 7  ✔ approved
+ ▌ !1957   fix: clear the change detector by id   sam    ✗ ci  ⚑ 2  ◐ review: working
+   !1961   chore: bump dependencies                                 lee    ✓ ci        ? review: asking
  ─────────────────────────────────────────────────────────────────────────────────────────────────
  2 marked                       j/k move · h/l view · space mark · enter jump · x close · ? help
 ```

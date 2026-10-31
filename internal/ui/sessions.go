@@ -133,9 +133,6 @@ func (m *Model) sessionsView() string {
 			return s
 		}
 		cur := st(lipgloss.NewStyle()).Render("  ")
-		if i == m.sessCursor {
-			cur = st(sMark).Render("▸ ")
-		}
 		sp := st(lipgloss.NewStyle()).Render("  ")
 		badge := r.info.Badge()
 		right := st(badgeStyle(badge.Kind)).Render(badge.Text) + sp + st(sDim).Render(age(time.Since(r.info.Created)))

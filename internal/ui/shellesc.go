@@ -112,9 +112,10 @@ func (s shellState) scan(text string) shellState {
 				s.pop()
 			}
 		case qAnsi:
-			if c == '\\' {
+			switch c {
+			case '\\':
 				s.esc = true
-			} else if c == '\'' {
+			case '\'':
 				s.pop()
 			}
 		case qTick:
@@ -233,7 +234,7 @@ func escapeShell(t *template.Template) error {
 	if t.Tree == nil {
 		return nil
 	}
-	_, err := escapeList(t.Tree, t.Tree.Root, shellState{stack: []frame{{q: qOut}}, prev: prevWordStart})
+	_, err := escapeList(t.Tree, t.Root, shellState{stack: []frame{{q: qOut}}, prev: prevWordStart})
 	return err
 }
 

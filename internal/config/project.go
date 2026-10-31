@@ -139,7 +139,7 @@ const projectTail = `
 # ---------------------------------------------------------------------------------------------------------
 # Actions: named, templated shell commands, run on the marked items (or the one under the cursor).
 # run, cwd are Go templates over the item's fields: {{.id}} {{.title}} {{.url}} {{.author}}, provider fields
-# ({{.iid}}, {{.number}}, {{.branch}}, ...), {{.vars.name}}, {{.settings}}; {{.x | q}} shell-quotes a value.
+# ({{.iid}}, {{.number}}, {{.branch}}, ...), {{.vars.name}}, {{.settings}}; run values are shell-quoted for you ({{.x | raw}} opts out).
 #   https://github.com/chriha/lanes#templates
 # ---------------------------------------------------------------------------------------------------------
 # [action.review]

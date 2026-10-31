@@ -46,6 +46,14 @@ func (o *Overrides) Save() error {
 	if err := os.MkdirAll(filepath.Dir(overridesPath()), app.DirMode); err != nil {
 		return err
 	}
+	o.backup = ""
+	if b, err := os.ReadFile(overridesPath()); err == nil && json.Unmarshal(b, &Overrides{}) != nil {
+		bak := overridesPath() + ".bak"
+		if err := os.Rename(overridesPath(), bak); err != nil {
+			return err
+		}
+		o.backup = bak
+	}
 	b, _ := json.MarshalIndent(o, "", "  ")
 	return app.WriteFile(overridesPath(), b)
 }

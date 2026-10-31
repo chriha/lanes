@@ -56,6 +56,7 @@ you what each session is doing (running, working, asking a question, waiting for
   - [command](#command)
 - [Configuration](#configuration)
   - [Global and project config](#global-and-project-config)
+  - [Trusting a project](#trusting-a-project)
   - [Full reference](#full-reference)
   - [Theme](#theme)
   - [Where things live](#where-things-live)
@@ -144,7 +145,8 @@ lanes --version
 ## Quick start
 
 1. `cd` into a git repository whose `origin` is on GitHub or GitLab.
-2. Run `lanes`.
+2. Run `lanes`. The first time in a project it asks whether you trust it; type `yes` (see
+   [Trusting a project](#trusting-a-project)).
 
 On first start `lanes` writes a default global config (see [Where things live](#where-things-live)) with three
 views — `review`, `mine`, `drafts` — and one `auto` provider named `forge`, which picks GitHub for a `github.com`
@@ -158,10 +160,10 @@ Besides the TUI, `lanes` has these commands:
 
 | Command          | Does                                                                                      |
 |------------------|-------------------------------------------------------------------------------------------|
-| `lanes init`     | write a commented `.lanes.toml` to the current directory; asks before overwriting one, with a backup (see [Global and project config](#global-and-project-config)) |
-| `lanes doctor`   | check tmux, the forge CLIs, the config and the state dirs (see [Troubleshooting](#troubleshooting)) |
-| `lanes status`   | print the current project's sessions that need input (see [tmux and lanes](#tmux-and-lanes)) |
-| `lanes --version`| print the version                                                                         |
+| `lanes init`     | write a commented `.lanes.toml` to the current directory; asks before overwriting one, with a backup (see [Global and project config](#global-and-project-config)); asks for trust first, like the TUI |
+| `lanes doctor`   | check tmux, the forge CLIs, the config and the state dirs (see [Troubleshooting](#troubleshooting)); asks for trust first, like the TUI |
+| `lanes status`   | print the current project's sessions that need input (see [tmux and lanes](#tmux-and-lanes)); prints nothing in an untrusted project and never asks |
+| `lanes --version`| print the version; never asks for trust                                                   |
 
 ## Using lanes
 
@@ -832,6 +834,44 @@ running app**: views, keymap, actions, theme and poll interval update, lists ref
 `config reloaded: 4 views, 3 actions`. If a file does not parse, the old configuration stays active and the
 footer shows the error.
 
+### Trusting a project
+
+A `.lanes.toml` can run shell commands (`command` providers, actions), so `lanes` does not read a project it has
+not been told to trust. Before it runs git, loads any config or starts a provider, it finds the project root (the
+nearest directory with a `.git` directory or file, found without running git, so worktrees count; otherwise the
+current directory) and checks it against its trust list. It asks in every new project, even one without a
+`.lanes.toml`, since a later pull could add one.
+
+If the root is not trusted, the TUI, `lanes init` and `lanes doctor` show a dialog:
+
+```
+Do you trust /home/you/src/payments?
+
+Its .lanes.toml can run shell commands (command providers, actions).
+
+Type yes to trust it: [NO]
+
+enter confirm · esc quit
+```
+
+Only `yes` (any case, surrounding spaces ignored) followed by `enter` trusts the project; `lanes` then continues and
+does not ask again there. Anything else — an empty answer, other text, `esc`, `ctrl-c` — is a no: `lanes` prints
+`not trusted` to stderr, exits 1 and records nothing.
+
+- **Changes ask again.** The trust covers the content of every `.lanes.toml` under the root (`.git` and
+  `node_modules` are skipped). Changing one, or adding one where there was none, makes the project untrusted at the
+  next start. While `lanes` runs, a reload of an untrusted change is not applied: the old config stays and the footer
+  shows `.lanes.toml changed — restart lanes to trust it`. Edits you make through `lanes` itself — `:edit project` and
+  `lanes init` in a trusted project — are trusted right away.
+- **No terminal, no trust.** Without a terminal on stdin an untrusted project is refused with
+  `<root> is not trusted; run lanes in a terminal to trust it` and exit 1. There is deliberately no way to trust a
+  project from a script — no subcommand, flag or environment variable; a person has to type `yes`.
+- **Silent commands.** `lanes status` and the Claude Code hooks (`lanes hook`) never ask: in an untrusted project
+  `status` prints nothing and the hooks do nothing.
+- **The trust list** is `trust.json` in the state directory (see [Where things live](#where-things-live)), mode 0600,
+  one entry per project root. Delete an entry, or the file, to be asked again. A corrupt file trusts nothing: `lanes`
+  reports the error and leaves the file alone rather than overwriting it.
+
 ### Full reference
 
 ```toml
@@ -922,6 +962,7 @@ on reload, and `lanes doctor` reports a failing `config` line.
 |----------------------------------------|---------------------------------------------------------|
 | Global config                          | `~/.config/lanes/config.toml`                           |
 | Project config                         | `.lanes.toml` in the project (or a parent)              |
+| Trusted projects                       | `~/.local/state/lanes/trust.json` (all projects)        |
 | In-app views and filter edits          | `~/.local/state/lanes/<project>/views.json`             |
 | Item history                           | `~/.local/state/lanes/<project>/history.jsonl`          |
 | Item notes                             | `~/.local/state/lanes/<project>/notes.json`             |

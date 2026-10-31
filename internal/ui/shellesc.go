@@ -87,6 +87,7 @@ func wordStartAfter(c byte) bool { return isBlank(c) || strings.IndexByte(";&|()
 
 // scan advances s over literal shell text.
 func (s shellState) scan(text string) shellState {
+	s.stack = slices.Clone(s.stack) // depth changes in place; copies of s (if/else branches) must not see them
 	for i := 0; i < len(text) && s.unknown == ""; i++ {
 		c := text[i]
 		next := byte(0)
@@ -179,6 +180,8 @@ func (s shellState) scan(text string) shellState {
 				s.comment = true
 			case c == '#' && prev == prevEither:
 				s.unknown = "a # that may start a comment"
+			case strings.HasPrefix(text[i:], "<<<"):
+				i += 2 // a here-string: its word is an ordinary word
 			case c == '<' && next == '<':
 				s.unknown = "a here-document"
 			case nested && (prev == prevWordStart || prev == prevEither) && strings.HasPrefix(text[i:], "case") &&

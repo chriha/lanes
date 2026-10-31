@@ -86,6 +86,22 @@ func validateLabels(labels map[string]string, prefix string) error {
 	return nil
 }
 
+// dropShadowedLabels removes the label keys of merged that a project label key overrides by differing only in case,
+// so the project's spelling replaces the global one instead of both colliding in validateLabels.
+func dropShadowedLabels(merged *Colors, project Colors) {
+	for name := range merged.Labels {
+		if _, ok := project.Labels[name]; ok {
+			continue
+		}
+		for pname := range project.Labels {
+			if strings.EqualFold(name, pname) {
+				delete(merged.Labels, name)
+				break
+			}
+		}
+	}
+}
+
 func (t Theme) validate() error {
 	switch t.Mode {
 	case "", "system", "light", "dark":
@@ -256,6 +272,9 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("%s: %w", pp, err)
 		}
 		c.View = mergeViews(global, pc.View)
+		dropShadowedLabels(&c.Theme.Colors, pc.Theme.Colors)
+		dropShadowedLabels(&c.Theme.Light, pc.Theme.Light)
+		dropShadowedLabels(&c.Theme.Dark, pc.Theme.Dark)
 		p = pp + " (project) over " + p
 	}
 	if len(c.View) == 0 {

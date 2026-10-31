@@ -513,8 +513,26 @@ run unlocks the item right away.
 | `{{.settings}}`                 | path to a Claude settings file that reports session status      |
 | `{{.session}}` `{{.action}}`    | the session / action name                                       |
 
-`{{.title | q}}` shell-quotes a value — use it for anything that may contain spaces or quotes. A missing field or
-variable is an error shown in the footer; nothing runs. The message names the missing field and the item's
+`run` is shell code, and fields like `title` or `branch` are written by whoever opened the item, so `lanes`
+escapes every value a `run` template inserts, for the quoting it lands in:
+
+| Template                       | `title` = `fix $(rm -rf ~)` becomes |
+|--------------------------------|-------------------------------------|
+| `echo {{.title}}`              | `echo 'fix $(rm -rf ~)'`            |
+| `claude "/review {{.title}}"`  | `claude "/review fix \$(rm -rf ~)"` |
+
+Outside quotes a value is single-quoted; inside `"…"` its `\`, `$`, `` ` `` and `"` are backslash-escaped.
+So write placeholders bare or inside double quotes, never inside single quotes: `'{{.title}}'` is an error
+(drop the quotes, or use `"…"`). The same goes for any spot where `lanes` cannot tell the quoting for sure,
+such as inside `` `…` `` (use `$(…)`), `${…}`, a here-document or a `#` comment: an error, never a guess.
+`lanes doctor` reports such templates, naming the action.
+
+`{{.x | raw}}` inserts a value unchanged — only for values you control, such as a var holding several flags
+(`vars = { flags = "--draft --fill" }`, `run = 'glab mr create {{.vars.flags | raw}}'`). `{{.x | q}}` is
+no longer needed: it gives the same output as `{{.x}}`. `cwd` is a directory, not shell code, so its values
+go in unchanged.
+
+A missing field or variable is an error shown in the footer; nothing runs. The message names the missing field and the item's
 identifier field (`iid` on GitLab, `number` on GitHub, `key` on Linear, otherwise `id`); `p` shows the item's fields:
 
 ```text

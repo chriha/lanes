@@ -359,7 +359,7 @@ filter = 'author == me && draft'
 # Built-in keys win over the keymap.
 # Template fields: id, title, url, author, plus provider fields (gitlab: iid, github: number,
 # branch, ticket, ...).
-# {{.x | q}} shell-quotes a value; {{.settings}} lets claude report its status to lanes.
+# Values are shell-quoted for you; {{.settings}} lets claude report its status to lanes.
 [keymap]
 m = "ready"
 

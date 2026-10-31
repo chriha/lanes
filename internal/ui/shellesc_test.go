@@ -180,7 +180,7 @@ func TestShippedRunExamplesRender(t *testing.T) {
 	data := map[string]any{
 		"id": "!1", "iid": 1, "number": 2, "key": "ENG-3", "title": "it's $(bad)", "url": "https://x/y/1",
 		"author": "a", "me": "me", "branch": "b", "settings": "/tmp/s.json", "session": "s", "action": "a",
-		"vars": map[string]any{"reviewers": "alice,bob", "dir": "."},
+		"vars": map[string]any{"reviewers": "alice,bob", "dir": ".", "flags": "--draft --fill"},
 	}
 	runLine := regexp.MustCompile(`\brun\s*=\s*'([^']*\{\{[^']*)'`)
 	n := 0

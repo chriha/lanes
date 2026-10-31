@@ -200,3 +200,146 @@ func TestTrustFileIsPrivate(t *testing.T) {
 		}
 	}
 }
+
+func TestAlwaysTrusted(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	if err := TrustAlways("/a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Trust("/p", "h1"); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name, root, hash string
+		want             bool
+	}{
+		{"always, original hash irrelevant", "/a", "h1", true},
+		{"always, changed hash", "/a", "h2", true},
+		{"always, no .lanes.toml", "/a", "", true},
+		{"always, hash equal to the sentinel", "/a", Always, true},
+		{"hash entry, other hash", "/p", "h2", false},
+		{"hash entry, sentinel as hash", "/p", Always, false},
+		{"no entry, sentinel as hash", "/r", Always, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if ok, err := IsTrusted(tt.root, tt.hash); ok != tt.want || err != nil {
+				t.Errorf("IsTrusted(%q, %q) = %v, %v; want %v, nil", tt.root, tt.hash, ok, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestTrustKeepsAlways(t *testing.T) {
+	tests := []struct {
+		name  string
+		first func() error
+		hash  string
+		want  string // stored value after Trust(root, hash)
+	}{
+		{"always is not downgraded", func() error { return TrustAlways("/p") }, "h2", Always},
+		{"always is not downgraded by an empty hash", func() error { return TrustAlways("/p") }, "", Always},
+		{"hash is replaced", func() error { return Trust("/p", "h1") }, "h2", "h2"},
+		{"no entry gets the hash", func() error { return nil }, "h2", "h2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			if err := tt.first(); err != nil {
+				t.Fatal(err)
+			}
+			if err := Trust("/p", tt.hash); err != nil {
+				t.Fatal(err)
+			}
+			m, err := load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := m["/p"]; got != tt.want {
+				t.Errorf("stored %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTrustAlwaysReplacesHash(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	if err := Trust("/p", "h1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := TrustAlways("/p"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := IsTrusted("/p", "h2"); !ok || err != nil {
+		t.Errorf("IsTrusted after TrustAlways = %v, %v; want true, nil", ok, err)
+	}
+	if fi, err := os.Stat(path()); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("trust.json = %v, %v; want mode 0600", fi, err)
+	}
+}
+
+func TestUntrust(t *testing.T) {
+	tests := []struct {
+		name        string
+		seed        func() error
+		wantRemoved bool
+	}{
+		{"hash entry", func() error { return Trust("/p", "h1") }, true},
+		{"always entry", func() error { return TrustAlways("/p") }, true},
+		{"empty-hash entry", func() error { return Trust("/p", "") }, true},
+		{"no entry", func() error { return Trust("/other", "h1") }, false},
+		{"no trust.json", func() error { return nil }, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			if err := tt.seed(); err != nil {
+				t.Fatal(err)
+			}
+			before, err := load()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			removed, err := Untrust("/p")
+			if err != nil || removed != tt.wantRemoved {
+				t.Fatalf("Untrust = %v, %v; want %v, nil", removed, err, tt.wantRemoved)
+			}
+
+			after, err := load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := after["/p"]; ok {
+				t.Errorf("entry for /p still present: %v", after)
+			}
+			for root, v := range before {
+				if root != "/p" && after[root] != v {
+					t.Errorf("entry %q = %q after Untrust, want %q kept", root, after[root], v)
+				}
+			}
+			for _, h := range []string{"h1", "", Always} {
+				if ok, _ := IsTrusted("/p", h); ok {
+					t.Errorf("IsTrusted(/p, %q) after Untrust = true", h)
+				}
+			}
+		})
+	}
+}
+
+func TestUntrustCorruptStore(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	mustMkdir(t, filepath.Dir(path()))
+	mustWrite(t, path(), "{not json")
+
+	if removed, err := Untrust("/p"); removed || err == nil {
+		t.Errorf("Untrust on corrupt file = %v, %v; want false, error", removed, err)
+	}
+	if err := TrustAlways("/p"); err == nil {
+		t.Error("TrustAlways on corrupt file: want error")
+	}
+	if b, _ := os.ReadFile(path()); string(b) != "{not json" {
+		t.Errorf("corrupt trust.json was overwritten: %q", b)
+	}
+}

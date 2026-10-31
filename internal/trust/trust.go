@@ -112,23 +112,65 @@ func load() (map[string]string, error) {
 	return m, nil
 }
 
-// IsTrusted reports whether root was trusted with this .lanes.toml hash. On error it is false.
+// Always is the trust.json value of a root trusted whatever its .lanes.toml says. A hex SHA-256 never equals it,
+// and an older lanes reads it as a changed hash and just asks again.
+const Always = "always"
+
+// IsTrusted reports whether root was trusted with this .lanes.toml hash, or always. On error it is false.
 func IsTrusted(root, hash string) (bool, error) {
 	m, err := load()
 	if err != nil {
 		return false, err
 	}
 	h, ok := m[root]
-	return ok && h == hash, nil
+	return ok && (h == Always || h == hash), nil
 }
 
-// Trust records root with hash. A corrupt trust.json is an error and is left as it is, never overwritten.
+// Trust records root with hash, but keeps an Always entry as it is: re-recording a hash (after the dialog, by
+// lanes init or :edit project) never takes always-trust away. A corrupt trust.json is an error and is left as it is,
+// never overwritten.
 func Trust(root, hash string) error {
 	m, err := load()
 	if err != nil {
 		return err
 	}
+	if m[root] == Always {
+		return nil
+	}
 	m[root] = hash
+	return save(m)
+}
+
+// TrustAlways records root as trusted whatever its .lanes.toml says. A corrupt trust.json is an error and is left as
+// it is.
+func TrustAlways(root string) error {
+	m, err := load()
+	if err != nil {
+		return err
+	}
+	m[root] = Always
+	return save(m)
+}
+
+// Untrust removes root's entry, hash or Always, and reports whether there was one. A corrupt trust.json is an error
+// and is left as it is.
+func Untrust(root string) (bool, error) {
+	m, err := load()
+	if err != nil {
+		return false, err
+	}
+	if _, ok := m[root]; !ok {
+		return false, nil
+	}
+	delete(m, root)
+	if err := save(m); err != nil {
+		return false, err // the entry is still on disk
+	}
+	return true, nil
+}
+
+// save writes m to trust.json atomically, through a temp file renamed over it.
+func save(m map[string]string) error {
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err

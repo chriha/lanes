@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/chriha/lanes/internal/item"
 )
@@ -17,19 +18,46 @@ type GitHubIssues struct {
 }
 
 // ponytail: first 100 open issues (and 20 blockers, blocked issues and sub-issues each); paginate if a repo needs more.
-const ghIssuesQuery = `query($owner:String!,$name:String!){
+const ghIssuesQueryFmt = `query($owner:String!,$name:String!){
   viewer{login}
   repository(owner:$owner,name:$name){ issues(states:OPEN,first:100,orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{
     number title url
     author{login}
     assignees(first:20){nodes{login}}
     labels(first:50){nodes{name}}
-    blockedBy(first:20){nodes{number state}}
-    blocking(first:20){nodes{number state}}
-    parent{number state}
-    subIssues(first:20){nodes{number state}}
+    %s
   }}}
 }`
+
+// ghIssuesRelations are the fields of hosts that support issue dependencies and sub-issues; older hosts reject them.
+const ghIssuesRelations = `blockedBy(first:20){nodes{number state}}
+    blocking(first:20){nodes{number state}}
+    parent{number state}
+    subIssues(first:20){nodes{number state}}`
+
+var (
+	ghIssuesQuery           = fmt.Sprintf(ghIssuesQueryFmt, ghIssuesRelations)
+	ghIssuesQueryNoRelation = fmt.Sprintf(ghIssuesQueryFmt, "")
+)
+
+// ghIssuesUnknownRelation reports whether the response rejects one of the relation fields as unknown.
+func ghIssuesUnknownRelation(out []byte) bool {
+	var r ghIssuesResp
+	if json.Unmarshal(out, &r) != nil {
+		return false
+	}
+	for _, e := range r.Errors {
+		if !strings.Contains(e.Message, "doesn't exist on type") {
+			continue
+		}
+		for _, f := range []string{"blockedBy", "blocking", "parent", "subIssues"} {
+			if strings.Contains(e.Message, "'"+f+"'") {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 type ghIssue struct {
 	Number    int
@@ -60,6 +88,10 @@ type ghIssuesResp struct {
 
 func (g *GitHubIssues) Fetch(ctx context.Context) ([]item.Item, error) {
 	out, err := ghGraphQL(ctx, "github-issues", &g.Project, g.Run, ghIssuesQuery)
+	if ghIssuesUnknownRelation(out) {
+		// The host has no issue dependencies or sub-issues: list the issues without relations.
+		out, err = ghGraphQL(ctx, "github-issues", &g.Project, g.Run, ghIssuesQueryNoRelation)
+	}
 	if err != nil {
 		return nil, err
 	}

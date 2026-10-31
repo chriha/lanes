@@ -656,3 +656,71 @@ docs = "#cccccc"
 		}
 	}
 }
+
+func TestThemeLabelsProjectOverridesCaseVariant(t *testing.T) {
+	const global = `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[theme.labels]
+bug = "#111111"
+docs = "#222222"
+[theme.dark.labels]
+bug = "#333333"
+[theme.light.labels]
+bug = "#444444"
+`
+	tests := []struct {
+		name    string
+		project string
+		want    map[string]string // theme.labels after loading
+		wantDk  map[string]string // theme.dark.labels after loading
+		wantErr string
+	}{
+		{"project key replaces global key differing in case", "[theme.labels]\nBug = \"#aaaaaa\"\n",
+			map[string]string{"Bug": "#aaaaaa", "docs": "#222222"}, map[string]string{"bug": "#333333"}, ""},
+		{"same for a mode table", "[theme.dark.labels]\nBUG = \"#aaaaaa\"\n",
+			map[string]string{"bug": "#111111", "docs": "#222222"}, map[string]string{"BUG": "#aaaaaa"}, ""},
+		{"light table", "[theme.light.labels]\nBug = \"#aaaaaa\"\n",
+			map[string]string{"bug": "#111111", "docs": "#222222"}, map[string]string{"bug": "#333333"}, ""},
+		{"exact match still overrides", "[theme.labels]\nbug = \"#aaaaaa\"\n",
+			map[string]string{"bug": "#aaaaaa", "docs": "#222222"}, map[string]string{"bug": "#333333"}, ""},
+		{"two keys in the project table still conflict", "[theme.labels]\nBug = \"#aaaaaa\"\nBUG = \"#bbbbbb\"\n",
+			nil, nil, "labels.Bug: same label as theme.labels.BUG"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+			t.Setenv("HOME", tmp)
+			old, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chdir(old) })
+			if err := os.Chdir(tmp); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), global)
+			write(t, filepath.Join(tmp, ".lanes.toml"), tt.project)
+			c, err := Load()
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want it to contain %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(c.Theme.Labels, tt.want) {
+				t.Errorf("theme.labels = %v, want %v", c.Theme.Labels, tt.want)
+			}
+			if !reflect.DeepEqual(c.Theme.Dark.Labels, tt.wantDk) {
+				t.Errorf("theme.dark.labels = %v, want %v", c.Theme.Dark.Labels, tt.wantDk)
+			}
+		})
+	}
+}

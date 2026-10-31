@@ -169,3 +169,54 @@ func TestSaveIsPrivate(t *testing.T) {
 		t.Errorf("new dir = %v, %v; want 0700", fi, err)
 	}
 }
+
+func TestBackupOnlyWhenFileFailsToDecode(t *testing.T) {
+	tests := []struct {
+		name       string
+		unreadable bool
+		content    string
+		wantBackup bool
+	}{
+		{"unreadable file stays in place", true, `{"a":{"text":"x"}}`, false},
+		{"undecodable file is backed up", false, "{not json", true},
+	}
+	ops := map[string]func(Store) error{
+		"Set":    func(s Store) error { return s.Set("b", "y") },
+		"Delete": func(s Store) error { return s.Delete("b") },
+	}
+	for _, tt := range tests {
+		for opName, op := range ops {
+			t.Run(tt.name+"/"+opName, func(t *testing.T) {
+				setup(t)
+				if err := os.MkdirAll(filepath.Dir(file()), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				mode := os.FileMode(0o600)
+				if tt.unreadable {
+					mode = 0
+				}
+				if err := os.WriteFile(file(), []byte(tt.content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chmod(file(), mode); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := os.ReadFile(file()); tt.unreadable && err == nil {
+					t.Skip("file still readable (running as root)")
+				}
+				if err := op(Store{}); err != nil {
+					t.Fatal(err)
+				}
+				_, err := os.Stat(file() + ".bak")
+				if got := err == nil; got != tt.wantBackup {
+					t.Fatalf("backup exists = %v, want %v", got, tt.wantBackup)
+				}
+				if tt.wantBackup {
+					if b, _ := os.ReadFile(file() + ".bak"); string(b) != tt.content {
+						t.Fatalf("backup = %q, want %q", b, tt.content)
+					}
+				}
+			})
+		}
+	}
+}

@@ -14,6 +14,8 @@ import (
 type Overrides struct {
 	Filters map[string]string `json:"filters"`
 	Views   []View            `json:"views"`
+
+	backup string // set by Save when it moved a corrupt views.json aside
 }
 
 func overridesPath() string { return filepath.Join(app.StateDir(), "views.json") }
@@ -35,6 +37,11 @@ func LoadOverrides() (*Overrides, error) {
 	return o, err
 }
 
+// BackedUp is the path a corrupt views.json was moved to by the last Save, or "" if none was.
+func (o *Overrides) BackedUp() string { return o.backup }
+
+// Save writes the overrides. A views.json that reads but doesn't decode is moved to views.json.bak
+// first, so the save never discards its content.
 func (o *Overrides) Save() error {
 	if err := os.MkdirAll(filepath.Dir(overridesPath()), app.DirMode); err != nil {
 		return err

@@ -163,13 +163,32 @@ func (m *Model) ask(prompt string, do func() tea.Cmd) {
 	m.mode = modeConfirm
 }
 
-// ParseTemplate parses an action's run or cwd template.
+// ParseTemplate parses an action's run template; every value it inserts is shell-escaped (see shellesc.go).
 func ParseTemplate(text string) (*template.Template, error) {
-	return template.New("").Funcs(template.FuncMap{"q": shq}).Option("missingkey=error").Parse(text)
+	t, err := ParseCwdTemplate(text)
+	if err != nil {
+		return nil, err
+	}
+	return t, escapeShell(t)
 }
 
+// ParseCwdTemplate parses an action's cwd template: a directory, not shell code, so values go in unchanged.
+func ParseCwdTemplate(text string) (*template.Template, error) {
+	return template.New("").Funcs(templateFuncs).Option("missingkey=error").Parse(text)
+}
+
+// render renders a run template.
 func render(text string, data map[string]any) (string, error) {
 	t, err := ParseTemplate(text)
+	return execTemplate(t, err, data)
+}
+
+func renderCwd(text string, data map[string]any) (string, error) {
+	t, err := ParseCwdTemplate(text)
+	return execTemplate(t, err, data)
+}
+
+func execTemplate(t *template.Template, err error, data map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
@@ -264,7 +283,7 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 				m.say(lvErr, fmt.Sprintf("action %s: %v", name, err))
 				return nil
 			}
-			cwd, err := render(act.Cwd, data)
+			cwd, err := renderCwd(act.Cwd, data)
 			if err != nil {
 				m.say(lvErr, fmt.Sprintf("action %s cwd: %v", name, err))
 				return nil

@@ -35,7 +35,7 @@ func listLines(m *Model) []string {
 		case strings.HasPrefix(l, "──"):
 			out = append(out, l)
 		default:
-			out = append(out, strings.Fields(strings.TrimPrefix(l, "▸"))[0]) // ▸ marks the cursor row
+			out = append(out, strings.Fields(strings.TrimPrefix(l, "▌"))[0]) // ▌ marks a marked row
 		}
 	}
 	return out

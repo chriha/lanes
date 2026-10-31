@@ -184,7 +184,8 @@ func ghRunner(run func(context.Context, ...string) ([]byte, error)) func(context
 }
 
 // ghGraphQL runs query through gh for the owner/repo in *project, which is detected from the origin remote
-// (and stored) when empty; typ prefixes the errors. run nil runs the real gh binary.
+// (and stored) when empty; typ prefixes the errors. run nil runs the real gh binary. On a gh failure the
+// stdout gh produced is returned along with the error.
 func ghGraphQL(ctx context.Context, typ string, project *string, run func(context.Context, ...string) ([]byte, error), query string) ([]byte, error) {
 	if *project == "" {
 		u, err := originPath()
@@ -199,7 +200,7 @@ func ghGraphQL(ctx context.Context, typ string, project *string, run func(contex
 	}
 	out, err := ghRunner(run)(ctx, "api", "graphql", "-f", "query="+query, "-f", "owner="+owner, "-f", "name="+name)
 	if err != nil {
-		return nil, fmt.Errorf("gh: %w", err)
+		return out, fmt.Errorf("gh: %w", err) // out: gh prints a GraphQL error response to stdout before exiting 1
 	}
 	return out, nil
 }

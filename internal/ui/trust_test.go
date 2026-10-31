@@ -1,11 +1,16 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/chriha/lanes/internal/config"
+	"github.com/chriha/lanes/internal/trust"
 )
 
 func TestTrustDialog(t *testing.T) {
@@ -51,5 +56,72 @@ func TestTrustDialogView(t *testing.T) {
 		if !strings.Contains(v, want) {
 			t.Errorf("view lacks %q:\n%s", want, v)
 		}
+	}
+}
+
+func TestReloadChecksTrust(t *testing.T) {
+	const before, after = "# a\n", "# b\n"
+	tests := []struct {
+		name        string
+		trustAfter  bool    // the user trusted the changed .lanes.toml (e.g. by restarting lanes)
+		msg         tea.Msg // nil = a reload from the tick or ctrl-r
+		wantApplied bool
+		wantTrusted bool // trust.json trusts the changed file afterwards
+	}{
+		{"untrusted change is kept out", false, nil, false, false},
+		{"trusted change is applied", true, nil, true, true},
+		{":edit project trusts and applies it", false, editorDone{project: true}, true, true},
+		{":edit of the global file does not trust it", false, editorDone{}, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newBackoffModel(t) // fresh HOME and XDG dirs
+			dir, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			old, _ := os.Getwd()
+			defer os.Chdir(old)
+			if err := os.Chdir(dir); err != nil {
+				t.Fatal(err)
+			}
+			p := filepath.Join(dir, config.ProjectFile)
+			write := func(s string) {
+				if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			record := func() {
+				hash, err := trust.HashRoot(dir)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := trust.Trust(dir, hash); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write(before)
+			record() // lanes started trusted
+			write(after)
+			if tt.trustAfter {
+				record()
+			}
+			cfg := m.cfg
+			if tt.msg == nil {
+				m.reload()
+			} else {
+				m.Update(tt.msg)
+			}
+			if applied := m.cfg != cfg; applied != tt.wantApplied {
+				t.Errorf("applied = %v, want %v (notice %q)", applied, tt.wantApplied, m.notice)
+			}
+			if !tt.wantApplied && m.notice != ".lanes.toml changed — restart lanes to trust it" {
+				t.Errorf("notice = %q, want the restart hint", m.notice)
+			}
+			hash, _ := trust.HashRoot(dir)
+			if ok, err := trust.IsTrusted(dir, hash); err != nil || ok != tt.wantTrusted {
+				t.Errorf("trusted = %v (err %v), want %v", ok, err, tt.wantTrusted)
+			}
+		})
 	}
 }

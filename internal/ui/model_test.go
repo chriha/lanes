@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/chriha/lanes/internal/cache"
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/item"
 )
@@ -310,7 +312,7 @@ func TestIDColumn(t *testing.T) {
 			m := newNotesModel(t)
 			for i, want := range map[int]string{0: tt.wantID, len(its) - 1: tt.wantEnd} {
 				line := ansi.Strip(m.row(its[i], false, tt.wantW))
-				if !strings.HasPrefix(line[3:], want) {
+				if !strings.HasPrefix(line[2:], want) {
 					t.Errorf("row %d = %q, want ID cell %q", i, line, want)
 				}
 				// the title column absorbs the ID width: rows keep the width of the 7-wide layout
@@ -335,7 +337,7 @@ func TestRowAuthorFollowsTitle(t *testing.T) {
 		{"short title", "fix it", "alice", []item.Badge{{Text: "ok"}}, "fix it  alice  "},
 		{"no author", "fix it", "", []item.Badge{{Text: "ok"}}, "fix it   "},
 		{"long author is cut", "fix it", long, nil, "fix it  " + strings.Repeat("a", 15) + "…"},
-		{"title cut first", strings.Repeat("t", 200), "alice", []item.Badge{{Text: "ok"}}, strings.Repeat("t", 57) + "…  alice "},
+		{"title cut first", strings.Repeat("t", 200), "alice", []item.Badge{{Text: "ok"}}, strings.Repeat("t", 58) + "…  alice "},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -343,7 +345,7 @@ func TestRowAuthorFollowsTitle(t *testing.T) {
 			m.width = 80
 			it := item.Item{ID: "!1", Title: tt.title, Author: tt.author, Badges: tt.badges, Fields: map[string]any{}}
 			line := ansi.Strip(m.row(it, false, 7))
-			cell := line[3+7+1:]
+			cell := line[2+7+1:]
 			if !strings.HasPrefix(cell, tt.wantPrefix) {
 				t.Errorf("row = %q, want %q after the ID", line, tt.wantPrefix)
 			}
@@ -401,5 +403,46 @@ func TestApplyThemeTextDimSelection(t *testing.T) {
 	applyTheme(config.Theme{})
 	if text, dim, tab = render(); text != defText || dim != defDim || tab != defTab {
 		t.Errorf("clearing the overrides should restore the defaults, got %q %q %q", text, dim, tab)
+	}
+}
+
+// dirtyProv returns items carrying terminal control sequences from both Quick and Fetch.
+type dirtyProv struct{}
+
+func (dirtyProv) dirty() []item.Item {
+	return []item.Item{{ID: "1", Title: "a\x1b[2Jb\nc", Author: "x\x07", Fields: map[string]any{"f": "\x1b]52;c;aGk=\x07"}}}
+}
+func (p dirtyProv) Fetch(context.Context) ([]item.Item, error) { return p.dirty(), nil }
+func (p dirtyProv) Quick(context.Context) ([]item.Item, error) { return p.dirty(), nil }
+
+func TestFetchStripsControlSequences(t *testing.T) {
+	m := newBackoffModel(t)
+	m.providers["p"] = dirtyProv{}
+	msgs := runCmd(m.fetch("p"))
+	if len(msgs) != 2 {
+		t.Fatalf("got %d messages, want quick and full", len(msgs))
+	}
+	for i, msg := range msgs {
+		fm, ok := msg.(fetchedMsg)
+		if !ok {
+			t.Fatalf("message %d is %T", i, msg)
+		}
+		it := fm.items[0]
+		if it.Title != "a[2Jb c" || it.Author != "x" || it.Fields["f"] != "]52;c;aGk=" {
+			t.Errorf("message %d (partial=%v) reached the model unsanitized: %#v", i, fm.partial, it)
+		}
+	}
+}
+
+func TestCachedItemsAreSanitized(t *testing.T) {
+	m := newBackoffModel(t)
+	cache.Save("p", dirtyProv{}.dirty())
+	m.data = map[string][]item.Item{}
+	m.applyConfig(&config.Config{Provider: map[string]config.Provider{"p": {Type: "command", Command: "true"}},
+		View: []config.View{{Name: "v", Provider: "p", Filter: "true"}},
+	})
+	got := m.data["p"]
+	if len(got) != 1 || got[0].Title != "a[2Jb c" || got[0].Fields["f"] != "]52;c;aGk=" {
+		t.Errorf("cached items reached the model unsanitized: %#v", got)
 	}
 }

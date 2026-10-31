@@ -47,12 +47,11 @@ func fakeEnv(dir string, tty, yes bool, calls *[]string) (env, *bytes.Buffer, *b
 	rec := func(s string) { *calls = append(*calls, s) }
 	return env{
 		wd: dir, isTTY: tty, stdout: &stdout, stderr: &stderr,
-		projectPath: func() string { return filepath.Join(dir, config.ProjectFile) },
-		ask:         func(string) (bool, error) { rec("ask"); return yes, nil },
-		initApp:     func(string) { rec("initApp") },
-		hook:        func(string) { rec("hook") },
-		status:      func() { rec("status") },
-		doctor:      func() int { rec("doctor"); return 0 },
+		ask:     func(string) (bool, error) { rec("ask"); return yes, nil },
+		initApp: func(string) { rec("initApp") },
+		hook:    func(string) { rec("hook") },
+		status:  func() { rec("status") },
+		doctor:  func() int { rec("doctor"); return 0 },
 		init: func() int {
 			rec("init")
 			return 0
@@ -101,7 +100,7 @@ func TestRunGate(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, config.ProjectFile), []byte("# x\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			hash, _ := trust.Hash(filepath.Join(dir, config.ProjectFile))
+			hash, _ := trust.HashRoot(root)
 			if tt.trusted {
 				if err := trust.Trust(root, hash); err != nil {
 					t.Fatal(err)

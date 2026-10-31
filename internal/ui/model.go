@@ -181,7 +181,7 @@ func (m *Model) applyConfig(cfg *config.Config) {
 		delete(m.fullFetched, name) // a rebuilt provider has no snapshot: show the partial result first again
 		delete(m.provErr, name)     // built again: drop the stale build error until the next fetch
 		if _, ok := m.data[name]; !ok {
-			m.data[name] = cache.Load(name)
+			m.data[name] = item.Sanitize(cache.Load(name))
 		}
 	}
 	for k, b := range m.busy {
@@ -379,7 +379,7 @@ func (m *Model) fetch(name string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		items, err := p.Fetch(ctx)
-		return fetchedMsg{name: name, items: items, err: err}
+		return fetchedMsg{name: name, items: item.Sanitize(items), err: err}
 	}
 	q, ok := p.(provider.Quicker)
 	if !ok || m.fullFetched[name] {
@@ -389,7 +389,7 @@ func (m *Model) fetch(name string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		items, err := q.Quick(ctx)
-		return fetchedMsg{name: name, items: items, err: err, partial: true}
+		return fetchedMsg{name: name, items: item.Sanitize(items), err: err, partial: true}
 	}
 	return tea.Sequence(quick, full)
 }
@@ -486,6 +486,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.pollSessions()
 	case editorDone:
+		if msg.project { // the user wrote it through lanes: trust its new content
+			if err := trustProject(); err != nil {
+				m.notice = "trust: " + err.Error()
+				return m, nil
+			}
+		}
 		return m, m.reload()
 	case noteEdited:
 		if msg.err != nil {
@@ -623,6 +629,15 @@ func (m *Model) say(l level, text string) { m.notice, m.level = text, l }
 
 // reload re-reads the config (also triggered by saving the file) and refetches, so edits apply live.
 func (m *Model) reload() tea.Cmd {
+	if ok, err := projectTrusted(); !ok {
+		if err != nil {
+			m.say(lvErr, "trust: "+err.Error())
+		} else {
+			m.say(lvWarn, ".lanes.toml changed — restart lanes to trust it")
+		}
+		m.cfgMod = config.Mtime() // do not retry the same untrusted file every tick
+		return nil
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		m.say(lvErr, "config: "+err.Error())
@@ -1049,9 +1064,9 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 		return s
 	}
 	plain := st(lipgloss.NewStyle())
-	mark := plain.Render("  ")
+	mark := plain.Render(" ")
 	if m.marks[it.ID] {
-		mark = st(sMark).Render("● ")
+		mark = st(sMark).Render("▌")
 	}
 	var badges []string
 	var all []item.Badge
@@ -1076,7 +1091,7 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	right := strings.Join(badges, plain.Render("  "))
 	const authW = 16
 	id := st(sID).Render(fmt.Sprintf("%-*s", idW, ansi.Truncate(it.ID, idW, "…")))
-	fixed := 1 + 2 + idW + 1 + 1 + rightW + 1
+	fixed := 1 + 1 + idW + 1 + 1 + rightW + 1
 	cellW := m.width - fixed // title, author and padding share this cell
 	authText := ansi.Truncate(it.Author, authW, "…")
 	authCellW := 0
@@ -1118,12 +1133,8 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	if pad := cellW - used; pad > 0 {
 		title += plain.Render(strings.Repeat(" ", pad))
 	}
-	cur := plain.Render(" ")
-	if selected {
-		cur = st(sMark).Render("▸")
-	}
 	sp := plain.Render(" ")
-	line := cur + mark + id + sp + title + sp + right
+	line := mark + sp + id + sp + title + sp + right
 	if selected {
 		return plain.Width(m.width).Render(line)
 	}

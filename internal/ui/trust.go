@@ -7,6 +7,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/chriha/lanes/internal/trust"
 )
 
 // trustDialog asks whether the user trusts the project at root. Only typing yes trusts it.
@@ -62,4 +64,33 @@ func AskTrust(root string) (bool, error) {
 		return false, err
 	}
 	return m.(trustDialog).yes, nil
+}
+
+// projectHash is the trust root of the cwd and the hash of its .lanes.toml files, as the startup gate computes them.
+func projectHash() (root, hash string, err error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", "", err
+	}
+	root = trust.Root(wd)
+	hash, err = trust.HashRoot(root)
+	return root, hash, err
+}
+
+// projectTrusted reports whether the project's .lanes.toml files still have the content the user trusted.
+func projectTrusted() (bool, error) {
+	root, hash, err := projectHash()
+	if err != nil {
+		return false, err
+	}
+	return trust.IsTrusted(root, hash)
+}
+
+// trustProject records the project's current .lanes.toml content as trusted.
+func trustProject() error {
+	root, hash, err := projectHash()
+	if err != nil {
+		return err
+	}
+	return trust.Trust(root, hash)
 }

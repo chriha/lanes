@@ -114,10 +114,10 @@ warn = "#eeeeee"
 	if c.Theme.Mode != "light" {
 		t.Errorf("theme mode = %q, want the project's %q", c.Theme.Mode, "light")
 	}
-	if want := (Colors{Accent: "#aaaaaa", OK: "#dddddd"}); c.Theme.Light != want {
+	if want := (Colors{Accent: "#aaaaaa", OK: "#dddddd"}); !reflect.DeepEqual(c.Theme.Light, want) {
 		t.Errorf("[theme.light] should merge per field: %+v, want %+v", c.Theme.Light, want)
 	}
-	if want := (Colors{Info: "#cccccc", Warn: "#eeeeee"}); c.Theme.Dark != want {
+	if want := (Colors{Info: "#cccccc", Warn: "#eeeeee"}); !reflect.DeepEqual(c.Theme.Dark, want) {
 		t.Errorf("[theme.dark] should merge per field: %+v, want %+v", c.Theme.Dark, want)
 	}
 }
@@ -228,6 +228,9 @@ run = "echo work"
 			want := strings.TrimSuffix(strings.TrimPrefix(tt.when, "when = '"), "'")
 			if got := c.Action["work"].When; got != want {
 				t.Errorf("when = %q, want %q", got, want)
+			}
+			if c.Action["work"].WhenFilter == nil {
+				t.Error("WhenFilter is nil after load, want the compiled when")
 			}
 		})
 	}
@@ -401,6 +404,9 @@ provider = "gl"
 	for _, scope := range []string{"global", "project"} {
 		for _, table := range []string{"theme", "theme.light", "theme.dark"} {
 			for i := 0; i < fields.NumField(); i++ {
+				if fields.Field(i).Type.Kind() != reflect.String {
+					continue // the labels table has its own test
+				}
 				key := table + "." + fields.Field(i).Tag.Get("toml")
 				for _, tt := range tests {
 					t.Run(scope+"/"+key+"/"+tt.name, func(t *testing.T) {
@@ -546,5 +552,237 @@ poll_interval_blurred = "3m"
 	}
 	if got := c.PollBlurred(); got != 3*time.Minute {
 		t.Errorf("PollBlurred() = %v, want 3m from the project config", got)
+	}
+}
+
+func TestThemeLabelsValidation(t *testing.T) {
+	const base = `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+`
+	tests := []struct {
+		name    string
+		labels  string // body of the labels table
+		wantErr string // substring naming the key; empty = valid
+	}{
+		{"valid short and long hex", "bug = \"#F87171\"\nneeds-info = \"#abc\"\n", ""},
+		{"quoted key with a space", "\"to be deployed\" = \"#4ADE80\"\n", ""},
+		{"color name", "bug = \"red\"\n", `labels.bug "red": want #RGB or #RRGGBB`},
+		{"no hash", "bug = \"F87171\"\n", `labels.bug "F87171": want #RGB or #RRGGBB`},
+		{"empty value", "bug = \"\"\n", `labels.bug "": want #RGB or #RRGGBB`},
+		{"keys differing only in case", "bug = \"#F87171\"\nBug = \"#4ADE80\"\n", "labels.bug: same label as"},
+	}
+	for _, scope := range []string{"global", "project"} {
+		for _, table := range []string{"theme", "theme.light", "theme.dark"} {
+			for _, tt := range tests {
+				t.Run(scope+"/"+table+"/"+tt.name, func(t *testing.T) {
+					tmp := t.TempDir()
+					t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+					t.Setenv("HOME", tmp)
+					old, _ := os.Getwd()
+					defer os.Chdir(old)
+					if err := os.Chdir(tmp); err != nil {
+						t.Fatal(err)
+					}
+					theme := "\n[" + table + ".labels]\n" + tt.labels
+					if scope == "global" {
+						write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), base+theme)
+					} else {
+						write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), base)
+						write(t, filepath.Join(tmp, ".lanes.toml"), theme)
+					}
+					_, err := Load()
+					if tt.wantErr == "" {
+						if err != nil {
+							t.Fatalf("err = %v, want none", err)
+						}
+						return
+					}
+					if err == nil {
+						t.Fatal("err = nil, want a config error")
+					}
+					if want := table + "." + tt.wantErr; !strings.Contains(err.Error(), want) {
+						t.Errorf("error %q does not contain %q", err, want)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestThemeLabelsProjectMerge(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+	t.Setenv("HOME", tmp)
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[theme.labels]
+bug = "#111111"
+docs = "#222222"
+[theme.dark.labels]
+bug = "#333333"
+`)
+	write(t, filepath.Join(tmp, ".lanes.toml"), `
+[theme.labels]
+bug = "#aaaaaa"
+needs-info = "#bbbbbb"
+[theme.light.labels]
+docs = "#cccccc"
+`)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		table     string
+		got, want map[string]string
+	}{
+		{"theme.labels", c.Theme.Labels, map[string]string{"bug": "#aaaaaa", "docs": "#222222", "needs-info": "#bbbbbb"}},
+		{"theme.light.labels", c.Theme.Light.Labels, map[string]string{"docs": "#cccccc"}},
+		{"theme.dark.labels", c.Theme.Dark.Labels, map[string]string{"bug": "#333333"}},
+	}
+	for _, tt := range tests {
+		if !reflect.DeepEqual(tt.got, tt.want) {
+			t.Errorf("[%s] = %v, want %v (merged per key)", tt.table, tt.got, tt.want)
+		}
+	}
+}
+
+func TestThemeLabelsProjectOverridesCaseVariant(t *testing.T) {
+	const global = `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[theme.labels]
+bug = "#111111"
+docs = "#222222"
+[theme.dark.labels]
+bug = "#333333"
+[theme.light.labels]
+bug = "#444444"
+`
+	tests := []struct {
+		name    string
+		project string
+		want    map[string]string // theme.labels after loading
+		wantDk  map[string]string // theme.dark.labels after loading
+		wantErr string
+	}{
+		{"project key replaces global key differing in case", "[theme.labels]\nBug = \"#aaaaaa\"\n",
+			map[string]string{"Bug": "#aaaaaa", "docs": "#222222"}, map[string]string{"bug": "#333333"}, ""},
+		{"same for a mode table", "[theme.dark.labels]\nBUG = \"#aaaaaa\"\n",
+			map[string]string{"bug": "#111111", "docs": "#222222"}, map[string]string{"BUG": "#aaaaaa"}, ""},
+		{"light table", "[theme.light.labels]\nBug = \"#aaaaaa\"\n",
+			map[string]string{"bug": "#111111", "docs": "#222222"}, map[string]string{"bug": "#333333"}, ""},
+		{"exact match still overrides", "[theme.labels]\nbug = \"#aaaaaa\"\n",
+			map[string]string{"bug": "#aaaaaa", "docs": "#222222"}, map[string]string{"bug": "#333333"}, ""},
+		{"two keys in the project table still conflict", "[theme.labels]\nBug = \"#aaaaaa\"\nBUG = \"#bbbbbb\"\n",
+			nil, nil, "labels.Bug: same label as theme.labels.BUG"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+			t.Setenv("HOME", tmp)
+			old, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chdir(old) })
+			if err := os.Chdir(tmp); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), global)
+			write(t, filepath.Join(tmp, ".lanes.toml"), tt.project)
+			c, err := Load()
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want it to contain %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(c.Theme.Labels, tt.want) {
+				t.Errorf("theme.labels = %v, want %v", c.Theme.Labels, tt.want)
+			}
+			if !reflect.DeepEqual(c.Theme.Dark.Labels, tt.wantDk) {
+				t.Errorf("theme.dark.labels = %v, want %v", c.Theme.Dark.Labels, tt.wantDk)
+			}
+		})
+	}
+}
+
+func TestActionWhenFilterSurvivesProjectOverlay(t *testing.T) {
+	tmp := t.TempDir()
+	proj := filepath.Join(tmp, "proj")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+	t.Setenv("HOME", tmp)
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(proj); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[action.shared]
+run = "echo shared"
+when = 'kind == "ticket"'
+[action.over]
+run = "echo global"
+when = 'kind == "ticket"'
+`)
+	write(t, filepath.Join(proj, ProjectFile), `
+[action.over]
+run = "echo project"
+when = 'kind == "pr"'
+`)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		action string
+		kind   string
+		want   bool
+	}{
+		{"shared", "ticket", true},
+		{"shared", "pr", false},
+		{"over", "pr", true},
+		{"over", "ticket", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.action+"/"+tt.kind, func(t *testing.T) {
+			f := c.Action[tt.action].WhenFilter
+			if f == nil {
+				t.Fatal("WhenFilter is nil")
+			}
+			got, err := f.Match(map[string]any{"kind": tt.kind})
+			if err != nil || got != tt.want {
+				t.Errorf("Match(kind=%s) = %v, %v; want %v", tt.kind, got, err, tt.want)
+			}
+		})
 	}
 }

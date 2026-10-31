@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -222,5 +223,101 @@ func TestPreviewKeepsSessionAndLastRunLines(t *testing.T) {
 				t.Errorf("preview has %d rows, want %d:\n%s", n, previewH, got)
 			}
 		})
+	}
+}
+
+func TestPreviewColorsLabels(t *testing.T) {
+	fg := func(hex string) lipgloss.Style { return lipgloss.NewStyle().Foreground(lipgloss.Color(hex)) }
+	sep := func() string { return sText.Render(", ") }
+	tests := []struct {
+		name   string
+		theme  config.Theme
+		labels any
+		want   func() string // the labels line after the key column, rendered with the active styles
+	}{
+		{"flat entry, case-insensitive, others in text color",
+			config.Theme{Mode: "dark", Colors: config.Colors{Labels: map[string]string{"bug": "#F87171"}}},
+			[]string{"Bug", "docs"},
+			func() string { return fg("#F87171").Render("Bug") + sep() + sText.Render("docs") }},
+		{"upper-case key matches a lower-case label, decoded from JSON",
+			config.Theme{Mode: "dark", Colors: config.Colors{Labels: map[string]string{"BUG": "#F87171"}}},
+			[]any{"docs", "bug"},
+			func() string { return sText.Render("docs") + sep() + fg("#F87171").Render("bug") }},
+		{"active mode's table wins over flat",
+			config.Theme{Mode: "light",
+				Colors: config.Colors{Labels: map[string]string{"bug": "#F87171"}},
+				Light:  config.Colors{Labels: map[string]string{"bug": "#C53030"}},
+				Dark:   config.Colors{Labels: map[string]string{"docs": "#60A5FA"}}},
+			[]string{"bug", "docs"},
+			func() string { return fg("#C53030").Render("bug") + sep() + sText.Render("docs") }},
+		{"no labels table", config.Theme{Mode: "dark"}, []string{"bug", "docs"},
+			func() string { return sText.Render("bug") + sep() + sText.Render("docs") }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newNotesModel(t)
+			trueColorTheme(t)
+			cfg := *m.cfg
+			cfg.Theme = tt.theme
+			m.applyConfig(&cfg)
+			m.data["p"] = []item.Item{{ID: "a", Fields: map[string]any{"number": 7, "labels": tt.labels}}}
+			m.rebuild()
+			want := " " + sDim.Render(fmt.Sprintf("%-12s", "labels")) + tt.want()
+			if got := m.preview(); !strings.Contains(got, want+"\n") {
+				t.Errorf("preview lacks the labels line %q:\n%q", want, got)
+			}
+		})
+	}
+}
+
+func TestPreviewLabelColorsFollowReload(t *testing.T) {
+	m := newNotesModel(t)
+	trueColorTheme(t)
+	m.data["p"] = []item.Item{{ID: "a", Fields: map[string]any{"number": 7, "labels": []string{"bug"}}}}
+	m.rebuild()
+	for _, tt := range []struct {
+		name   string
+		labels map[string]string
+		want   string
+	}{
+		{"colored", map[string]string{"bug": "#F87171"}, "248;113;113"},
+		{"recolored", map[string]string{"bug": "#4ADE80"}, "73;222;128"},
+		{"entry removed", nil, "230;232;238"}, // the dark text color
+	} {
+		cfg := *m.cfg
+		cfg.Theme = config.Theme{Mode: "dark", Colors: config.Colors{Labels: tt.labels}}
+		m.applyConfig(&cfg)
+		var line string
+		for _, l := range strings.Split(m.preview(), "\n") {
+			if strings.Contains(ansi.Strip(l), "labels") {
+				line = l
+			}
+		}
+		if !strings.Contains(line, tt.want+"mbug") {
+			t.Errorf("%s: labels line %q, want bug in %s", tt.name, line, tt.want)
+		}
+	}
+}
+
+func TestPreviewTruncatesColoredLabels(t *testing.T) {
+	m := newNotesModel(t)
+	trueColorTheme(t)
+	cfg := *m.cfg
+	cfg.Theme = config.Theme{Mode: "dark", Colors: config.Colors{Labels: map[string]string{"bug": "#F87171", "docs": "#4ADE80"}}}
+	m.applyConfig(&cfg)
+	labels := []string{}
+	for range 10 {
+		labels = append(labels, "bug", "docs")
+	}
+	m.data["p"] = []item.Item{{ID: "a", Fields: map[string]any{"number": 7, "labels": labels}}}
+	m.rebuild()
+	m.width = 40
+	for _, l := range strings.Split(m.preview(), "\n") {
+		if w := ansi.StringWidth(l); w > m.width {
+			t.Errorf("line is %d wide, want at most %d: %q", w, m.width, l)
+		}
+		if s := ansi.Strip(l); strings.HasPrefix(s, " labels") && !strings.HasSuffix(s, "…") {
+			t.Errorf("long labels line is not truncated with …: %q", s)
+		}
 	}
 }

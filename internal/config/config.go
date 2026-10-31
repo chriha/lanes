@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -36,6 +37,8 @@ type Colors struct {
 	Text      string `toml:"text"`
 	Dim       string `toml:"dim"`
 	Selection string `toml:"selection"`
+
+	Labels map[string]string `toml:"labels"` // label name (case-insensitive) -> hex color, for the preview's labels line
 }
 
 // Theme holds the [theme] table: the flat color keys apply to both modes, [theme.light] / [theme.dark] to one.
@@ -48,15 +51,55 @@ type Theme struct {
 
 var hexColor = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
-// validate rejects any non-empty color that is not #RGB or #RRGGBB; it walks the fields, so new keys are covered.
+// validate rejects any non-empty color that is not #RGB or #RRGGBB; it walks the string fields, so new keys are covered.
 func (c Colors) validate(prefix string) error {
 	v := reflect.ValueOf(c)
 	for i := 0; i < v.NumField(); i++ {
+		if v.Field(i).Kind() != reflect.String {
+			continue
+		}
 		if s := v.Field(i).String(); s != "" && !hexColor.MatchString(s) {
 			return fmt.Errorf("%s%s %q: want #RGB or #RRGGBB", prefix, v.Type().Field(i).Tag.Get("toml"), s)
 		}
 	}
+	return validateLabels(c.Labels, prefix+"labels.")
+}
+
+// validateLabels rejects a label color that is not #RGB or #RRGGBB, and two names that differ only in case.
+func validateLabels(labels map[string]string, prefix string) error {
+	names := make([]string, 0, len(labels))
+	for name := range labels {
+		names = append(names, name)
+	}
+	sort.Strings(names) // deterministic errors
+	seen := map[string]string{}
+	for _, name := range names {
+		if s := labels[name]; !hexColor.MatchString(s) {
+			return fmt.Errorf("%s%s %q: want #RGB or #RRGGBB", prefix, name, s)
+		}
+		lower := strings.ToLower(name)
+		if prev, ok := seen[lower]; ok {
+			return fmt.Errorf("%s%s: same label as %s%s (names match case-insensitively)", prefix, name, prefix, prev)
+		}
+		seen[lower] = name
+	}
 	return nil
+}
+
+// dropShadowedLabels removes the label keys of merged that a project label key overrides by differing only in case,
+// so the project's spelling replaces the global one instead of both colliding in validateLabels.
+func dropShadowedLabels(merged *Colors, project Colors) {
+	for name := range merged.Labels {
+		if _, ok := project.Labels[name]; ok {
+			continue
+		}
+		for pname := range project.Labels {
+			if strings.EqualFold(name, pname) {
+				delete(merged.Labels, name)
+				break
+			}
+		}
+	}
 }
 
 func (t Theme) validate() error {
@@ -105,6 +148,19 @@ type Action struct {
 	Refresh bool           `toml:"refresh"` // run type: refetch providers when finished
 	When    string         `toml:"when"`    // expr against the item's fields; the action only runs on matching items (empty = all)
 	Jump    bool           `toml:"jump"`    // session type: on a single item, attach to the session once started (or if running)
+
+	WhenFilter *filter.Filter `toml:"-"` // compiled When; filled by CompileWhen (config load), nil on a hand-built action
+}
+
+// CompileWhen compiles When into WhenFilter; an empty When yields a filter matching everything. Config load calls it
+// for every action, so a hand-built action must too (a nil WhenFilter matches everything).
+func (a *Action) CompileWhen() error {
+	f, err := filter.Compile(a.When)
+	if err != nil {
+		return err
+	}
+	a.WhenFilter = f
+	return nil
 }
 
 // ShellAction is the name of the built-in shell session (key t); config actions cannot use it.
@@ -216,6 +272,9 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("%s: %w", pp, err)
 		}
 		c.View = mergeViews(global, pc.View)
+		dropShadowedLabels(&c.Theme.Colors, pc.Theme.Colors)
+		dropShadowedLabels(&c.Theme.Light, pc.Theme.Light)
+		dropShadowedLabels(&c.Theme.Dark, pc.Theme.Dark)
 		p = pp + " (project) over " + p
 	}
 	if len(c.View) == 0 {
@@ -247,9 +306,10 @@ func Load() (*Config, error) {
 		if a.Jump && a.Type == "run" {
 			return nil, fmt.Errorf("%s: action %q: jump needs type session", p, name)
 		}
-		if _, err := filter.Compile(a.When); err != nil {
+		if err := a.CompileWhen(); err != nil {
 			return nil, fmt.Errorf("%s: action %q: when: %w", p, name, err)
 		}
+		c.Action[name] = a // a is a copy: store the compiled filter
 	}
 	if err := c.Theme.validate(); err != nil {
 		return nil, fmt.Errorf("%s: %w", p, err)
@@ -323,4 +383,7 @@ run = 'glab mr update {{.iid}} --ready'
 # accent = "#6C3FD1"
 # [theme.dark]         # same color keys, dark mode only
 # accent = "#A78BFA"
+# [theme.labels]       # preview label colors by name, case-insensitive; also [theme.light.labels] / [theme.dark.labels]
+# bug = "#F87171"
+# needs-info = "#FBBF24"
 `

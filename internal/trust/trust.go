@@ -163,7 +163,10 @@ func Untrust(root string) (bool, error) {
 		return false, nil
 	}
 	delete(m, root)
-	return true, save(m)
+	if err := save(m); err != nil {
+		return false, err // the entry is still on disk
+	}
+	return true, nil
 }
 
 // save writes m to trust.json atomically, through a temp file renamed over it.

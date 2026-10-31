@@ -132,6 +132,19 @@ type Action struct {
 	Refresh bool           `toml:"refresh"` // run type: refetch providers when finished
 	When    string         `toml:"when"`    // expr against the item's fields; the action only runs on matching items (empty = all)
 	Jump    bool           `toml:"jump"`    // session type: on a single item, attach to the session once started (or if running)
+
+	WhenFilter *filter.Filter `toml:"-"` // compiled When; filled by CompileWhen (config load), nil on a hand-built action
+}
+
+// CompileWhen compiles When into WhenFilter; an empty When yields a filter matching everything. Config load calls it
+// for every action, so a hand-built action must too (a nil WhenFilter matches everything).
+func (a *Action) CompileWhen() error {
+	f, err := filter.Compile(a.When)
+	if err != nil {
+		return err
+	}
+	a.WhenFilter = f
+	return nil
 }
 
 // ShellAction is the name of the built-in shell session (key t); config actions cannot use it.
@@ -274,9 +287,10 @@ func Load() (*Config, error) {
 		if a.Jump && a.Type == "run" {
 			return nil, fmt.Errorf("%s: action %q: jump needs type session", p, name)
 		}
-		if _, err := filter.Compile(a.When); err != nil {
+		if err := a.CompileWhen(); err != nil {
 			return nil, fmt.Errorf("%s: action %q: when: %w", p, name, err)
 		}
+		c.Action[name] = a // a is a copy: store the compiled filter
 	}
 	if err := c.Theme.validate(); err != nil {
 		return nil, fmt.Errorf("%s: %w", p, err)

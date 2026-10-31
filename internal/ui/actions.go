@@ -122,6 +122,9 @@ func (m *Model) targets() []item.Item {
 func matchWhen(act config.Action, its []item.Item) (match, skip []item.Item, err error) {
 	f := act.WhenFilter // compiled once at config load
 	if f == nil {
+		if act.When != "" { // never compiled: fail closed rather than run on items the expression would exclude
+			return nil, its, fmt.Errorf("when %q was not compiled", act.When)
+		}
 		return its, nil, nil
 	}
 	for _, it := range its {

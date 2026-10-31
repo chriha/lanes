@@ -193,3 +193,11 @@ func TestMatchWhenUsesStoredFilter(t *testing.T) {
 		t.Errorf("match = %v, skip = %v; want item 1 matched and 2 skipped", match, skip)
 	}
 }
+
+func TestMatchWhenFailsClosedWithoutCompiledFilter(t *testing.T) {
+	its := mkItems("1")
+	match, skip, err := matchWhen(config.Action{When: `kind == "ticket"`}, its)
+	if err == nil || len(match) != 0 || len(skip) != 1 {
+		t.Errorf("match = %v, skip = %v, err = %v; want everything skipped with an error", match, skip, err)
+	}
+}

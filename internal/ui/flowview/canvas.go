@@ -134,6 +134,9 @@ func (c *Canvas) Box(rect Rect, b lipgloss.Border, role Role) {
 	c.Set(x1, y1, first(b.BottomRight), role)
 }
 
+// Blit copies the cells of src from sx, sy into dst. Not implemented yet.
+func (c *Canvas) Blit(src *Canvas, sx, sy int, dst Rect) {}
+
 // String renders the rows joined by newlines. Adjacent cells of one role form a run that is styled once with the
 // theme's precomputed prefix and suffix; blank unstyled cells stay plain spaces.
 func (c *Canvas) String() string {

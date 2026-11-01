@@ -52,7 +52,7 @@ func (s State) drawTree(c *Canvas, l Layout) ([]Node, [][]Point) {
 			c.center(n.Rect, n.Rect.Y+n.Rect.H/2, fmt.Sprintf("+%d more", n.More), RoleDim)
 			continue
 		}
-		s.drawAgent(c, n.Rect, s.Snap.Agents[n.Agent], l.Mode == ModeFull)
+		s.drawAgent(c, n.Rect, s.Snap.Agents[n.Agent])
 	}
 	return nodes, paths
 }
@@ -70,7 +70,8 @@ func (s State) boxWidth(l Layout) int {
 // drawAgent draws an agent box: the name in the top border; the model and effort meter, the context bar and the
 // task (full only) inside; the status and, while running, the current activity in the bottom border. A finished
 // agent's box is dim and still.
-func (s State) drawAgent(c *Canvas, r Rect, a session.Agent, full bool) {
+func (s State) drawAgent(c *Canvas, r Rect, a session.Agent) {
+	full := r.H >= 5                                        // a compact box is 4 high
 	running := a.Status == session.AgentRunning && !s.Ended // an ended session's agents are stopped
 	role, title, text, phase := ModelRole(a.Model), RoleBold, RoleText, s.Phase
 	if !running {

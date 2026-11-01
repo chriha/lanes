@@ -39,7 +39,22 @@ type Layout struct {
 	Gap     int  // columns between agent boxes side by side
 	Log     Rect // the log's title rule is its first row
 	Status  int  // row of the status line
+	View    Rect // the viewport the diagram scrolls in
 }
+
+// Diagram is the scrolling part of the view laid out on a canvas of its own, in its own coordinates: the lead, the
+// tool layer below it and the agent tree below that. It is at least the viewport's size.
+type Diagram struct {
+	W, H  int
+	Lead  Rect
+	Tools Rect
+	Tree  Rect // where the agent rows go
+	Box   Rect // the size (W, H) of one agent box
+	Nodes []Node
+}
+
+// Diagram lays out the scrolling part for the agents. Not implemented yet.
+func (l Layout) Diagram(agents []session.Agent) Diagram { return Diagram{} }
 
 // NewLayout lays the view out for a w×h terminal: full from 90×46, compact from 60×24, else too small. The full
 // layout fills the terminal: the session column runs down its left side, and right of it as many agent boxes of

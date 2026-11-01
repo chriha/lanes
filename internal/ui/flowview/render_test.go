@@ -76,7 +76,7 @@ func TestAgentBox(t *testing.T) {
 			}
 			c := NewCanvas(30, h, nil)
 			s := State{Now: now, Phase: 1, Ended: tt.ended}
-			s.drawAgent(c, Rect{0, 0, 30, h}, tt.agent, tt.full)
+			s.drawAgent(c, Rect{0, 0, 30, h}, tt.agent)
 			got := rows(c)
 			for i, w := range tt.want {
 				if w == "" {
@@ -97,7 +97,7 @@ func TestAgentBoxOfAnEndedSessionIsDim(t *testing.T) {
 	a := session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: 42, Start: time.Now()}
 	for _, ended := range []bool{false, true} {
 		c := NewCanvas(28, 5, nil)
-		State{Ended: ended, Phase: 1}.drawAgent(c, Rect{0, 0, 28, 5}, a, true)
+		State{Ended: ended, Phase: 1}.drawAgent(c, Rect{0, 0, 28, 5}, a)
 		want := RoleOpus
 		if ended {
 			want = RoleDim
@@ -122,7 +122,7 @@ func TestAgentBoxContextGauge(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := NewCanvas(28, 5, nil)
-			State{}.drawAgent(c, Rect{0, 0, 28, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: tt.ctx}, true)
+			State{}.drawAgent(c, Rect{0, 0, 28, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: tt.ctx})
 			if got := strings.TrimSpace(strings.Trim(rows(c)[2], "│")); got != tt.want {
 				t.Errorf("ctx row = %q, want %q", got, tt.want)
 			}

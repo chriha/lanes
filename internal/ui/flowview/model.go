@@ -115,6 +115,10 @@ func (m *Model) SetState(st State) {
 	m.settle()
 }
 
+// Offset returns the diagram's scroll offset: the column and line of the diagram at the viewport's top left. Not
+// implemented yet.
+func (m Model) Offset() (x, y int) { return 0, 0 }
+
 // View draws the frame: the whole diagram, the compact layout or a resize hint, by size.
 func (m Model) View() string {
 	c, l, s := m.canvas, m.layout, m.frame()

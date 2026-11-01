@@ -56,8 +56,8 @@ type env struct {
 	wd             string
 	isTTY          bool
 	stdout, stderr io.Writer
-	ask            func(root string) (bool, error) // the trust dialog
-	initApp        func(dir string)                // app.Init: runs git in the project
+	ask            func(root string) (yes, always bool, err error) // the trust dialog
+	initApp        func(dir string)                                // app.Init: runs git in the project
 	hook           func(event string)
 	status         func()
 	doctor         func() int
@@ -103,7 +103,7 @@ func run(args []string, e env) int {
 			fmt.Fprintf(e.stderr, "%s is not trusted; run %s in a terminal to trust it\n", root, app.Name)
 			return 1
 		}
-		yes, err := e.ask(root)
+		yes, _, err := e.ask(root)
 		if err != nil {
 			fmt.Fprintf(e.stderr, "%s: %v\n", app.Name, err)
 			return 1

@@ -13,10 +13,11 @@ import (
 
 // trustDialog asks whether the user trusts the project at root. Only typing yes trusts it.
 type trustDialog struct {
-	root  string
-	input textinput.Model
-	yes   bool
-	done  bool
+	root   string
+	input  textinput.Model
+	yes    bool
+	always bool // the "always trust this project" checkbox
+	done   bool
 }
 
 func newTrustDialog(root string) trustDialog {
@@ -57,13 +58,14 @@ func (m trustDialog) View() string {
 		"enter confirm · esc quit\n", m.root, m.input.View())
 }
 
-// AskTrust runs the trust dialog on stderr (stdout stays for command output) and reports whether the user typed yes.
-func AskTrust(root string) (bool, error) {
+// AskTrust runs the trust dialog on stderr (stdout stays for command output) and reports whether the user typed yes,
+// and whether they also checked "always trust this project".
+func AskTrust(root string) (yes, always bool, err error) {
 	m, err := tea.NewProgram(newTrustDialog(root), tea.WithOutput(os.Stderr)).Run()
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	return m.(trustDialog).yes, nil
+	return m.(trustDialog).yes, false, nil
 }
 
 // projectHash is the trust root of the cwd and the hash of its .lanes.toml files, as the startup gate computes them.

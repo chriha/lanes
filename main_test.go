@@ -47,7 +47,7 @@ func fakeEnv(dir string, tty, yes bool, calls *[]string) (env, *bytes.Buffer, *b
 	rec := func(s string) { *calls = append(*calls, s) }
 	return env{
 		wd: dir, isTTY: tty, stdout: &stdout, stderr: &stderr,
-		ask:     func(string) (bool, error) { rec("ask"); return yes, nil },
+		ask:     func(string) (bool, bool, error) { rec("ask"); return yes, false, nil },
 		initApp: func(string) { rec("initApp") },
 		hook:    func(string) { rec("hook") },
 		status:  func() { rec("status") },

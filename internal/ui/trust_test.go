@@ -16,23 +16,37 @@ import (
 func TestTrustDialog(t *testing.T) {
 	enter := tea.KeyMsg{Type: tea.KeyEnter}
 	tests := []struct {
-		name  string
-		typed string
-		last  tea.KeyMsg
-		want  bool
+		name       string
+		tabs       int // tab presses before typing
+		typed      string
+		last       tea.KeyMsg
+		want       bool
+		wantAlways bool // the checkbox is checked; the gate uses it only with yes
 	}{
-		{"yes", "yes", enter, true},
-		{"YES", "YES", enter, true},
-		{"padded yes", " yes ", enter, true},
-		{"y", "y", enter, false},
-		{"empty", "", enter, false},
-		{"no", "no", enter, false},
-		{"esc after yes", "yes", tea.KeyMsg{Type: tea.KeyEsc}, false},
-		{"ctrl+c after yes", "yes", tea.KeyMsg{Type: tea.KeyCtrlC}, false},
+		{"yes", 0, "yes", enter, true, false},
+		{"YES", 0, "YES", enter, true, false},
+		{"padded yes", 0, " yes ", enter, true, false},
+		{"y", 0, "y", enter, false, false},
+		{"empty", 0, "", enter, false, false},
+		{"no", 0, "no", enter, false, false},
+		{"esc after yes", 0, "yes", tea.KeyMsg{Type: tea.KeyEsc}, false, false},
+		{"ctrl+c after yes", 0, "yes", tea.KeyMsg{Type: tea.KeyCtrlC}, false, false},
+		{"checked yes", 1, "yes", enter, true, true},
+		{"checked YES", 1, "YES", enter, true, true},
+		{"checked twice is unchecked", 2, "yes", enter, true, false},
+		{"checked thrice is checked", 3, "yes", enter, true, true},
+		{"checked y", 1, "y", enter, false, true},
+		{"checked empty", 1, "", enter, false, true},
+		{"checked no", 1, "no", enter, false, true},
+		{"checked esc after yes", 1, "yes", tea.KeyMsg{Type: tea.KeyEsc}, false, true},
+		{"checked ctrl+c after yes", 1, "yes", tea.KeyMsg{Type: tea.KeyCtrlC}, false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var m tea.Model = newTrustDialog("/p")
+			for range tt.tabs {
+				m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+			}
 			for _, r := range tt.typed {
 				m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 			}
@@ -43,19 +57,47 @@ func TestTrustDialog(t *testing.T) {
 			if _, ok := cmd().(tea.QuitMsg); !ok {
 				t.Fatal("dialog did not quit")
 			}
-			if got := m.(trustDialog).yes; got != tt.want {
-				t.Errorf("trusted = %v, want %v", got, tt.want)
+			d := m.(trustDialog)
+			if d.yes != tt.want {
+				t.Errorf("trusted = %v, want %v", d.yes, tt.want)
+			}
+			if d.always != tt.wantAlways {
+				t.Errorf("always = %v, want %v", d.always, tt.wantAlways)
 			}
 		})
 	}
 }
 
 func TestTrustDialogView(t *testing.T) {
-	v := ansi.Strip(newTrustDialog("/some/project").View())
-	for _, want := range []string{"/some/project", ".lanes.toml", "shell commands", "Type yes to trust it", "NO", "enter confirm · esc quit"} {
-		if !strings.Contains(v, want) {
-			t.Errorf("view lacks %q:\n%s", want, v)
-		}
+	const box = "always trust this project, even when its .lanes.toml changes"
+	tests := []struct {
+		name string
+		tabs int
+		want []string
+	}{
+		{"unchecked", 0, []string{
+			"/some/project", ".lanes.toml", "shell commands", "Type yes to trust it", "NO",
+			"[ ] " + box, "enter confirm · tab toggle always · esc quit",
+		}},
+		{"checked", 1, []string{"[x] " + box}},
+		{"unchecked again", 2, []string{"[ ] " + box}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m tea.Model = newTrustDialog("/some/project")
+			for range tt.tabs {
+				m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+			}
+			v := ansi.Strip(m.View())
+			for _, want := range tt.want {
+				if !strings.Contains(v, want) {
+					t.Errorf("view lacks %q:\n%s", want, v)
+				}
+			}
+			if strings.Index(v, box) < strings.Index(v, "Type yes to trust it") {
+				t.Errorf("the checkbox is not under the yes input:\n%s", v)
+			}
+		})
 	}
 }
 
@@ -63,15 +105,18 @@ func TestReloadChecksTrust(t *testing.T) {
 	const before, after = "# a\n", "# b\n"
 	tests := []struct {
 		name        string
+		always      bool    // the root is trusted always, not by hash
 		trustAfter  bool    // the user trusted the changed .lanes.toml (e.g. by restarting lanes)
 		msg         tea.Msg // nil = a reload from the tick or ctrl-r
 		wantApplied bool
 		wantTrusted bool // trust.json trusts the changed file afterwards
 	}{
-		{"untrusted change is kept out", false, nil, false, false},
-		{"trusted change is applied", true, nil, true, true},
-		{":edit project trusts and applies it", false, editorDone{project: true}, true, true},
-		{":edit of the global file does not trust it", false, editorDone{}, false, false},
+		{"untrusted change is kept out", false, false, nil, false, false},
+		{"trusted change is applied", false, true, nil, true, true},
+		{":edit project trusts and applies it", false, false, editorDone{project: true}, true, true},
+		{":edit of the global file does not trust it", false, false, editorDone{}, false, false},
+		{"always-trusted change is applied", true, false, nil, true, true},
+		{":edit project keeps always", true, false, editorDone{project: true}, true, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -102,6 +147,11 @@ func TestReloadChecksTrust(t *testing.T) {
 			}
 			write(before)
 			record() // lanes started trusted
+			if tt.always {
+				if err := trust.TrustAlways(dir); err != nil {
+					t.Fatal(err)
+				}
+			}
 			write(after)
 			if tt.trustAfter {
 				record()
@@ -121,6 +171,10 @@ func TestReloadChecksTrust(t *testing.T) {
 			hash, _ := trust.HashRoot(dir)
 			if ok, err := trust.IsTrusted(dir, hash); err != nil || ok != tt.wantTrusted {
 				t.Errorf("trusted = %v (err %v), want %v", ok, err, tt.wantTrusted)
+			}
+			// a hash no file has: only an always entry trusts it
+			if ok, err := trust.IsTrusted(dir, "other"); err != nil || ok != tt.always {
+				t.Errorf("always = %v (err %v), want %v", ok, err, tt.always)
 			}
 		})
 	}

@@ -10,21 +10,35 @@ import (
 
 var border = lipgloss.RoundedBorder()
 
+// fit strips escape sequences from s (transcript text is untrusted) and cuts it to w runes, ending in … when cut.
+// Runes, not display width: the canvas draws every rune in one cell.
+func fit(s string, w int) []rune {
+	r := []rune(ansi.Strip(s))
+	if w <= 0 {
+		return nil
+	}
+	if len(r) > w {
+		r = append(r[:w-1], '…')
+	}
+	return r
+}
+
 // textIn draws s at x, y cut to w cells.
 func (c *Canvas) textIn(x, y, w int, s string, role Role) int {
-	return c.Text(x, y, ansi.Truncate(s, max(w, 0), "…"), role)
+	return c.Text(x, y, string(fit(s, w)), role)
 }
 
 // center draws s centered in rect's inside on row y, cut to fit.
 func (c *Canvas) center(r Rect, y int, s string, role Role) {
-	s = ansi.Truncate(s, max(r.W-2, 0), "…")
-	c.Text(r.X+(r.W-ansi.StringWidth(s))/2, y, s, role)
+	t := fit(s, r.W-2)
+	c.Text(r.X+(r.W-len(t))/2, y, string(t), role)
 }
 
 // spread draws left at the start and right at the end of w cells from x.
 func (c *Canvas) spread(x, y, w int, left, right string, lr, rr Role) {
-	c.textIn(x, y, w-ansi.StringWidth(right)-1, left, lr)
-	c.Text(x+w-ansi.StringWidth(right), y, right, rr)
+	n := len([]rune(right))
+	c.textIn(x, y, w-n-1, left, lr)
+	c.Text(x+w-n, y, right, rr)
 }
 
 // titled draws a box with title in its top border.
@@ -96,11 +110,7 @@ func (s State) drawLead(c *Canvas, r Rect) {
 	case s.Hook == "working":
 		mark = s.spin()
 	}
-	hook := s.Hook
-	if s.Ended {
-		hook = "ended"
-	}
-	c.center(r, r.Y+3, fmt.Sprintf("%c %s %s", mark, hook, fmtDur(s.Now.Sub(s.Start))), role)
+	c.center(r, r.Y+3, strings.TrimSpace(fmt.Sprintf("%c %s %s", mark, s.leadState(), since(s.Start, s.Now))), role)
 }
 
 func (s State) drawTools(c *Canvas, r Rect) {
@@ -130,10 +140,7 @@ func (s State) drawLog(c *Canvas, r Rect) {
 }
 
 func (s State) drawStatus(c *Canvas, l Layout) {
-	hook := s.Hook
-	if s.Ended {
-		hook = "ended"
-	}
+	hook := s.leadState()
 	line := fmt.Sprintf("lead [%s]   agents [%d/%d running]", hook, s.running(), len(s.Snap.Agents))
 	if l.Mode == ModeCompact {
 		lead := s.Snap.Lead

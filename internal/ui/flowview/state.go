@@ -103,6 +103,22 @@ func fmtDur(d time.Duration) string {
 	return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
 }
 
+// since is the duration from start to end, "" when either is unknown.
+func since(start, end time.Time) string {
+	if start.IsZero() || end.IsZero() {
+		return ""
+	}
+	return fmtDur(end.Sub(start))
+}
+
+// leadState is the lead's state label: the hook state, or ended.
+func (s State) leadState() string {
+	if s.Ended {
+		return "ended"
+	}
+	return s.Hook
+}
+
 // fmtCount is a compact count: 950, 12.3k, 1.2M.
 func fmtCount(n int) string {
 	switch {

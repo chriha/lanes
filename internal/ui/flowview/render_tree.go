@@ -61,11 +61,16 @@ func (s State) drawAgent(c *Canvas, r Rect, a session.Agent, full bool) {
 	srole := RoleText
 	switch a.Status {
 	case session.AgentRunning:
-		status = strings.TrimSpace(fmt.Sprintf("%c %s %s", s.spin(), fmtDur(s.Now.Sub(a.Start)), a.Tool))
+		mark := s.spin()
+		if s.Ended { // frozen: no spinner
+			mark = '■'
+		}
+		status = fmt.Sprintf("%c %s %s", mark, since(a.Start, s.Now), a.Tool)
 	case session.AgentDone:
-		status, srole = "✓ "+fmtDur(a.End.Sub(a.Start)), RoleOK
+		status, srole = "✓ "+since(a.Start, a.End), RoleOK
 	default:
-		status, srole = "✗ "+fmtDur(a.End.Sub(a.Start)), RoleBad
+		status, srole = "✗ "+since(a.Start, a.End), RoleBad
 	}
+	status = strings.Join(strings.Fields(status), " ")
 	c.center(r, r.Y+r.H-2, status, srole)
 }

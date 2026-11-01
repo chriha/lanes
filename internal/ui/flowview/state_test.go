@@ -57,3 +57,21 @@ func TestFormats(t *testing.T) {
 		}
 	}
 }
+
+func TestSinceUnknownTimes(t *testing.T) {
+	t0 := time.Date(2026, 11, 1, 14, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name       string
+		start, end time.Time
+		want       string
+	}{
+		{"both known", t0, t0.Add(90 * time.Second), "1m30s"},
+		{"no start", time.Time{}, t0, ""},
+		{"no end", t0, time.Time{}, ""},
+	}
+	for _, tt := range tests {
+		if got := since(tt.start, tt.end); got != tt.want {
+			t.Errorf("%s: since = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}

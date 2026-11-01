@@ -263,3 +263,69 @@ func TestAgentKeyIsListed(t *testing.T) {
 		t.Errorf("sessions footer does not hint A:\n%s", v)
 	}
 }
+
+func TestReadInFlightAtTheEndIsNotTheFinalState(t *testing.T) {
+	m := agentModel(t, working("fix~1"))
+	path := withTranscript(t, "fix~1")
+	press(m, "A")
+	if m.agents == nil {
+		t.Fatal("A did not open the view")
+	}
+	inFlight := m.agents.poll() // started while the session was live
+	dead := working("fix~1")
+	dead.Dead = true
+	m.Update(sessionsMsg{infos: []session.Info{dead}})
+	_, next := m.Update(inFlight())
+	if next == nil {
+		t.Fatal("a read started before the end froze the view: what Claude wrote last is never read")
+	}
+	if v := ansi.Strip(m.View()); strings.Contains(v, "ended") {
+		t.Errorf("view froze on a read started before the end:\n%s", v)
+	}
+	last := strings.Replace(transcriptLine, "Looking at the ticket.", "All done.", 1)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(last); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	msg, ok := next().(agentSnapMsg)
+	if !ok || msg.snap.Lead.LastText != "All done." {
+		t.Fatalf("the read after the end gave %+v, want the last text", msg)
+	}
+	if _, more := m.Update(msg); more != nil {
+		t.Error("the read after the end schedules another read")
+	}
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "ended") {
+		t.Errorf("view did not freeze on the read after the end:\n%s", v)
+	}
+}
+
+func TestAgentReadErrorIsSaidOnce(t *testing.T) {
+	m := agentModel(t, working("fix~1"))
+	path := withTranscript(t, "fix~1")
+	press(m, "A")
+	if m.agents == nil {
+		t.Fatal("A did not open the view")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0o700); err != nil { // a directory where the transcript was: every read fails
+		t.Fatal(err)
+	}
+	msg, _ := read(t, m)
+	if msg.err == nil {
+		t.Fatal("reading a directory as the transcript gave no error")
+	}
+	if !strings.HasPrefix(m.notice, "agent view: ") {
+		t.Fatalf("notice = %q, want the read error", m.notice)
+	}
+	m.say(lvInfo, "")
+	read(t, m)
+	if m.notice != "" {
+		t.Errorf("the same read error is said again: %q", m.notice)
+	}
+}

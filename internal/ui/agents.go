@@ -23,6 +23,7 @@ type agentView struct {
 	hook   string          // Claude's hook state as last applied
 	ended  bool            // Claude exited or the session finished: the next poll is the last
 	frozen bool            // the end is applied: no more polls
+	err    string          // the last read error said, so a failing read is said once
 }
 
 // agentPollMsg says it is time for the agent view's next read of the transcripts.
@@ -30,18 +31,19 @@ type agentPollMsg struct{ gen int }
 
 // agentSnapMsg carries what a read of the transcripts gave.
 type agentSnapMsg struct {
-	gen  int
-	snap session.Snapshot
-	err  error
+	gen   int
+	snap  session.Snapshot
+	err   error
+	final bool // the read started after the end was known: it holds the final state
 }
 
 // poll reads what the transcripts gained since the last read, off the UI goroutine. Only one read is in flight:
 // the next is scheduled when this one has landed.
 func (a *agentView) poll() tea.Cmd {
-	t, gen := a.tailer, a.gen
+	t, gen, final := a.tailer, a.gen, a.ended
 	return func() tea.Msg {
 		snap, err := t.Poll()
-		return agentSnapMsg{gen: gen, snap: snap, err: err}
+		return agentSnapMsg{gen: gen, snap: snap, err: err, final: final}
 	}
 }
 
@@ -121,21 +123,28 @@ func (m *Model) onAgentPoll(msg agentPollMsg) tea.Cmd {
 	return a.poll()
 }
 
-// onAgentSnap hands a read to the view and schedules the next one. Once the session ended, this read is the final
-// state: the view freezes on it and reads no more.
+// onAgentSnap hands a read to the view and schedules the next one. The first read that started after the session
+// ended is the final state: the view freezes on it and reads no more.
 func (m *Model) onAgentSnap(msg agentSnapMsg) tea.Cmd {
 	a := m.agents
 	if a == nil || msg.gen != a.gen || a.frozen {
 		return nil
 	}
-	if msg.err != nil {
+	if msg.err != nil && msg.err.Error() != a.err {
 		m.say(lvWarn, "agent view: "+msg.err.Error())
 	}
+	a.err = ""
+	if msg.err != nil {
+		a.err = msg.err.Error()
+	}
 	a.fv.Apply(flowview.SnapshotEvent{Snap: msg.snap})
-	if a.ended {
+	switch {
+	case msg.final:
 		a.fv.Apply(flowview.EndEvent{})
 		a.frozen = true
 		return nil
+	case a.ended: // the end came while this read was on its way: what came after it is read once more
+		return a.poll()
 	}
 	gen := a.gen
 	return tea.Tick(agentPollEvery, func(time.Time) tea.Msg { return agentPollMsg{gen: gen} })

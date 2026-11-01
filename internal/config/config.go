@@ -142,6 +142,7 @@ type Group struct {
 type Action struct {
 	Type    string         `toml:"type"`    // session (default): tmux session you can jump into | run: headless, result shown in the footer
 	Run     string         `toml:"run"`     // templated shell command, e.g. claude --settings {{.settings}} "/x {{.iid}}"
+	Resume  string         `toml:"resume"`  // optional; templated like run, plus {{.claude_session}}: resumes a finished Claude session (gr)
 	Cwd     string         `toml:"cwd"`     // templated working dir; empty = current dir
 	Confirm string         `toml:"confirm"` // none (default) | single; multi-item runs always confirm
 	Vars    map[string]any `toml:"vars"`    // available in templates as {{.vars.name}}
@@ -161,6 +162,14 @@ func (a *Action) CompileWhen() error {
 	}
 	a.WhenFilter = f
 	return nil
+}
+
+// ClaudeSessionField is the template field holding the Claude session id to resume; only resume templates define it.
+const ClaudeSessionField = "claude_session"
+
+// usesField reports whether template text refers to the top-level field name ({{.name}}, {{$.name}}).
+func usesField(text, name string) bool {
+	return false
 }
 
 // ShellAction is the name of the built-in shell session (key t); config actions cannot use it.
@@ -305,6 +314,11 @@ func Load() (*Config, error) {
 		}
 		if a.Jump && a.Type == "run" {
 			return nil, fmt.Errorf("%s: action %q: jump needs type session", p, name)
+		}
+		for field, text := range map[string]string{"run": a.Run, "cwd": a.Cwd} {
+			if usesField(text, ClaudeSessionField) {
+				return nil, fmt.Errorf("%s: action %q: {{.%s}} is only defined in resume, not in %s", p, name, ClaudeSessionField, field)
+			}
 		}
 		if err := a.CompileWhen(); err != nil {
 			return nil, fmt.Errorf("%s: action %q: when: %w", p, name, err)

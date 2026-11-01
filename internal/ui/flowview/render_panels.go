@@ -107,13 +107,30 @@ func (s State) drawHeader(c *Canvas, l Layout) {
 	}
 	c.Text(f.X+f.W-1-len(state), f.Y, state, role)
 	c.HLine(f.X, f.X+f.W-1, f.Y+1, '═', RoleDim)
-	if l.Mode == ModeFull {
-		x := f.X + (f.W-28)/2
-		for _, fam := range knownFamilies {
-			c.Set(x, f.Y+2, '■', ModelRole(fam))
-			x = c.Text(x+2, f.Y+2, fam, RoleDim) + 3
-		}
+	x := f.X + (f.W-28)/2
+	for _, fam := range knownFamilies {
+		c.Set(x, f.Y+2, '■', ModelRole(fam))
+		x = c.Text(x+2, f.Y+2, fam, RoleDim) + 3
 	}
+}
+
+// drawPosition shows on the row above the log, right-aligned, which lines and columns of the diagram d the viewport
+// shows from x, y: the lines when the diagram is higher than the viewport, the columns when it is wider. Nothing
+// when it fits.
+func drawPosition(c *Canvas, l Layout, d Diagram, x, y int) {
+	v := l.View
+	var parts []string
+	if d.H > v.H {
+		parts = append(parts, fmt.Sprintf("lines %d-%d/%d", y+1, y+v.H, d.H))
+	}
+	if d.W > v.W {
+		parts = append(parts, fmt.Sprintf("cols %d-%d/%d", x+1, x+v.W, d.W))
+	}
+	if len(parts) == 0 {
+		return
+	}
+	s := strings.Join(parts, "  ")
+	c.Text(l.Frame.X+l.Frame.W-1-len(s), l.Log.Y-1, s, RoleDim)
 }
 
 // drawSession draws the session column as the lead's dashboard: the session's name and age, the lead's context and
@@ -204,7 +221,7 @@ func (s State) drawSession(c *Canvas, r Rect) {
 			label("advisor", shortModel(lead.AdvisorModel), ModelRole(lead.AdvisorModel)),
 			label("  calls", fmtThousands(lead.AdvisorCalls), RoleBold))
 	}
-	for i, draw := range rows[:min(len(rows), r.H-2)] {
+	for i, draw := range rows[:max(min(len(rows), r.H-2), 0)] {
 		if draw != nil {
 			draw(r.Y + 1 + i)
 		}

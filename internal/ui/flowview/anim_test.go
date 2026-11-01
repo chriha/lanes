@@ -298,8 +298,8 @@ func TestPacketIsDrawnOnItsConnector(t *testing.T) {
 		frame := m.View()
 
 		l := m.layout
-		nodes := layoutTree(m.st.Snap.Agents, l.Tree, l.Box, l.Gap)
-		paths := treePaths(nodes, l.Tools, l.Tree)
+		d := l.Diagram(m.st.Snap.Agents)
+		paths := treePaths(d.Nodes, d.Tools, d.Tree)
 		if len(paths) != 2 {
 			t.Fatalf("up=%v: %d connectors, want 2", up, len(paths))
 		}
@@ -309,6 +309,8 @@ func TestPacketIsDrawnOnItsConnector(t *testing.T) {
 		if up {
 			head, tail = path[len(path)-1-k], path[len(path)-k]
 		}
+		onScreen := func(p Point) Point { return Point{p.X + l.View.X, p.Y + l.View.Y} } // the view is not scrolled
+		head, tail = onScreen(head), onScreen(tail)
 		if got := cellOf(frame, head.X, head.Y); got != '●' {
 			t.Errorf("up=%v: head cell %v = %q, want ●", up, head, got)
 		}

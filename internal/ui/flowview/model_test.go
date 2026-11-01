@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
@@ -99,8 +100,9 @@ func TestViewGolden(t *testing.T) {
 		{"full", 90, 46, fixtureState()},
 		{"full_ended", 90, 46, ended},
 		{"full_wide", 200, 50, wide},
-		{"compact", 70, 30, fixtureState()},
-		{"too_small", 50, 20, fixtureState()},
+		{"short", 90, 24, fixtureState()},
+		{"narrow", 60, 20, fixtureState()},
+		{"narrowest", 52, 15, fixtureState()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -126,7 +128,7 @@ func TestViewGolden(t *testing.T) {
 }
 
 func TestViewFillsTheTerminal(t *testing.T) {
-	for _, size := range [][2]int{{90, 46}, {120, 50}, {70, 30}, {50, 20}, {0, 0}} {
+	for _, size := range [][2]int{{90, 46}, {120, 50}, {90, 24}, {60, 20}, {52, 15}, {40, 10}, {10, 3}, {0, 0}} {
 		m := New(nil)
 		m.SetSize(size[0], size[1])
 		m.SetState(fixtureState())
@@ -156,5 +158,215 @@ func TestSetSessionKeepsTheFirstSnapshotStill(t *testing.T) {
 	}
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "AGENT VIEW · fix~7") || !strings.Contains(v, "1m00s") {
 		t.Errorf("view lacks the title or the session's age:\n%s", v)
+	}
+}
+
+// keyMsg is the key message Bubble Tea sends for k.
+func keyMsg(k string) tea.KeyMsg {
+	switch k {
+	case "ctrl+d":
+		return tea.KeyMsg{Type: tea.KeyCtrlD}
+	case "ctrl+u":
+		return tea.KeyMsg{Type: tea.KeyCtrlU}
+	}
+	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
+}
+
+// withAgentsOf is the fixture with agents in place of its own.
+func withAgentsOf(agents []session.Agent) State {
+	st := fixtureState()
+	st.Snap.Agents = agents
+	return st
+}
+
+// deep is twelve agents over three depths: six of the lead, five of theirs and one below those.
+func deep() []session.Agent {
+	return many(6, "agent-06:agent-00", "agent-07:agent-01", "agent-08:agent-02", "agent-09:agent-03",
+		"agent-10:agent-04", "agent-11:agent-06")
+}
+
+// scrolled is a w×h view of st after the keys.
+func scrolled(st State, w, h int, keys ...string) Model {
+	m := New(nil)
+	m.SetSize(w, h)
+	m.SetState(st)
+	for _, k := range keys {
+		m, _ = m.Update(keyMsg(k))
+	}
+	return m
+}
+
+func TestScrollKeys(t *testing.T) {
+	// At 90×24 the viewport is 67×15 and the deep diagram 67×69: it scrolls 54 lines and no column. At 52×15 the
+	// viewport is 29×6 and the diagram 36 wide: it scrolls 7 columns.
+	tests := []struct {
+		name   string
+		w, h   int
+		keys   []string
+		wx, wy int
+	}{
+		{"j moves a line down", 90, 24, []string{"j"}, 0, 1},
+		{"k moves a line up", 90, 24, []string{"j", "j", "k"}, 0, 1},
+		{"k stops at the top", 90, 24, []string{"k"}, 0, 0},
+		{"ctrl+d moves half the viewport down", 90, 24, []string{"ctrl+d"}, 0, 7},
+		{"ctrl+u moves half the viewport up", 90, 24, []string{"ctrl+d", "ctrl+d", "ctrl+u"}, 0, 7},
+		{"G goes to the bottom", 90, 24, []string{"G"}, 0, 54},
+		{"j stops at the bottom", 90, 24, []string{"G", "j"}, 0, 54},
+		{"ctrl+d stops at the bottom", 90, 24, []string{"G", "k", "ctrl+d"}, 0, 54},
+		{"g goes to the top", 90, 24, []string{"G", "g"}, 0, 0},
+		{"l does nothing when the diagram fits the width", 90, 24, []string{"l"}, 0, 0},
+		{"h does nothing when the diagram fits the width", 90, 24, []string{"h"}, 0, 0},
+		{"l moves a column right", 52, 15, []string{"l"}, 1, 0},
+		{"l stops at the right end", 52, 15, []string{"l", "l", "l", "l", "l", "l", "l", "l", "l", "l"}, 7, 0},
+		{"h moves a column left", 52, 15, []string{"l", "l", "h"}, 1, 0},
+		{"h stops at the left end", 52, 15, []string{"h"}, 0, 0},
+		{"arrows scroll like hjkl", 52, 15, []string{"right", "down", "down", "up"}, 1, 1},
+		{"other keys do nothing", 90, 24, []string{"x", "enter"}, 0, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New(nil)
+			m.SetSize(tt.w, tt.h)
+			m.SetState(withAgentsOf(deep()))
+			for _, k := range tt.keys {
+				msg := keyMsg(k)
+				switch k {
+				case "right":
+					msg = tea.KeyMsg{Type: tea.KeyRight}
+				case "down":
+					msg = tea.KeyMsg{Type: tea.KeyDown}
+				case "up":
+					msg = tea.KeyMsg{Type: tea.KeyUp}
+				case "enter":
+					msg = tea.KeyMsg{Type: tea.KeyEnter}
+				}
+				var cmd tea.Cmd
+				if m, cmd = m.Update(msg); cmd != nil {
+					t.Errorf("%s returned a command", k)
+				}
+			}
+			if x, y := m.Offset(); x != tt.wx || y != tt.wy {
+				t.Errorf("offset %d,%d; want %d,%d", x, y, tt.wx, tt.wy)
+			}
+		})
+	}
+}
+
+func TestScrollOffsetSurvivesSnapshots(t *testing.T) {
+	m := scrolled(withAgentsOf(deep()), 90, 24, "j", "j", "j")
+	snap := m.st.Snap
+	snap.Agents = append([]session.Agent(nil), snap.Agents...)
+	snap.Agents[0].Tool = "Read"
+	m.Apply(SnapshotEvent{snap})
+	if x, y := m.Offset(); x != 0 || y != 3 {
+		t.Errorf("after a snapshot: offset %d,%d; want 0,3", x, y)
+	}
+	m, _ = m.Update(keyMsg("G"))
+	snap.Agents = snap.Agents[:1] // the diagram shrinks to 67×21: 6 lines past the viewport
+	m.Apply(SnapshotEvent{snap})
+	if x, y := m.Offset(); x != 0 || y != 6 {
+		t.Errorf("after the diagram shrank: offset %d,%d; want 0,6, the new bottom", x, y)
+	}
+	if m, _ = m.Update(keyMsg("k")); func() int { _, y := m.Offset(); return y }() != 5 {
+		t.Errorf("k after the shrink did not move up from the new bottom")
+	}
+}
+
+// frameRows is the view's frame without styles, as rune rows.
+func frameRows(m Model) [][]rune {
+	var out [][]rune
+	for _, ln := range strings.Split(ansi.Strip(m.View()), "\n") {
+		out = append(out, []rune(ln))
+	}
+	return out
+}
+
+func TestScrollMovesOnlyTheDiagram(t *testing.T) {
+	for _, size := range [][2]int{{90, 24}, {52, 15}} {
+		w, h := size[0], size[1]
+		t.Run(fmt.Sprintf("%dx%d", w, h), func(t *testing.T) {
+			before := scrolled(withAgentsOf(deep()), w, h)
+			after := scrolled(withAgentsOf(deep()), w, h, "j", "j", "l")
+			l := before.layout
+			dx, _ := after.Offset()
+			a, b := frameRows(before), frameRows(after)
+			v := l.View
+			for y := 0; y < h; y++ {
+				for x := 0; x < w; x++ {
+					inView := x >= v.X && x < v.X+v.W && y >= v.Y && y < v.Y+v.H
+					indicator := y == l.Log.Y-1 && x >= v.X
+					switch {
+					case inView:
+						// the diagram moved as one block: two lines up and dx columns left
+						if y+2 < v.Y+v.H && x+dx < v.X+v.W && b[y][x] != a[y+2][x+dx] {
+							t.Fatalf("viewport cell %d,%d = %q, want %q from %d,%d before", x, y, b[y][x], a[y+2][x+dx], x+dx, y+2)
+						}
+					case !indicator && b[y][x] != a[y][x]:
+						t.Fatalf("pinned cell %d,%d changed from %q to %q:\n%s", x, y, a[y][x], b[y][x], string(b[y]))
+					}
+				}
+			}
+			for _, pinned := range []string{"AGENT VIEW", "■ opus", "╭─ session", "session log", "● live"} {
+				if !strings.Contains(ansi.Strip(after.View()), pinned) {
+					t.Errorf("scrolled frame lacks %q", pinned)
+				}
+			}
+		})
+	}
+}
+
+func TestScrollReachesEveryAgent(t *testing.T) {
+	sets := map[string][]session.Agent{"1": many(1), "5": many(5), "7": many(7), "12": many(12), "12 over 3 depths": deep()}
+	for _, size := range sizes {
+		for name, agents := range sets {
+			t.Run(fmt.Sprintf("%s at %dx%d", name, size[0], size[1]), func(t *testing.T) {
+				m := scrolled(withAgentsOf(agents), size[0], size[1])
+				var seen strings.Builder
+				for {
+					seen.WriteString(ansi.Strip(m.View()))
+					_, y := m.Offset()
+					if m, _ = m.Update(keyMsg("j")); func() int { _, ny := m.Offset(); return ny }() == y {
+						break
+					}
+				}
+				for _, a := range agents {
+					if !strings.Contains(seen.String(), "─ "+a.Name+" ─") {
+						t.Errorf("no frame scrolled to shows the box of %s", a.Name)
+					}
+				}
+				if strings.Contains(seen.String(), "more") {
+					t.Error("a frame shows a +n more box")
+				}
+			})
+		}
+	}
+}
+
+func TestScrollIndicator(t *testing.T) {
+	tests := []struct {
+		name    string
+		w, h    int
+		agents  []session.Agent
+		keys    []string
+		want    string
+		without []string
+	}{
+		{"nothing to scroll, no indicator", 200, 50, fixtureState().Snap.Agents, nil, "", []string{"lines ", "cols "}},
+		{"lines shown of the diagram's", 90, 24, deep(), []string{"j"}, "lines 2-16/69", []string{"cols "}},
+		{"columns too on a narrow terminal", 52, 15, deep(), []string{"l"}, "lines 1-6/109  cols 2-30/36", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := scrolled(withAgentsOf(tt.agents), tt.w, tt.h, tt.keys...)
+			row := string(frameRows(m)[m.layout.Log.Y-1])
+			if !strings.Contains(row, tt.want) {
+				t.Errorf("row above the log = %q, want it to hold %q", row, tt.want)
+			}
+			for _, w := range tt.without {
+				if strings.Contains(row, w) {
+					t.Errorf("row above the log = %q has %q", row, w)
+				}
+			}
+		})
 	}
 }

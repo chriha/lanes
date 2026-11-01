@@ -15,9 +15,12 @@ var lastID atomic.Int64
 // Model is the agent view as an embeddable sub-model: the parent sets its size and state, forwards its messages
 // to Update and shows View. Events change the state; its own tick steps the animation while the view is open.
 type Model struct {
-	st     State
-	layout Layout
-	canvas *Canvas
+	st      State
+	layout  Layout
+	canvas  *Canvas
+	diagram *Canvas // the scrolling part, drawn whole and copied into the viewport
+	offX    int     // the diagram's column at the viewport's left edge, as scrolled: clamped when used
+	offY    int     // the diagram's line at the viewport's top, as scrolled: clamped when used
 
 	id     int64     // tells this model's ticks from other models'
 	gen    int       // tells the current tick chain from one a Resume replaced
@@ -43,7 +46,7 @@ type tickMsg struct {
 
 // New returns an empty view that renders with theme (nil renders without styles).
 func New(theme *Theme) Model {
-	return Model{canvas: NewCanvas(0, 0, theme), layout: NewLayout(0, 0), id: lastID.Add(1)}
+	return Model{canvas: NewCanvas(0, 0, theme), diagram: NewCanvas(0, 0, theme), layout: NewLayout(0, 0), id: lastID.Add(1)}
 }
 
 // SetSize sets the terminal size the view fills.
@@ -83,8 +86,47 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, m.tick()
 	case Event:
 		m.Apply(msg)
+	case tea.KeyMsg:
+		m.scroll(msg.String())
 	}
 	return m, nil
+}
+
+// scroll moves the viewport over the diagram for a key: j/k a line, ctrl+d/ctrl+u half the viewport, g/G to the
+// top/bottom, h/l a column; the arrows like hjkl. It stops at the diagram's edges; other keys do nothing.
+func (m *Model) scroll(key string) {
+	const far = 1 << 30
+	half := max(m.layout.View.H/2, 1)
+	dx, dy := 0, 0
+	switch key {
+	case "j", "down":
+		dy = 1
+	case "k", "up":
+		dy = -1
+	case "ctrl+d":
+		dy = half
+	case "ctrl+u":
+		dy = -half
+	case "g":
+		dy = -far
+	case "G":
+		dy = far
+	case "h", "left":
+		dx = -1
+	case "l", "right":
+		dx = 1
+	default:
+		return
+	}
+	d := m.layout.Diagram(m.st.Snap.Agents)
+	x, y := m.clamp(d, m.offX, m.offY)
+	m.offX, m.offY = m.clamp(d, x+dx, y+dy)
+}
+
+// clamp keeps an offset within the diagram d: the viewport never runs past its edges.
+func (m Model) clamp(d Diagram, x, y int) (int, int) {
+	v := m.layout.View
+	return min(max(x, 0), max(d.W-v.W, 0)), min(max(y, 0), max(d.H-v.H, 0))
 }
 
 // Pause stops the animation tick, for a hidden view.
@@ -115,23 +157,30 @@ func (m *Model) SetState(st State) {
 	m.settle()
 }
 
-// View draws the frame: the whole diagram, the compact layout or a resize hint, by size.
+// Offset returns the diagram's scroll offset: the column and line of the diagram at the viewport's top left. It
+// is kept across snapshots and resizes and clamped to the diagram as it is now.
+func (m Model) Offset() (x, y int) {
+	return m.clamp(m.layout.Diagram(m.st.Snap.Agents), m.offX, m.offY)
+}
+
+// View draws the frame. The header, legend, session column, log and status line are pinned; the diagram (lead,
+// tool layer and every agent) is drawn whole on a canvas of its own and the scrolled-to part of it copied into the
+// viewport, with the position shown above the log when it does not fit.
 func (m Model) View() string {
 	c, l, s := m.canvas, m.layout, m.frame()
 	c.Clear()
-	if l.Mode == ModeTooSmall {
-		hint := "resize to ≥ 60×24"
-		c.Text((c.W-len([]rune(hint)))/2, c.H/2, hint, RoleDim)
-		return c.String()
-	}
+	d := l.Diagram(s.Snap.Agents)
+	dc := m.diagram
+	dc.Resize(d.W, d.H)
+	s.drawLead(dc, d.Lead)
+	s.drawTools(dc, d.Tools)
+	paths := s.drawTree(dc, d)
+	s.drawPackets(dc, m.packets, d.Nodes, paths, toolPath(d))
+	x, y := m.clamp(d, m.offX, m.offY)
+	c.Blit(dc, x, y, l.View)
 	s.drawHeader(c, l)
-	if l.Mode == ModeFull {
-		s.drawSession(c, l.Session)
-		s.drawTools(c, l.Tools)
-	}
-	s.drawLead(c, l.Lead)
-	nodes, paths := s.drawTree(c, l)
-	s.drawPackets(c, m.packets, nodes, paths, toolPath(l))
+	s.drawSession(c, l.Session)
+	drawPosition(c, l, d, x, y)
 	s.drawLog(c, l.Log)
 	s.drawStatus(c, l)
 	return c.String()

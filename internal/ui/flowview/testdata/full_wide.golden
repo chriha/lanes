@@ -31,18 +31,18 @@
 │                    │        │       scan a package       │ │ │       scan a package       │   │       scan a package       │   │       scan a package       │   │       scan a package       │        
 │ last:              │        ╰─ ◓ 1m00s ▸ Read ───────────╯ │ ╰─ ◓ 1m00s ▸ Read ───────────╯   ╰─ ◓ 1m00s ▸ Read ───────────╯   ╰─ ◓ 1m00s ▸ Read ───────────╯   ╰─ ◓ 1m00s ▸ Read ───────────╯        
 │ Slice 2 is next:   │                                       │                                                                                                                                          
-│ the layered layout │                                       └─────────────────────────────────┬────────────────────────────────┐                                                                       
-│ and the static…    │                                                                         ▼                                ▼                                                                       
-│                    │                                                          ╭─ code-reviewer ────────────╮   ╭────────────────────────────╮                                                         
-│ advisor   opus 4.1 │                                                          │   sonnet 4.5 ▮▮▯▯ medium   │   │                            │                                                         
-│   calls          3 │                                                          │ ctx ░░░░░░░░░░░░░░░░░   -- │   │          +1 more           │                                                         
-│                    │                                                          │      review the diff       │   │                            │                                                         
-│                    │                                                          ╰─ ◓ 2m00s ▸ Grep drawAgent ─╯   ╰────────────────────────────╯                                                         
-│                    │                                                                                                                                                                                  
-│                    │                                                                                                                                                                                  
-│                    │                                                                                                                                                                                  
-╰────────────────────╯                                                                                                                                                                                  
-                                                                                                                                                                                                        
+│ the layered layout │                                       └─────────────────────────────────────────────────┐                                                                                        
+│ and the static…    │                                                                                         ▼                                                                                        
+│                    │                                                                          ╭─ code-reviewer ────────────╮                                                                          
+│ advisor   opus 4.1 │                                                                          │   sonnet 4.5 ▮▮▯▯ medium   │                                                                          
+│   calls          3 │                                                                          │ ctx ░░░░░░░░░░░░░░░░░   -- │                                                                          
+│                    │                                                                          │      review the diff       │                                                                          
+│                    │                                                                          ╰─ ◓ 2m00s ▸ Grep drawAgent ─╯                                                                          
+│                    │                                                                                         │                                                                                        
+│                    │                                                                                         │                                                                                        
+│                    │                                                                                         ▼                                                                                        
+╰────────────────────╯                                                                          ╭─ validator ────────────────╮                                                                          
+                                                                                                                                                                                          lines 1-41/45 
 ──┤ session log ├───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  14:28:00 implementer   spawned code-reviewer                                                                                                                                                           
  14:28:30 code-reviewer spawned validator                                                                                                                                                               

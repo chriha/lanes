@@ -1,0 +1,15 @@
+ AGENT VIEW · issue-196                        live 
+════════════════════════════════════════════════════
+            ■ opus   ■ sonnet   ■ haiku             
+╭─ session ──────────╮ ╭────────────────────────────
+│ issue-196   12m03s │ │         opus 4.1 · lead    
+│ ctx █████▓░░░  61% │ │        Agent implementer   
+│ effort ▮▮▮▯ high   │ │         ◓ working 12m03s   
+│                    │ ╰────────────────────────────
+╰────────────────────╯                   │          
+                         lines 1-6/45  cols 1-29/36 
+──┤ session log ├───────────────────────────────────
+ 14:28:00 implementer   spawned code-reviewer       
+ 14:28:30 code-reviewer spawned validator           
+ 14:29:30 validator     failed                      
+ opus [1 running]  sonnet [1 running]        ● live 

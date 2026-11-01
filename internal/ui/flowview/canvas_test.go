@@ -307,3 +307,36 @@ func BenchmarkCanvasString(b *testing.B) {
 		sink = c.String()
 	}
 }
+
+func TestBlit(t *testing.T) {
+	src := NewCanvas(4, 3, nil)
+	for y, row := range []string{"abcd", "efgh", "ijkl"} {
+		src.Text(0, y, row, RoleText)
+	}
+	tests := []struct {
+		name   string
+		sx, sy int
+		dst    Rect
+		want   string
+	}{
+		{"the whole source", 0, 0, Rect{1, 1, 4, 3}, "......\n.abcd.\n.efgh.\n.ijkl."},
+		{"a window of it", 1, 1, Rect{0, 0, 2, 2}, "fg....\njk....\n......\n......"},
+		{"past the source's end is blank", 3, 2, Rect{0, 0, 3, 2}, "l  ...\n   ...\n......\n......"},
+		{"clipped to the canvas", 0, 0, Rect{4, 2, 4, 3}, "......\n......\n....ab\n....ef"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCanvas(6, 4, nil)
+			for y := 0; y < c.H; y++ {
+				c.HLine(0, c.W-1, y, '.', RoleDim)
+			}
+			c.Blit(src, tt.sx, tt.sy, tt.dst)
+			if got := c.String(); got != tt.want {
+				t.Errorf("blit =\n%s\nwant\n%s", got, tt.want)
+			}
+			if tt.name == "the whole source" && c.At(1, 1).Role != RoleText {
+				t.Errorf("blitted cell has role %d, want the source's", c.At(1, 1).Role)
+			}
+		})
+	}
+}

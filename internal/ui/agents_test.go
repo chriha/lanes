@@ -124,6 +124,28 @@ func TestAgentViewBackKeys(t *testing.T) {
 	}
 }
 
+func TestAgentViewScrollKeys(t *testing.T) {
+	m := agentModel(t, working("fix~1"))
+	withTranscript(t, "fix~1")
+	m.width, m.height = 90, 12 // a 3-line viewport: the 13 lines of lead and tools scroll 10
+	press(m, "A")
+	tests := []struct {
+		key    string
+		wx, wy int
+	}{
+		{"j", 0, 1}, {"G", 0, 10}, {"k", 0, 9}, {"g", 0, 0}, {"l", 0, 0},
+	}
+	for _, tt := range tests {
+		press(m, tt.key)
+		if m.mode != modeAgents || m.agents == nil {
+			t.Fatalf("%s closed the agent view", tt.key)
+		}
+		if x, y := m.agents.fv.Offset(); x != tt.wx || y != tt.wy {
+			t.Errorf("after %s: offset %d,%d; want %d,%d", tt.key, x, y, tt.wx, tt.wy)
+		}
+	}
+}
+
 // read runs the open view's read of the transcripts and hands its result to the model, as Bubble Tea would.
 func read(t *testing.T, m *Model) (agentSnapMsg, func() bool) {
 	t.Helper()

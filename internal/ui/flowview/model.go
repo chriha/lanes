@@ -100,6 +100,12 @@ func (m *Model) Resume() tea.Cmd {
 	return m.tick()
 }
 
+// SetSession names the session the view shows and sets its start and the frame's clock. Unlike SetState it keeps
+// the state otherwise, so the first snapshot after it logs the agents seen so far without sending packets.
+func (m *Model) SetSession(title string, start, now time.Time) {
+	m.st.Title, m.st.Start, m.st.Now = title, start, now
+}
+
 // SetState sets what the view shows, without animating toward it: later snapshots animate from here.
 func (m *Model) SetState(st State) {
 	m.st = st

@@ -35,6 +35,7 @@ const (
 	modeConfirm
 	modeHistory
 	modeSessions
+	modeAgents
 )
 
 type view struct {
@@ -118,6 +119,8 @@ type Model struct {
 	lastAttn   string // session the n key jumped to last
 	// interrupted holds the sessions X interrupted in this run; X on one of them again sends SIGKILL
 	interrupted map[string]bool
+	agents      *agentView // the open agent view, nil when closed
+	agentGen    int        // counts the agent views opened, to drop the polls of closed ones
 	ov          *config.Overrides
 	notes       notes.Store
 	snoozes     snooze.Store
@@ -424,6 +427,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.agents != nil {
+			m.agents.fv.SetSize(msg.Width, msg.Height)
+		}
 	case fetchedMsg:
 		var again tea.Cmd
 		if !msg.partial {
@@ -475,6 +481,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.onUpdate(msg)
 	case sessionsMsg:
 		m.onSessions(msg)
+		if msg.err == nil {
+			m.syncAgents()
+		}
+	case agentPollMsg:
+		return m, m.onAgentPoll(msg)
+	case agentSnapMsg:
+		return m, m.onAgentSnap(msg)
 	case interruptedMsg:
 		if m.interrupted == nil {
 			m.interrupted = map[string]bool{}
@@ -512,6 +525,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.pollSessions()
 	case tea.KeyMsg:
 		return m.key(msg)
+	default:
+		if m.agents != nil { // the agent view's own tick
+			var cmd tea.Cmd
+			m.agents.fv, cmd = m.agents.fv.Update(msg)
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -612,7 +631,7 @@ func (m *Model) fetchStale(interval time.Duration) tea.Cmd {
 }
 
 // builtinKeys cannot be rebound through [keymap].
-const builtinKeys = "jkgGhlVqRoixXtpnNFSyz/:? "
+const builtinKeys = "jkgGhlVqRoixXtpnNFSyzA/:? "
 
 // level is how severe a footer notice is: it picks the notice's colour.
 type level int
@@ -678,6 +697,8 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case modeSessions:
 		return m.keySessions(k)
+	case modeAgents:
+		return m.keyAgents(k)
 	}
 	m.notice = ""
 	s := k.String()
@@ -807,6 +828,10 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "S":
 		m.openSessions()
+	case "A":
+		if n > 0 {
+			return m, m.agentsOfItem(m.items()[m.cursor])
+		}
 	case "n":
 		if m.sess == nil {
 			break
@@ -905,6 +930,10 @@ func (m *Model) View() string {
 		return m.historyView()
 	case modeSessions:
 		return m.sessionsView()
+	case modeAgents:
+		if m.agents != nil {
+			return m.agents.fv.View()
+		}
 	case modeConfirm:
 		if m.confirm != nil && m.confirm.back == modeSessions {
 			return m.sessionsView()
@@ -1213,6 +1242,7 @@ func (m *Model) helpLines() []string {
 		{"N", "edit the item's note in $EDITOR (save empty to delete)"},
 		{"z", "snooze item(s): 2h, 3d, mon, 2026-11-03, empty = until it changes; on a snoozed one: unsnooze"},
 		{"n", "jump into the next session that is asking or waiting"},
+		{"A", "agent view of the item's newest Claude session: agents, tools, context (esc / q / A back)"},
 		{"S", "sessions: every session, also of items no longer listed (enter jump, X interrupt, x close)"},
 		{"p", "toggle preview pane"},
 		{"o / u", "open item in browser"},

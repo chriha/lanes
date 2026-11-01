@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,5 +103,28 @@ func TestViewFillsTheTerminal(t *testing.T) {
 		if w, h := lipgloss.Size(m.View()); size[1] > 0 && (w != size[0] || h != size[1]) {
 			t.Errorf("view at %dx%d is %dx%d", size[0], size[1], w, h)
 		}
+	}
+}
+
+func TestSetSessionKeepsTheFirstSnapshotStill(t *testing.T) {
+	m := New(nil)
+	m.SetSize(90, 46)
+	m.SetSession("fix~7", t0.Add(-time.Minute), t0)
+	m.Apply(SnapshotEvent{session.Snapshot{
+		Lead:   session.Lead{Model: "claude-opus-4-1"},
+		Agents: []session.Agent{{ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Start: t0, Ctx: -1}},
+	}})
+	if len(m.Packets()) != 0 {
+		t.Errorf("first snapshot sent packets %v, want none: the agents were there before the view opened", m.Packets())
+	}
+	f := m.frame()
+	if f.Title != "fix~7" || !f.Start.Equal(t0.Add(-time.Minute)) || !f.Now.Equal(t0) {
+		t.Errorf("title %q, start %v, now %v; want the session's", f.Title, f.Start, f.Now)
+	}
+	if len(f.Log) != 1 || f.Log[0].Text != "spawned implementer" {
+		t.Errorf("log %+v, want the agent's spawn", f.Log)
+	}
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "AGENT VIEW · fix~7") || !strings.Contains(v, "1m00s") {
+		t.Errorf("view lacks the title or the session's age:\n%s", v)
 	}
 }

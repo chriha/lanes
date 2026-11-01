@@ -35,6 +35,7 @@ const (
 	modeConfirm
 	modeHistory
 	modeSessions
+	modeAgents
 )
 
 type view struct {
@@ -118,6 +119,8 @@ type Model struct {
 	lastAttn   string // session the n key jumped to last
 	// interrupted holds the sessions X interrupted in this run; X on one of them again sends SIGKILL
 	interrupted map[string]bool
+	agents      *agentView // the open agent view, nil when closed
+	agentGen    int        // counts the agent views opened, to drop the polls of closed ones
 	ov          *config.Overrides
 	notes       notes.Store
 	snoozes     snooze.Store

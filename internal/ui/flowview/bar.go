@@ -47,3 +47,22 @@ func effortMeter(level string) string {
 	}
 	return strings.Repeat("▮", n) + strings.Repeat("▯", 4-n)
 }
+
+// sparks are the sparkline's glyphs from the lowest to the highest level.
+var sparks = [...]rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
+
+// Spark draws a sparkline of counts at x, y, one cell per count, scaled to the highest: a zero as ▁ in track, any
+// other count as a glyph from ▂ to █ in fill.
+func (c *Canvas) Spark(x, y int, counts []int, fill, track Role) {
+	top := 0
+	for _, n := range counts {
+		top = max(top, n)
+	}
+	for i, n := range counts {
+		if n <= 0 {
+			c.Set(x+i, y, sparks[0], track)
+			continue
+		}
+		c.Set(x+i, y, sparks[(n*(len(sparks)-1)+top-1)/top], fill)
+	}
+}

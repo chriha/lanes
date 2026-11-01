@@ -24,12 +24,13 @@ type Model struct {
 	paused bool      // no ticking: the view is hidden
 	last   time.Time // time of the last tick, zero before the first of a chain
 
-	primed               bool                           // a state is set: snapshots are diffed against seen
-	seen                 map[string]session.AgentStatus // each agent's status in the last snapshot
-	packets              []Packet
-	turns, calls, tokens int           // the lead's counters as shown, easing toward the state's
-	typed                float64       // runes of the lead's last text shown
-	phaseClock           time.Duration // time since the last phase step
+	primed                  bool                           // a state is set: snapshots are diffed against seen
+	seen                    map[string]session.AgentStatus // each agent's status in the last snapshot
+	packets                 []Packet
+	turns, calls, tokens    int           // the lead's counters as shown, easing toward the state's
+	tokIn, tokOut, tokCache int           // the lead's token split as shown, easing like the counters
+	typed                   float64       // runes of the lead's last text shown
+	phaseClock              time.Duration // time since the last phase step
 }
 
 // tickMsg is a model's animation tick.

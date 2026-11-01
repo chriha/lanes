@@ -84,3 +84,31 @@ func TestFmtThousands(t *testing.T) {
 		}
 	}
 }
+
+func TestActivity(t *testing.T) {
+	ago := func(d time.Duration) time.Time { return t0.Add(-d) }
+	at := func(idx, n int) []int { // sparkMinutes counts, n at idx
+		c := make([]int, sparkMinutes)
+		c[idx] = n
+		return c
+	}
+	tests := []struct {
+		name  string
+		times []time.Time
+		want  []int
+	}{
+		{"no calls", nil, make([]int, sparkMinutes)},
+		{"calls within the last minute count in the newest cell", []time.Time{ago(0), ago(10 * time.Second), ago(59 * time.Second)}, at(14, 3)},
+		{"one minute ago is the cell before", []time.Time{ago(time.Minute), ago(119 * time.Second)}, at(13, 2)},
+		{"the oldest minute is the first cell", []time.Time{ago(14*time.Minute + 59*time.Second)}, at(0, 1)},
+		{"calls 15 minutes ago or older are dropped", []time.Time{ago(15 * time.Minute), ago(time.Hour)}, make([]int, sparkMinutes)},
+		{"calls after now count as now", []time.Time{t0.Add(5 * time.Second)}, at(14, 1)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := activity(tt.times, t0); fmt.Sprint(got) != fmt.Sprint(tt.want) {
+				t.Errorf("activity = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

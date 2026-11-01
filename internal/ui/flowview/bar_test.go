@@ -74,3 +74,35 @@ func TestEffortMeter(t *testing.T) {
 		}
 	}
 }
+
+func TestCanvasSpark(t *testing.T) {
+	tests := []struct {
+		name   string
+		counts []int
+		want   string
+	}{
+		{"no counts draw nothing", nil, ""},
+		{"all zero is the floor", []int{0, 0, 0}, "▁▁▁"},
+		{"scaled to the highest", []int{0, 1, 2, 4, 8}, "▁▂▃▅█"},
+		{"a single call is full height", []int{0, 1}, "▁█"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCanvas(len(tt.counts), 1, nil)
+			c.Spark(0, 0, tt.counts, RoleHaiku, RoleDim)
+			if got := c.String(); got != tt.want {
+				t.Errorf("spark = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCanvasSparkRoles(t *testing.T) {
+	c := NewCanvas(3, 1, nil)
+	c.Spark(0, 0, []int{0, 3, 1}, RoleHaiku, RoleDim)
+	for x, want := range []Role{RoleDim, RoleHaiku, RoleHaiku} {
+		if got := c.At(x, 0).Role; got != want {
+			t.Errorf("cell %d role = %d, want %d", x, got, want)
+		}
+	}
+}

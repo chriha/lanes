@@ -37,7 +37,17 @@ func fixtureState() State {
 				ToolCalls: map[string]int{"Read": 20, "Bash": 14, "Agent": 9, "Edit": 5},
 				Tokens:    1_234_567,
 				LastText:  "Slice 2 is next: the layered layout and the static panels.",
+
+				Effort:       "high",
+				Ctx:          61,
+				TokensIn:     12_345,
+				TokensOut:    98_765,
+				TokensCache:  1_123_457,
+				AdvisorModel: "claude-opus-4-1",
+				AdvisorCalls: 3,
 			},
+			ToolTimes: toolTimes(now, map[int]int{20: 4, 14: 2, 10: 1, 7: 6, 5: 2, 3: 4, 2: 8, 1: 5, 0: 3}),
+			Files:     []string{"render_panels.go", "state.go", "layout.go", "README.md"},
 			Agents: []session.Agent{
 				{ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Task: "slice 2 of #196", Start: ago(9 * time.Minute), Tool: "Bash", ToolArg: "go test ./...", Ctx: 42, Effort: "high"},
 				{ID: "a2", Name: "triager", Model: "claude-haiku-4-5", Task: "triage #201", Status: session.AgentDone, Start: ago(11 * time.Minute), End: ago(10 * time.Minute), Ctx: 7, Effort: "low"},
@@ -52,6 +62,17 @@ func fixtureState() State {
 			{At: ago(30 * time.Second), Actor: "validator", Model: "claude-sonnet-4-5", Text: "failed"},
 		},
 	}
+}
+
+// toolTimes returns tool call times before now: perMinute maps minutes ago to the calls in that minute.
+func toolTimes(now time.Time, perMinute map[int]int) []time.Time {
+	var out []time.Time
+	for ago := 30; ago >= 0; ago-- {
+		for i := 0; i < perMinute[ago]; i++ {
+			out = append(out, now.Add(-time.Duration(ago)*time.Minute-time.Duration(i+1)*time.Second))
+		}
+	}
+	return out
 }
 
 func TestViewGolden(t *testing.T) {

@@ -48,6 +48,9 @@ func (m *Model) Step(dt time.Duration) {
 	m.turns = ease(m.turns, lead.Turns, dt)
 	m.calls = ease(m.calls, lead.Calls, dt)
 	m.tokens = ease(m.tokens, lead.Tokens, dt)
+	m.tokIn = ease(m.tokIn, lead.TokensIn, dt)
+	m.tokOut = ease(m.tokOut, lead.TokensOut, dt)
+	m.tokCache = ease(m.tokCache, lead.TokensCache, dt)
 	m.typed = min(m.typed+typeRate*dt.Seconds(), float64(len([]rune(lead.LastText))))
 }
 
@@ -149,6 +152,7 @@ func (m *Model) track(agents []session.Agent) {
 func (m *Model) settle() {
 	lead := m.st.Snap.Lead
 	m.turns, m.calls, m.tokens = lead.Turns, lead.Calls, lead.Tokens
+	m.tokIn, m.tokOut, m.tokCache = lead.TokensIn, lead.TokensOut, lead.TokensCache
 	m.typed = float64(len([]rune(lead.LastText)))
 	m.packets = nil
 }
@@ -160,6 +164,7 @@ func (m Model) Packets() []Packet { return m.packets }
 func (m Model) frame() State {
 	f := m.st
 	f.Snap.Lead.Turns, f.Snap.Lead.Calls, f.Snap.Lead.Tokens = m.turns, m.calls, m.tokens
+	f.Snap.Lead.TokensIn, f.Snap.Lead.TokensOut, f.Snap.Lead.TokensCache = m.tokIn, m.tokOut, m.tokCache
 	text := []rune(f.Snap.Lead.LastText)
 	f.Snap.Lead.LastText = string(text[:min(int(m.typed), len(text))])
 	return f

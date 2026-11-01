@@ -42,7 +42,8 @@ type Layout struct {
 }
 
 // NewLayout lays the view out for a w×h terminal: full from 90×46, compact from 60×24, else too small. The full
-// layout fills the terminal and fits as many agent boxes of 28 to 30 columns side by side as the width allows.
+// layout fills the terminal: the session column runs down its left side, and right of it as many agent boxes of
+// 28 to 30 columns go side by side as the width allows.
 func NewLayout(w, h int) Layout {
 	if w < minW || h < minH {
 		return Layout{Mode: ModeTooSmall, Frame: Rect{0, 0, w, h}}
@@ -51,12 +52,13 @@ func NewLayout(w, h int) Layout {
 	if w >= fullW && h >= fullH {
 		l = Layout{Mode: ModeFull, Frame: Rect{0, 0, w, h}, Status: h - 1, Gap: wideGap}
 		lx := sessionW + (w-sessionW-leadW)/2 + 1 // centered right of the session column
-		l.Session = Rect{0, 3, sessionW, 13}
+		l.Log = Rect{0, h - 5, w, 4}
+		l.Session = Rect{0, 3, sessionW, l.Log.Y - 4} // down to a row above the log
 		l.Lead = Rect{lx, 3, leadW, 5}
 		l.Tools = Rect{lx, 10, leadW, 6}
-		slots := (w + wideGap) / (boxMinW + wideGap)
-		l.Box = Rect{W: min(boxMaxW, (w+wideGap)/slots-wideGap), H: 5}
-		l.Log = Rect{0, h - 5, w, 4}
+		tw := w - sessionW - 1
+		slots := (tw + wideGap) / (boxMinW + wideGap)
+		l.Box = Rect{W: min(boxMaxW, (tw+wideGap)/slots-wideGap), H: 5}
 	} else {
 		fw, fh := min(w, fullW), min(h, fullH)
 		x, y := (w-fw)/2, (h-fh)/2
@@ -71,6 +73,10 @@ func NewLayout(w, h int) Layout {
 	}
 	top := above.Y + above.H + rowGap
 	l.Tree = Rect{l.Frame.X, top, l.Frame.W, l.Log.Y - 1 - top}
+	if l.Mode == ModeFull { // right of the session column
+		l.Tree.X = l.Session.X + l.Session.W + 1
+		l.Tree.W = l.Frame.W - l.Tree.X
+	}
 	return l
 }
 

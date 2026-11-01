@@ -28,6 +28,20 @@ archives:
 checksum:
   name_template: checksums.txt
 
+brews:
+  - name: lanes
+    repository:
+      owner: chriha
+      name: homebrew-lanes
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/chriha/lanes
+    description: Vim-style terminal UI for work items, with actions run in tmux sessions
+    license: MIT
+    dependencies:
+      - name: tmux
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/lanes --version")
+
 changelog:
   use: github
   sort: asc

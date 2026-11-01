@@ -115,6 +115,14 @@ look at a list, press a key, and the work starts in the background in a session 
 
 ## Install
 
+With Homebrew (macOS and Linux; also installs `tmux`):
+
+```sh
+brew install chriha/lanes/lanes
+```
+
+With Go:
+
 ```sh
 go install github.com/chriha/lanes@latest
 ```

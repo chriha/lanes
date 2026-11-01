@@ -64,6 +64,15 @@ func (s State) topTools(n int) []toolShare {
 	return out
 }
 
+// sparkMinutes is how many minutes the activity sparkline covers, one cell per minute.
+const sparkMinutes = 15
+
+// activity counts the tool calls at times per minute over the sparkMinutes minutes up to now, oldest first: the
+// last count is the minute up to now. Calls older than that are dropped; calls after now count as now.
+func activity(times []time.Time, now time.Time) []int {
+	return make([]int, sparkMinutes)
+}
+
 // running counts the agents still running; none once the session ended, whatever the transcripts say.
 func (s State) running() int {
 	if s.Ended {

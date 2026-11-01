@@ -54,10 +54,6 @@ func TestEndEventCarriesClaudeSession(t *testing.T) {
 			press(m, "x")
 			settle(m, press(m, "y"))
 		}},
-		{"interrupted", "interrupted", func(m *Model) {
-			press(m, "X")
-			settle(m, press(m, "y"))
-		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -86,6 +82,44 @@ func TestEndEventCarriesClaudeSession(t *testing.T) {
 				t.Errorf("Claude session file kept after the end event: %v", err)
 			}
 		})
+	}
+}
+
+// An interrupt only signals the session, which may keep running: it records the Claude session id but keeps it,
+// so a later end without a hook event in between still carries it.
+func TestInterruptKeepsClaudeSession(t *testing.T) {
+	m, _ := busyModel(t)
+	paneTmux(t, 0)
+	mgr, err := session.NewManager()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.sess = mgr
+	alive := session.Info{Name: "fix~1", Action: "fix", ItemKey: "1"}
+	m.sessions = []session.Info{alive}
+	m.sessByItem["1"] = m.sessions
+	claudeHook(t, alive.Name, "abc")
+	sidecar := filepath.Join(app.StateDir(), "sessions", alive.Name+".claude.json")
+
+	press(m, "X")
+	settle(m, press(m, "y"))
+	if _, err := os.Stat(sidecar); err != nil {
+		t.Errorf("Claude session file gone after an interrupt: %v", err)
+	}
+
+	press(m, "x")
+	settle(m, press(m, "y"))
+	evs := history.For("1")
+	if len(evs) != 2 {
+		t.Fatalf("history = %+v, want interrupted then killed", evs)
+	}
+	for i, want := range []string{"interrupted", "killed"} {
+		if evs[i].Event != want || evs[i].ClaudeSession != "abc" {
+			t.Errorf("event %d = %+v, want %s with claude_session abc", i, evs[i], want)
+		}
+	}
+	if _, err := os.Stat(sidecar); !os.IsNotExist(err) {
+		t.Errorf("Claude session file kept after the session ended: %v", err)
 	}
 }
 

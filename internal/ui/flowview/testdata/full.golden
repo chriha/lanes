@@ -18,29 +18,29 @@
                              ┌───────────────────────────┴──┐                             
                              ▼                              ▼                             
                ╭─ implementer ────────────╮   ╭─ triager ────────────────╮                
-               │     opus 4.1 ctx 42%     │   │     haiku 4.5 ctx 7%     │                
+               │    opus 4.1 ▮▮▮▯ high    │   │    haiku 4.5 ▮▯▯▯ low    │                
+               │ ctx ██████▒░░░░░░░░  42% │   │ ctx █░░░░░░░░░░░░░░   7% │                
                │     slice 2 of #196      │   │       triage #201        │                
-               │       ◓ 9m00s Bash       │   │         ✓ 1m00s          │                
-               ╰──────────────────────────╯   ╰──────────────────────────╯                
+               ╰─ ◓ 9m00s ▸ Bash go tes… ─╯   ╰─ ✓ done 1m00s ───────────╯                
                              │                                                            
                              └───────────────┐                                            
                                              ▼                                            
                                ╭─ code-reviewer ──────────╮                               
-                               │        sonnet 4.5        │                               
+                               │  sonnet 4.5 ▮▮▯▯ medium  │                               
+                               │ ctx ░░░░░░░░░░░░░░░   -- │                               
                                │     review the diff      │                               
-                               │       ◓ 2m00s Grep       │                               
-                               ╰──────────────────────────╯                               
+                               ╰─ ◓ 2m00s ▸ Grep drawAg… ─╯                               
                                              │                                            
                                              │                                            
                                              ▼                                            
                                ╭─ validator ──────────────╮                               
-                               │    sonnet 4.5 ctx 12%    │                               
+                               │        sonnet 4.5        │                               
+                               │ ctx █▓░░░░░░░░░░░░░  12% │                               
                                │    validate a finding    │                               
-                               │         ✗ 1m00s          │                               
-                               ╰──────────────────────────╯                               
+                               ╰─ ✗ failed 1m00s ─────────╯                               
                                                                                           
 ──┤ session log ├─────────────────────────────────────────────────────────────────────────
- 14:28:00 implementer  spawned code-reviewer                                              
- 14:28:30 code-review… spawned validator                                                  
- 14:29:30 validator    failed                                                             
- lead [working]   agents [2/4 running]                                                    
+ 14:28:00 implementer   spawned code-reviewer                                             
+ 14:28:30 code-reviewer spawned validator                                                 
+ 14:29:30 validator     failed                                                            
+ opus [1 running]  sonnet [1 running]  haiku [done]  agents [2/4]  tools [48]             

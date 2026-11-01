@@ -1,6 +1,15 @@
 package flowview
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/chriha/lanes/internal/session"
+)
 
 func TestCenterSanitizesAndFits(t *testing.T) {
 	tests := []struct {
@@ -21,5 +30,200 @@ func TestCenterSanitizesAndFits(t *testing.T) {
 				t.Errorf("center = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAgentBox(t *testing.T) {
+	now := time.Date(2026, 11, 1, 14, 30, 0, 0, time.UTC)
+	base := session.Agent{
+		ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Effort: "high", Ctx: 42, Task: "slice 2 of #196",
+		Start: now.Add(-9 * time.Minute), Tool: "Bash", ToolArg: "go test",
+	}
+	with := func(f func(a *session.Agent)) session.Agent {
+		a := base
+		f(&a)
+		return a
+	}
+	tests := []struct {
+		name    string
+		agent   session.Agent
+		full    bool
+		ended   bool
+		want    []string // what each row holds, spaces collapsed; "" skips the row
+		without string   // must not appear anywhere in the box
+	}{
+		{"running, full", base, true, false,
+			[]string{"╭─ implementer ─", "│ opus 4.1 ▮▮▮▯ high │", "│ ctx", "│ slice 2 of #196 │", "╰─ ◓ 9m00s ▸ Bash go test ─"}, ""},
+		{"unknown effort omits the meter", with(func(a *session.Agent) { a.Effort = "" }), true, false,
+			[]string{"", "│ opus 4.1 │"}, "▮"},
+		{"running without a tool", with(func(a *session.Agent) { a.Tool, a.ToolArg = "", "" }), true, false,
+			[]string{"", "", "", "", "╰─ ◓ running 9m00s ─"}, "▸"},
+		{"done", with(func(a *session.Agent) { a.Status, a.End = session.AgentDone, a.Start.Add(time.Minute) }), true, false,
+			[]string{"", "", "", "", "╰─ ✓ done 1m00s ─"}, "▸"},
+		{"failed", with(func(a *session.Agent) { a.Status, a.End = session.AgentError, a.Start.Add(time.Minute) }), true, false,
+			[]string{"", "", "", "", "╰─ ✗ failed 1m00s ─"}, "▸"},
+		{"running in an ended session is stopped", base, true, true,
+			[]string{"", "", "", "", "╰─ ■ stopped 9m00s ─"}, "◓"},
+		{"compact has no task and no effort level", base, false, false,
+			[]string{"╭─ implementer ─", "│ opus ▮▮▮▯ │", "│ ctx", "╰─ ◓ 9m00s ▸ Bash go test ─"}, "slice"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := 5
+			if !tt.full {
+				h = 4
+			}
+			c := NewCanvas(30, h, nil)
+			s := State{Now: now, Phase: 1, Ended: tt.ended}
+			s.drawAgent(c, Rect{0, 0, 30, h}, tt.agent, tt.full)
+			got := rows(c)
+			for i, w := range tt.want {
+				if w == "" {
+					continue
+				}
+				if g := strings.Join(strings.Fields(got[i]), " "); !strings.Contains(g, w) {
+					t.Errorf("row %d = %q, want it to hold %q", i, got[i], w)
+				}
+			}
+			if tt.without != "" && strings.Contains(c.String(), tt.without) {
+				t.Errorf("box shows %q:\n%s", tt.without, c.String())
+			}
+		})
+	}
+}
+
+func TestAgentBoxContextGauge(t *testing.T) {
+	tests := []struct {
+		name string
+		ctx  int
+		want string
+	}{
+		{"known", 50, "ctx ███████▒░░░░░░░  50%"},
+		{"unknown", -1, "ctx ░░░░░░░░░░░░░░░   --"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCanvas(28, 5, nil)
+			State{}.drawAgent(c, Rect{0, 0, 28, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: tt.ctx}, true)
+			if got := strings.TrimSpace(strings.Trim(rows(c)[2], "│")); got != tt.want {
+				t.Errorf("ctx row = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAgentBoxTitleFitsTheName(t *testing.T) {
+	long := strings.Repeat("x", 40)
+	tests := []struct {
+		name   string
+		w, h   int
+		agent  string
+		want   string
+		maxBox int
+	}{
+		{"a name wider than the default box widens it", 200, 50, "a-rather-long-agent-name-here", "─ a-rather-long-agent-name-here ─", 200},
+		{"in the compact layout too", 70, 30, "code-reviewer", "─ code-reviewer ─", 70},
+		{"a name wider than the row is cut", 90, 46, strings.Repeat(long, 3), "─ " + strings.Repeat("x", 83) + "… ─", 90},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New(nil)
+			m.SetSize(tt.w, tt.h)
+			st := fixtureState()
+			st.Snap.Agents = []session.Agent{{ID: "a1", Name: tt.agent, Model: "claude-opus-4-1", Start: st.Now, Ctx: -1}}
+			m.SetState(st)
+			v := ansi.Strip(m.View())
+			if !strings.Contains(v, tt.want) {
+				t.Errorf("view lacks the title %q:\n%s", tt.want, v)
+			}
+			if w, _ := lipgloss.Size(v); w != tt.w {
+				t.Errorf("view is %d wide, want %d", w, tt.w)
+			}
+		})
+	}
+}
+
+func TestLogActorColumn(t *testing.T) {
+	at := time.Date(2026, 11, 1, 14, 28, 30, 0, time.UTC)
+	tests := []struct {
+		name   string
+		agents []string
+		actor  string
+		want   string
+	}{
+		{"the column fits the longest agent name", []string{"code-reviewer", "x"}, "x", "14:28:30 x             did it"},
+		{"a long actor is not cut", nil, "code-reviewer", "14:28:30 code-reviewer did it"},
+		{"the lead needs at least its name", nil, "lead", "14:28:30 lead did it"},
+		{"names past 20 cells are cut", []string{strings.Repeat("n", 25)}, strings.Repeat("n", 25), "14:28:30 " + strings.Repeat("n", 19) + "… did it"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := State{Log: []LogLine{{At: at, Actor: tt.actor, Text: "did it"}}}
+			for _, n := range tt.agents {
+				s.Snap.Agents = append(s.Snap.Agents, session.Agent{Name: n})
+			}
+			c := NewCanvas(60, 2, nil)
+			s.drawLog(c, Rect{0, 0, 60, 2})
+			if got := strings.TrimSpace(rows(c)[1]); got != tt.want {
+				t.Errorf("log line = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStatusLine(t *testing.T) {
+	live := fixtureState()
+	ended := fixtureState()
+	ended.Ended = true
+	none := fixtureState()
+	none.Snap.Agents = nil
+	tests := []struct {
+		name    string
+		w       int
+		st      State
+		want    []string
+		without []string
+	}{
+		{"live lists each family and the totals", 200, live,
+			[]string{"opus [1 running]  sonnet [1 running]  haiku [done]  agents [2/4]  tools [48]  tokens [1,234,567]  ● live"}, nil},
+		{"ended reports no running agents", 200, ended,
+			[]string{"opus [stopped]", "sonnet [1 failed]", "haiku [done]", "agents [0/4]", "■ ended"}, []string{"running"}},
+		{"no agents, no families", 200, none, []string{"agents [0/0]  tools [48]"}, []string{"opus ["}},
+		{"entries that don't fit are left out whole", 90, live, []string{"agents [2/4]"}, []string{"…", "● live"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := NewLayout(tt.w, 50)
+			c := NewCanvas(tt.w, 50, nil)
+			tt.st.drawStatus(c, l)
+			line := rows(c)[l.Status]
+			for _, w := range tt.want {
+				if !strings.Contains(line, w) {
+					t.Errorf("status line %q lacks %q", line, w)
+				}
+			}
+			for _, w := range tt.without {
+				if strings.Contains(line, w) {
+					t.Errorf("status line %q has %q", line, w)
+				}
+			}
+		})
+	}
+}
+
+func TestStatusLineColorsFamilies(t *testing.T) {
+	l := NewLayout(200, 50)
+	c := NewCanvas(200, 50, nil)
+	fixtureState().drawStatus(c, l)
+	line := []rune(rows(c)[l.Status])
+	for fam, role := range map[string]Role{"opus": RoleOpus, "sonnet": RoleSonnet, "haiku": RoleHaiku} {
+		i := strings.Index(string(line), fam+" [")
+		if i < 0 {
+			t.Fatalf("status line lacks %s", fam)
+		}
+		x := len([]rune(string(line)[:i]))
+		if got := c.At(x, l.Status).Role; got != role {
+			t.Errorf("%s drawn in role %d, want %d", fam, got, role)
+		}
 	}
 }

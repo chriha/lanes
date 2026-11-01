@@ -1,5 +1,7 @@
 package flowview
 
+import "strings"
+
 // shades are the bar's edge glyphs from light to dark.
 var shades = [3]rune{'░', '▒', '▓'}
 
@@ -30,5 +32,9 @@ func (c *Canvas) Bar(x, y, w int, v float64, phase int, fill, track Role) {
 // effortMeter is the 4-cell meter of an effort level: low ▮▯▯▯, medium ▮▮▯▯, high ▮▮▮▯, xhigh and max ▮▮▮▮; ""
 // for an unknown level.
 func effortMeter(level string) string {
-	return ""
+	n := map[string]int{"low": 1, "medium": 2, "high": 3, "xhigh": 4, "max": 4}[strings.ToLower(level)]
+	if n == 0 {
+		return ""
+	}
+	return strings.Repeat("▮", n) + strings.Repeat("▯", 4-n)
 }

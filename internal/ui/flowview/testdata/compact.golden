@@ -6,25 +6,25 @@
                  │         ◓ working 12m03s         │                 
                  ╰──────────────────────────────────╯                 
                                    │                                  
-                          ┌────────┴────────┐                         
-                          ▼                 ▼                         
-                  ╭─ implemente…─╮  ╭─ triager ────╮                  
-                  │ opus ctx 42% │  │ haiku ctx 7% │                  
-                  │ ◓ 9m00s Bash │  │   ✓ 1m00s    │                  
-                  ╰──────────────╯  ╰──────────────╯                  
-                          │                                           
-                          ├─────────────────┐                         
-                          ▼                 ▼                         
-                  ╭─ code-revie…─╮  ╭──────────────╮                  
-                  │    sonnet    │  │              │                  
-                  │ ◓ 2m00s Grep │  │   +1 more    │                  
-                  ╰──────────────╯  ╰──────────────╯                  
+                        ┌──────────┴─────────┐                        
+                        ▼                    ▼                        
+               ╭─ implementer ───╮  ╭─ triager ───────╮               
+               │    opus ▮▮▮▯    │  │   haiku ▮▯▯▯    │               
+               │ ctx ██▓░░░  42% │  │ ctx ▒░░░░░   7% │               
+               ╰─ ◓ 9m00s ▸ Ba… ─╯  ╰─ ✓ done 1m00s ──╯               
+                        │                                             
+                        ├────────────────────┐                        
+                        ▼                    ▼                        
+               ╭─ code-reviewer ─╮  ╭─────────────────╮               
+               │   sonnet ▮▮▯▯   │  │                 │               
+               │ ctx ░░░░░░   -- │  │     +1 more     │               
+               ╰─ ◓ 2m00s ▸ Gr… ─╯  ╰─────────────────╯               
                                                                       
                                                                       
                                                                       
                                                                       
                                                                       
 ──┤ session log ├─────────────────────────────────────────────────────
- 14:28:30 code-review… spawned validator                              
- 14:29:30 validator    failed                                         
- lead [working]  agents [2/4]  turns 12  tools 48  tokens 1.2M        
+ 14:28:30 code-reviewer spawned validator                             
+ 14:29:30 validator     failed                                        
+ opus [1 running]  sonnet [1 running]  haiku [done]  agents [2/4]     

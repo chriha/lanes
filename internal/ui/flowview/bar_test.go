@@ -56,3 +56,21 @@ func TestCanvasBarClips(t *testing.T) {
 		t.Errorf("bar = %q, want %q", got, " ██")
 	}
 }
+
+func TestEffortMeter(t *testing.T) {
+	tests := map[string]string{
+		"low":     "▮▯▯▯",
+		"medium":  "▮▮▯▯",
+		"high":    "▮▮▮▯",
+		"xhigh":   "▮▮▮▮",
+		"max":     "▮▮▮▮",
+		"High":    "▮▮▮▯",
+		"":        "",
+		"extreme": "",
+	}
+	for level, want := range tests {
+		if got := effortMeter(level); got != want {
+			t.Errorf("effortMeter(%q) = %q, want %q", level, got, want)
+		}
+	}
+}

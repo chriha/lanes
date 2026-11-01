@@ -112,6 +112,7 @@ const projectTail = `
 # poll_interval_blurred = "5m" # how often lists refresh while the terminal is unfocused; never below poll_interval (default 5m)
 # preview = false             # open the preview pane at startup (default false; toggle with p)
 # no_notify = false           # disable desktop notifications (default false)
+# no_update_check = false     # never check GitHub (once a day) for a newer lanes release (default false)
 # claude_dir = "~/.claude"    # show this Claude profile's usage in the footer (default: none)
 
 # ---------------------------------------------------------------------------------------------------------

@@ -2,13 +2,18 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/trust"
+	"github.com/chriha/lanes/internal/update"
 )
 
 func TestUsageError(t *testing.T) {
@@ -43,22 +48,30 @@ func TestUsageError(t *testing.T) {
 	}
 }
 
-// fakeEnv returns an env for dir whose steps append their name to calls; ask answers yes.
+// fakeEnv returns an env for dir whose steps append their name to calls; ask answers yes. The release fetch
+// fails, so a test that reaches the network sees "fetch" in calls.
 func fakeEnv(dir string, tty, yes bool, calls *[]string) (env, *bytes.Buffer, *bytes.Buffer) {
 	var stdout, stderr bytes.Buffer
 	rec := func(s string) { *calls = append(*calls, s) }
 	return env{
 		wd: dir, isTTY: tty, stdout: &stdout, stderr: &stderr,
-		ask:     func(string) (bool, bool, error) { rec("ask"); return yes, false, nil },
-		initApp: func(string) { rec("initApp") },
-		hook:    func(string) { rec("hook") },
-		status:  func() { rec("status") },
-		doctor:  func() int { rec("doctor"); return 0 },
+		version: "dev",
+		fetch: func(context.Context) (string, error) {
+			rec("fetch")
+			return "", errors.New("no network in tests")
+		},
+		upgrade:   func() string { return update.Brew },
+		updateOff: func() bool { return false },
+		ask:       func(string) (bool, bool, error) { rec("ask"); return yes, false, nil },
+		initApp:   func(string) { rec("initApp") },
+		hook:      func(string) { rec("hook") },
+		status:    func() { rec("status") },
+		doctor:    func() int { rec("doctor"); return 0 },
 		init: func() int {
 			rec("init")
 			return 0
 		},
-		tui: func() int { rec("tui"); return 0 },
+		tui: func(update.Checker, string) int { rec("tui"); return 0 },
 	}, &stdout, &stderr
 }
 
@@ -87,6 +100,7 @@ func TestRunGate(t *testing.T) {
 		{"hook trusted", []string{"hook", "Stop"}, true, false, true, 0, "hook", "", true},
 		{"version untrusted", []string{"--version"}, false, false, true, 0, "", "", false},
 		{"version word untrusted", []string{"version"}, false, false, true, 0, "", "", false},
+		{"version trusted", []string{"version"}, true, false, true, 0, "initApp", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -396,5 +410,138 @@ func TestRunCorruptStore(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(store); string(b) != "{broken" {
 		t.Errorf("trust.json was rewritten: %q", b)
+	}
+}
+
+// writeUpdateCache stores a successful release check that found latest, as the TUI's check would.
+func writeUpdateCache(t *testing.T, latest string) string {
+	t.Helper()
+	p := filepath.Join(app.CacheDir(), "update.json")
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	b := `{"checked_at":"` + time.Now().Add(-time.Hour).Format(time.RFC3339) + `","latest":"` + latest + `"}`
+	if err := os.WriteFile(p, []byte(b), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestRunVersionUpdateHint(t *testing.T) {
+	tests := []struct {
+		name    string
+		version string
+		cached  string // latest release in update.json; "" = no cache file
+		trusted bool
+		off     bool // settings.no_update_check
+		want    string
+	}{
+		{"newer cached", "v1.0.0", "v1.1.0", true, false, "lanes v1.0.0\nv1.1.0 available · brew upgrade lanes\n"},
+		{"same cached", "v1.1.0", "v1.1.0", true, false, "lanes v1.1.0\n"},
+		{"older cached", "v1.2.0", "v1.1.0", true, false, "lanes v1.2.0\n"},
+		{"no cache", "v1.0.0", "", true, false, "lanes v1.0.0\n"},
+		{"prerelease of the cached release", "v1.1.0-rc1", "v1.1.0", true, false, "lanes v1.1.0-rc1\nv1.1.0 available · brew upgrade lanes\n"},
+		{"no_update_check", "v1.0.0", "v1.1.0", true, true, "lanes v1.0.0\n"},
+		{"dev build", "dev", "v1.1.0", true, false, "lanes dev\n"},
+		{"untrusted: no project cache", "v1.0.0", "v1.1.0", false, false, "lanes v1.0.0\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			t.Setenv("XDG_CACHE_HOME", t.TempDir())
+			root, dir := gateRoot(t)
+			if tt.trusted {
+				hash, _ := trust.HashRoot(root)
+				if err := trust.Trust(root, hash); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var before []byte
+			if tt.cached != "" {
+				before, _ = os.ReadFile(writeUpdateCache(t, tt.cached))
+			}
+			for _, args := range [][]string{{"version"}, {"--version"}} {
+				var calls []string
+				e, stdout, stderr := fakeEnv(dir, false, true, &calls)
+				e.version = tt.version
+				e.updateOff = func() bool { return tt.off }
+				if code := run(args, e); code != 0 {
+					t.Errorf("%s: exit code = %d, want 0", args[0], code)
+				}
+				if got := stdout.String(); got != tt.want {
+					t.Errorf("%s: stdout = %q, want %q", args[0], got, tt.want)
+				}
+				if stderr.Len() > 0 {
+					t.Errorf("%s: stderr = %q, want empty", args[0], stderr.String())
+				}
+				if strings.Contains(strings.Join(calls, " "), "fetch") {
+					t.Errorf("%s: calls = %q, version must never ask the network", args[0], calls)
+				}
+			}
+			after, _ := os.ReadFile(filepath.Join(app.CacheDir(), "update.json"))
+			if !bytes.Equal(before, after) {
+				t.Errorf("update.json changed: %q -> %q", before, after)
+			}
+		})
+	}
+}
+
+func TestRunChecksUpdatesOnlyInTUI(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"hook", []string{"hook", "Stop"}},
+		{"status", []string{"status"}},
+		{"untrust", []string{"--untrust"}},
+		{"init", []string{"init"}},
+		{"doctor", []string{"doctor"}},
+		{"tui", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			t.Setenv("XDG_CACHE_HOME", t.TempDir())
+			root, dir := gateRoot(t)
+			hash, _ := trust.HashRoot(root)
+			if err := trust.Trust(root, hash); err != nil {
+				t.Fatal(err)
+			}
+			var calls []string
+			e, _, _ := fakeEnv(dir, true, true, &calls)
+			e.version = "v1.0.0"
+			var got *update.Checker
+			var upgrade string
+			e.tui = func(c update.Checker, u string) int {
+				calls = append(calls, "tui")
+				got, upgrade = &c, u
+				return 0
+			}
+			run(tt.args, e)
+			if strings.Contains(strings.Join(calls, " "), "fetch") {
+				t.Errorf("calls = %q, want no release check", calls)
+			}
+			if _, err := os.Stat(filepath.Join(app.CacheDir(), "update.json")); !os.IsNotExist(err) {
+				t.Errorf("update.json exists (err %v), want no release check", err)
+			}
+			if tt.args != nil {
+				if got != nil {
+					t.Errorf("the TUI got a checker for %q", tt.args)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatal("the TUI got no checker")
+			}
+			if got.Current != "v1.0.0" || upgrade != update.Brew {
+				t.Errorf("checker for %q with %q, want v1.0.0 with %q", got.Current, upgrade, update.Brew)
+			}
+			if want := filepath.Join(app.CacheDir(), "update.json"); got.CachePath != want {
+				t.Errorf("CachePath = %q, want %q", got.CachePath, want)
+			}
+			if _, err := got.Fetch(context.Background()); err == nil || !strings.Contains(strings.Join(calls, " "), "fetch") {
+				t.Errorf("the checker does not fetch through env.fetch (calls %q)", calls)
+			}
+		})
 	}
 }

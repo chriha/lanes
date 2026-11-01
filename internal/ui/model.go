@@ -22,6 +22,7 @@ import (
 	"github.com/chriha/lanes/internal/provider"
 	"github.com/chriha/lanes/internal/session"
 	"github.com/chriha/lanes/internal/snooze"
+	"github.com/chriha/lanes/internal/update"
 )
 
 type mode int
@@ -126,11 +127,14 @@ type Model struct {
 	usage       usageMsg // Claude usage from [settings] claude_dir, shown at the left of the footer
 	// originForge detects the forge for a new .lanes.toml (:edit project); nil = provider.OriginForge
 	originForge func() (typ, repo string, err error)
+	// updates checks for a newer release at start; nil = no check (see WithUpdateCheck)
+	updates *update.Checker
+	upgrade string // the upgrade command the update notice shows
 
 	width, height int
 }
 
-func New(cfg *config.Config) *Model {
+func New(cfg *config.Config, opts ...Option) *Model {
 	m := &Model{
 		data:         map[string][]item.Item{},
 		fetchedAt:    map[string]time.Time{},
@@ -163,6 +167,9 @@ func New(cfg *config.Config) *Model {
 	m.settings, _ = session.SettingsFile()
 	m.sessByItem = map[string][]session.Info{}
 	m.applyConfig(cfg)
+	for _, o := range opts {
+		o(m)
+	}
 	return m
 }
 
@@ -358,7 +365,7 @@ func (m *Model) clamp() {
 }
 
 func (m *Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{tick(), m.pollSessions()}
+	cmds := []tea.Cmd{tick(), m.pollSessions(), m.updateCheck()}
 	for name := range m.providers {
 		cmds = append(cmds, m.fetch(name))
 	}
@@ -464,6 +471,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(tick(), m.onTick(), m.pollSessions(), m.pollUsage())
 	case usageMsg:
 		m.usage = msg
+	case updateMsg:
+		m.onUpdate(msg)
 	case sessionsMsg:
 		m.onSessions(msg)
 	case interruptedMsg:

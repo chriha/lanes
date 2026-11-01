@@ -210,13 +210,34 @@ func (t *Tailer) snapshot() Snapshot {
 		ToolCalls: make(map[string]int, len(l.toolCalls)),
 		Tokens:    l.tokens,
 		LastText:  l.lastText,
+
+		Effort:       l.effort,
+		Ctx:          -1,
+		TokensIn:     l.in,
+		TokensOut:    l.out,
+		TokensCache:  l.cache,
+		AdvisorModel: l.advisorModel,
+		AdvisorCalls: l.advisorCalls,
 	}}
+	if l.ctxTokens > 0 {
+		s.Lead.Ctx = ctxPercent(l.ctxTokens, l.model)
+	}
 	for k, v := range l.toolCalls {
 		s.Lead.ToolCalls[k] = v
 	}
+	all := []*transcript{l}
 	for id, a := range t.agents {
 		s.Agents = append(s.Agents, a.snapshot(id, t.failed))
 	}
+	ids := make([]string, 0, len(t.agents))
+	for id := range t.agents {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		all = append(all, t.agents[id].t)
+	}
+	s.ToolTimes, s.Files = toolTimes(all), files(all)
 	sort.Slice(s.Agents, func(i, j int) bool {
 		a, b := s.Agents[i], s.Agents[j]
 		if !a.Start.Equal(b.Start) {
@@ -225,6 +246,53 @@ func (t *Tailer) snapshot() Snapshot {
 		return a.ID < b.ID
 	})
 	return s
+}
+
+// toolTimes merges the tool call times of the transcripts within ToolWindow of their newest line, oldest first.
+func toolTimes(ts []*transcript) []time.Time {
+	var newest time.Time
+	for _, t := range ts {
+		if t.last.After(newest) {
+			newest = t.last
+		}
+	}
+	from := newest.Add(-ToolWindow)
+	var out []time.Time
+	for _, t := range ts {
+		for _, tm := range t.toolTimes {
+			if !tm.Before(from) {
+				out = append(out, tm)
+			}
+		}
+	}
+	slices.SortStableFunc(out, func(a, b time.Time) int { return a.Compare(b) })
+	return out
+}
+
+// files merges the files the transcripts touched: base names, newest first, each once, at most MaxFiles.
+func files(ts []*transcript) []string {
+	var all []touch
+	for _, t := range ts {
+		all = append(all, t.files...)
+	}
+	slices.SortStableFunc(all, func(a, b touch) int {
+		if c := b.at.Compare(a.at); c != 0 {
+			return c
+		}
+		return b.seq - a.seq
+	})
+	var out []string
+	seen := map[string]bool{}
+	for _, f := range all {
+		if len(out) == MaxFiles {
+			break
+		}
+		if !seen[f.path] {
+			seen[f.path] = true
+			out = append(out, filepath.Base(f.path))
+		}
+	}
+	return out
 }
 
 func (a *agent) snapshot(id string, failed map[string]bool) Agent {
@@ -240,6 +308,7 @@ func (a *agent) snapshot(id string, failed map[string]bool) Agent {
 		Tool:    tr.current().name,
 		ToolArg: tr.current().arg,
 		Ctx:     -1,
+		Effort:  tr.effort,
 	}
 	out.Name = m.Name
 	if out.Name == "" {
@@ -292,21 +361,45 @@ func briefName(prompt string) string {
 type transcript struct {
 	path      string
 	offset    int64
-	msgs      map[string]int // tokens counted per assistant message id: one message spans several lines
+	msgs      map[string]usage // usage counted per assistant message id: one message spans several lines
 	model     string
 	pending   []toolCall // tool calls without a result yet, oldest first
 	calls     int
 	toolCalls map[string]int
-	tokens    int
+	tokens    int // input + cache write + output
+	in        int
+	out       int
+	cache     int // cache read + cache write
 	ctxTokens int // input + cache read + cache write of the newest assistant message
 	lastText  string
 	brief     string // the brief named in the first user text that names one
 	first     time.Time
 	last      time.Time
+
+	effort       string
+	advisorModel string
+	advisorCalls int
+	toolTimes    []time.Time // start times of the tool calls within ToolWindow of the newest line, oldest first
+	files        []touch     // the last MaxFiles distinct files touched, oldest first
+	seq          int         // counts the files touched, to order those with the same time
+}
+
+type usage struct {
+	Input      int `json:"input_tokens"`
+	CacheWrite int `json:"cache_creation_input_tokens"`
+	CacheRead  int `json:"cache_read_input_tokens"`
+	Output     int `json:"output_tokens"`
+}
+
+// touch is a file an Edit, Write or NotebookEdit call touched.
+type touch struct {
+	path string
+	at   time.Time
+	seq  int
 }
 
 func newTranscript(path string) *transcript {
-	return &transcript{path: path, msgs: map[string]int{}, toolCalls: map[string]int{}}
+	return &transcript{path: path, msgs: map[string]usage{}, toolCalls: map[string]int{}}
 }
 
 type toolCall struct{ id, name, arg string }
@@ -362,18 +455,15 @@ func (t *transcript) noteBrief(text string) {
 }
 
 type transcriptLine struct {
-	Type      string    `json:"type"`
-	Timestamp time.Time `json:"timestamp"`
-	Message   struct {
+	Type         string    `json:"type"`
+	Timestamp    time.Time `json:"timestamp"`
+	Effort       string    `json:"effort"`
+	AdvisorModel string    `json:"advisorModel"`
+	Message      struct {
 		ID      string          `json:"id"`
 		Model   string          `json:"model"`
 		Content json.RawMessage `json:"content"`
-		Usage   struct {
-			Input      int `json:"input_tokens"`
-			CacheWrite int `json:"cache_creation_input_tokens"`
-			CacheRead  int `json:"cache_read_input_tokens"`
-			Output     int `json:"output_tokens"`
-		} `json:"usage"`
+		Usage   usage           `json:"usage"`
 	} `json:"message"`
 }
 
@@ -433,12 +523,20 @@ func (t *transcript) apply(line []byte, failed map[string]bool) {
 	if m.Model != "" {
 		t.model = m.Model
 	}
+	if l.Effort != "" {
+		t.effort = l.Effort
+	}
+	if l.AdvisorModel != "" {
+		t.advisorModel = l.AdvisorModel
+	}
 	if m.ID != "" {
 		// The newest line of a message has its newest usage: it replaces what earlier lines counted.
-		u := m.Usage
-		n := u.Input + u.CacheWrite + u.Output
-		t.tokens += n - t.msgs[m.ID]
-		t.msgs[m.ID] = n
+		u, old := m.Usage, t.msgs[m.ID]
+		t.in += u.Input - old.Input
+		t.out += u.Output - old.Output
+		t.cache += u.CacheRead + u.CacheWrite - old.CacheRead - old.CacheWrite
+		t.tokens += u.Input + u.CacheWrite + u.Output - old.Input - old.CacheWrite - old.Output
+		t.msgs[m.ID] = u
 		t.ctxTokens = u.Input + u.CacheRead + u.CacheWrite
 	}
 	for _, c := range blocks {
@@ -451,7 +549,48 @@ func (t *transcript) apply(line []byte, failed map[string]bool) {
 			t.calls++
 			t.toolCalls[c.Name]++
 			t.pending = append(t.pending, toolCall{c.ID, c.Name, toolArg(c.Input)})
+			t.noteToolTime(l.Timestamp)
+			t.noteFile(c.Name, c.Input, l.Timestamp)
+		case "server_tool_use":
+			if c.Name == "advisor" {
+				t.advisorCalls++
+			}
 		}
+	}
+}
+
+// noteToolTime keeps the start time of a tool call and drops those older than ToolWindow before the newest line.
+func (t *transcript) noteToolTime(at time.Time) {
+	if at.IsZero() {
+		return
+	}
+	t.toolTimes = append(t.toolTimes, at)
+	from := t.last.Add(-ToolWindow)
+	t.toolTimes = slices.DeleteFunc(t.toolTimes, func(tm time.Time) bool { return tm.Before(from) })
+}
+
+// fileTools are the tools that change a file, with the input field naming it.
+var fileTools = map[string]string{"Edit": "file_path", "Write": "file_path", "NotebookEdit": "notebook_path"}
+
+// noteFile keeps the file a call of a file tool touched as the newest, once, and the last MaxFiles of them.
+func (t *transcript) noteFile(tool string, input json.RawMessage, at time.Time) {
+	key, ok := fileTools[tool]
+	if !ok {
+		return
+	}
+	var in map[string]any
+	if json.Unmarshal(input, &in) != nil {
+		return
+	}
+	p, _ := in[key].(string)
+	if p = strings.TrimSpace(p); p == "" {
+		return
+	}
+	t.seq++
+	t.files = slices.DeleteFunc(t.files, func(f touch) bool { return f.path == p })
+	t.files = append(t.files, touch{p, at, t.seq})
+	if len(t.files) > MaxFiles {
+		t.files = t.files[len(t.files)-MaxFiles:]
 	}
 }
 

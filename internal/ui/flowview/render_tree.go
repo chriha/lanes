@@ -1,7 +1,6 @@
 package flowview
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/chriha/lanes/internal/session"
@@ -26,74 +25,39 @@ func treePaths(nodes []Node, root, area Rect) [][]Point {
 	return paths
 }
 
-// toolPath is the full layout's connector from the lead to the tool layer, nil in the other layouts.
-func toolPath(l Layout) []Point {
-	if l.Mode != ModeFull {
-		return nil
-	}
-	return elbow(Point{l.Lead.X + l.Lead.W/2, l.Lead.Y + l.Lead.H}, Point{l.Tools.X + l.Tools.W/2, l.Tools.Y - 1})
+// toolPath is the diagram's connector from the lead to the tool layer.
+func toolPath(d Diagram) []Point {
+	return elbow(Point{d.Lead.X + d.Lead.W/2, d.Lead.Y + d.Lead.H}, Point{d.Tools.X + d.Tools.W/2, d.Tools.Y - 1})
 }
 
-// drawTree draws the agent boxes and their connectors and returns the boxes and each one's connector.
-func (s State) drawTree(c *Canvas, l Layout) ([]Node, [][]Point) {
-	root := l.Lead
-	if l.Mode == ModeFull {
-		root = l.Tools
-		c.drawPaths([][]Point{toolPath(l)}, RoleDim)
-	}
-	box := l.Box
-	box.W = s.boxWidth(l)
-	nodes := layoutTree(s.Snap.Agents, l.Tree, box, l.Gap)
-	paths := treePaths(nodes, root, l.Tree)
+// drawTree draws the tool layer's connector, the agent boxes and their connectors, and returns each box's connector.
+func (s State) drawTree(c *Canvas, d Diagram) [][]Point {
+	c.drawPaths([][]Point{toolPath(d)}, RoleDim)
+	paths := treePaths(d.Nodes, d.Tools, d.Tree)
 	c.drawPaths(paths, RoleDim)
-	for _, n := range nodes {
-		if n.Agent < 0 {
-			c.Box(n.Rect, border, RoleDim)
-			c.center(n.Rect, n.Rect.Y+n.Rect.H/2, fmt.Sprintf("+%d more", n.More), RoleDim)
-			continue
-		}
+	for _, n := range d.Nodes {
 		s.drawAgent(c, n.Rect, s.Snap.Agents[n.Agent])
 	}
-	return nodes, paths
+	return paths
 }
 
-// boxWidth is the agent box width: the layout's, widened so the longest agent name fits the box title, at most
-// the tree area's width.
-func (s State) boxWidth(l Layout) int {
-	w := l.Box.W
-	for _, a := range s.Snap.Agents {
-		w = max(w, runeLen(a.Name)+6) // corner, rule and a space on each side
-	}
-	return min(w, l.Tree.W)
-}
-
-// drawAgent draws an agent box: the name in the top border; the model and effort meter, the context bar and the
-// task (full only) inside; the status and, while running, the current activity in the bottom border. A finished
-// agent's box is dim and still.
+// drawAgent draws an agent box: the name in the top border; the model and effort, the context bar and the task
+// inside; the status and, while running, the current activity in the bottom border. A finished agent's box is dim
+// and still.
 func (s State) drawAgent(c *Canvas, r Rect, a session.Agent) {
-	full := r.H >= 5                                        // a compact box is 4 high
 	running := a.Status == session.AgentRunning && !s.Ended // an ended session's agents are stopped
 	role, title, text, phase := ModelRole(a.Model), RoleBold, RoleText, s.Phase
 	if !running {
 		role, title, text, phase = RoleDim, RoleDim, RoleDim, 0
 	}
 	c.titled(r, a.Name, role, title)
-	model := shortModel(a.Model)
-	if !full {
-		model, _, _ = strings.Cut(model, " ")
-	}
-	row := []seg{{model, role}}
+	row := []seg{{shortModel(a.Model), role}}
 	if m := effortMeter(a.Effort); m != "" {
-		row = append(row, seg{" " + m, role})
-		if full {
-			row = append(row, seg{" " + strings.ToLower(a.Effort), RoleDim})
-		}
+		row = append(row, seg{" " + m, role}, seg{" " + strings.ToLower(a.Effort), RoleDim})
 	}
 	c.centerSegs(r, r.Y+1, row...)
 	c.ctxRow(r.X+2, r.Y+2, r.W-4, a.Ctx, phase, role, text)
-	if full {
-		c.center(r, r.Y+3, a.Task, text)
-	}
+	c.center(r, r.Y+3, a.Task, text)
 	y := r.Y + r.H - 1
 	x := c.Text(r.X+2, y, " ", role)
 	x = c.segs(x, y, r.W-6, s.agentStatus(a, role)...)

@@ -48,35 +48,28 @@ func TestAgentBox(t *testing.T) {
 	tests := []struct {
 		name    string
 		agent   session.Agent
-		full    bool
 		ended   bool
 		want    []string // what each row holds, spaces collapsed; "" skips the row
 		without string   // must not appear anywhere in the box
 	}{
-		{"running, full", base, true, false,
+		{"running", base, false,
 			[]string{"╭─ implementer ─", "│ opus 4.1 ▮▮▮▯ high │", "│ ctx", "│ slice 2 of #196 │", "╰─ ◓ 9m00s ▸ Bash go test ─"}, ""},
-		{"unknown effort omits the meter", with(func(a *session.Agent) { a.Effort = "" }), true, false,
+		{"unknown effort omits the meter", with(func(a *session.Agent) { a.Effort = "" }), false,
 			[]string{"", "│ opus 4.1 │"}, "▮"},
-		{"running without a tool", with(func(a *session.Agent) { a.Tool, a.ToolArg = "", "" }), true, false,
+		{"running without a tool", with(func(a *session.Agent) { a.Tool, a.ToolArg = "", "" }), false,
 			[]string{"", "", "", "", "╰─ ◓ running 9m00s ─"}, "▸"},
-		{"done", with(func(a *session.Agent) { a.Status, a.End = session.AgentDone, a.Start.Add(time.Minute) }), true, false,
+		{"done", with(func(a *session.Agent) { a.Status, a.End = session.AgentDone, a.Start.Add(time.Minute) }), false,
 			[]string{"", "", "", "", "╰─ ✓ done 1m00s ─"}, "▸"},
-		{"failed", with(func(a *session.Agent) { a.Status, a.End = session.AgentError, a.Start.Add(time.Minute) }), true, false,
+		{"failed", with(func(a *session.Agent) { a.Status, a.End = session.AgentError, a.Start.Add(time.Minute) }), false,
 			[]string{"", "", "", "", "╰─ ✗ failed 1m00s ─"}, "▸"},
-		{"running in an ended session is stopped", base, true, true,
+		{"running in an ended session is stopped", base, true,
 			[]string{"", "", "", "", "╰─ ■ stopped 9m00s ─"}, "◓"},
-		{"compact has no task and no effort level", base, false, false,
-			[]string{"╭─ implementer ─", "│ opus ▮▮▮▯ │", "│ ctx", "╰─ ◓ 9m00s ▸ Bash go test ─"}, "slice"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := 5
-			if !tt.full {
-				h = 4
-			}
-			c := NewCanvas(30, h, nil)
+			c := NewCanvas(30, 5, nil)
 			s := State{Now: now, Phase: 1, Ended: tt.ended}
-			s.drawAgent(c, Rect{0, 0, 30, h}, tt.agent)
+			s.drawAgent(c, Rect{0, 0, 30, 5}, tt.agent)
 			got := rows(c)
 			for i, w := range tt.want {
 				if w == "" {
@@ -140,7 +133,7 @@ func TestAgentBoxTitleFitsTheName(t *testing.T) {
 		maxBox int
 	}{
 		{"a name wider than the default box widens it", 200, 50, "a-rather-long-agent-name-here", "─ a-rather-long-agent-name-here ─", 200},
-		{"in the compact layout too", 70, 30, "code-reviewer", "─ code-reviewer ─", 70},
+		{"on a narrow terminal too", 60, 46, "code-reviewer", "─ code-reviewer ─", 60},
 		{"a name wider than the row is cut", 90, 46, strings.Repeat(long, 3), "─ " + strings.Repeat("x", 60) + "… ─", 90},
 	}
 	for _, tt := range tests {

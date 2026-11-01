@@ -1,0 +1,24 @@
+ AGENT VIEW · issue-196                                                              live 
+══════════════════════════════════════════════════════════════════════════════════════════
+                               ■ opus   ■ sonnet   ■ haiku                                
+╭─ session ──────────╮                 ╭──────────────────────────────────╮               
+│ issue-196   12m03s │                 │         opus 4.1 · lead          │               
+│ ctx █████▓░░░  61% │                 │        Agent implementer         │               
+│ effort ▮▮▮▯ high   │                 │         ◓ working 12m03s         │               
+│                    │                 ╰──────────────────────────────────╯               
+│ activity     3/min │                                   │                                
+│ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄    │                                   ▼                                
+│                    │                 ╭──────────────────────────────────╮               
+│ ◆ working          │                 │ tools                   calls 48 │               
+│ ┆                  │                 │ Read     ███████▓░░░░░░░░░░  42% │               
+│ ◇ asking           │                 │ Bash     █████▒░░░░░░░░░░░░  29% │               
+│ ┆                  │                 │ Agent    ███▓░░░░░░░░░░░░░░  19% │               
+│ ◇ waiting          │                 ╰──────────────────────────────────╯               
+│                    │                                   │                                
+╰────────────────────╯                  ┌────────────────┴───────────────┐                
+                                                                            lines 1-15/37 
+──┤ session log ├─────────────────────────────────────────────────────────────────────────
+ 14:28:00 implementer   spawned code-reviewer                                             
+ 14:28:30 code-reviewer spawned validator                                                 
+ 14:29:30 validator     failed                                                            
+ opus [1 running]  sonnet [1 running]  haiku [done]  agents [2/4]  tools [48]      ● live 

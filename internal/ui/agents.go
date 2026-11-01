@@ -106,12 +106,19 @@ func (m *Model) closeAgents() {
 	m.agents = nil
 }
 
+// keyAgents closes the agent view on esc, q, A or ctrl+c and hands every other key to it: its scroll keys move the
+// diagram.
 func (m *Model) keyAgents(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k.String() {
 	case "esc", "q", "A", "ctrl+c":
 		m.closeAgents()
+		return m, nil
 	}
-	return m, nil
+	var cmd tea.Cmd
+	if m.agents != nil {
+		m.agents.fv, cmd = m.agents.fv.Update(k)
+	}
+	return m, cmd
 }
 
 // onAgentPoll starts the next read of the open view; a tick of a closed or frozen view starts none.

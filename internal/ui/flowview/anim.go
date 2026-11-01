@@ -252,14 +252,11 @@ func (m Model) frame() State {
 
 // drawPackets draws each packet on its connector: a head with a fading tail behind it, in the sender's color: the
 // parent's on the way down, the agent's on the way up. Packets further along are drawn last, so their heads win
-// where connectors share cells. Packets of agents folded into a "+n more" box, and burst packets not started yet,
-// aren't drawn.
+// where connectors share cells. Packets of agents without a box, and burst packets not started yet, aren't drawn.
 func (s State) drawPackets(c *Canvas, packets []Packet, nodes []Node, paths [][]Point, tools []Point) {
 	node := map[string]int{}
 	for i, n := range nodes {
-		if n.Agent >= 0 {
-			node[s.Snap.Agents[n.Agent].ID] = i
-		}
+		node[s.Snap.Agents[n.Agent].ID] = i
 	}
 	model := map[string]string{"": s.Snap.Lead.Model} // the senders' models by agent id, the lead's by ""
 	for _, a := range s.Snap.Agents {

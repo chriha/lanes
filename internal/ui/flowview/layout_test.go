@@ -155,11 +155,15 @@ func TestNewLayout(t *testing.T) {
 				if l.Box.W < 28 || l.Box.W > 30 {
 					t.Errorf("box width %d, want 28 to 30", l.Box.W)
 				}
-				if l.Tree.X != 0 || l.Tree.W != tt.w || l.Log.W != tt.w {
-					t.Errorf("tree %+v and log %+v do not span the terminal width %d", l.Tree, l.Log, tt.w)
+				if l.Tree.X <= l.Session.X+l.Session.W || l.Tree.X+l.Tree.W != tt.w || l.Log.W != tt.w {
+					t.Errorf("tree %+v does not span right of the session column %+v to the edge, or log %+v not the width %d",
+						l.Tree, l.Session, l.Log, tt.w)
 				}
 				if l.Lead.X < l.Session.X+l.Session.W {
 					t.Errorf("lead %+v overlaps the session column %+v", l.Lead, l.Session)
+				}
+				if l.Session.Y != 3 || l.Session.Y+l.Session.H != l.Log.Y-1 {
+					t.Errorf("session column %+v does not run from below the legend to a row above the log %+v", l.Session, l.Log)
 				}
 			}
 			if l.Tree.H < l.Box.H {
@@ -211,17 +215,17 @@ func TestFullLayoutFillsTheWidth(t *testing.T) {
 		more   int    // agents folded into "+n more"
 	}{
 		{"1 agent at 90", 90, 46, many(1), "[1]", 0},
-		{"5 agents at 90", 90, 46, many(5), "[3 2]", 0},
-		{"7 agents at 90", 90, 46, many(7), "[3 3]", 2},
-		{"12 agents at 90", 90, 46, many(12), "[3 3]", 7},
+		{"5 agents at 90", 90, 46, many(5), "[2 2]", 2},
+		{"7 agents at 90", 90, 46, many(7), "[2 2]", 4},
+		{"12 agents at 90", 90, 46, many(12), "[2 2]", 9},
 		{"depth 3 at 90", 90, 46, depth3, "[2 2 1]", 0},
-		{"a child under a wrapped row at 90", 90, 46, many(7, "x:agent-00"), "[3 3 1]", 2},
+		{"a child under a wrapped row at 90", 90, 46, many(7, "x:agent-00"), "[2 2 1]", 4},
 		{"1 agent at 200", 200, 50, many(1), "[1]", 0},
 		{"5 agents at 200", 200, 50, many(5), "[5]", 0},
-		{"7 agents at 200", 200, 50, many(7), "[6 1]", 0},
-		{"12 agents at 200", 200, 50, many(12), "[6 6]", 0},
+		{"7 agents at 200", 200, 50, many(7), "[5 2]", 0},
+		{"12 agents at 200", 200, 50, many(12), "[5 5]", 3},
 		{"depth 3 at 200", 200, 50, depth3, "[2 2 1]", 0},
-		{"a child under a wrapped row at 200", 200, 50, many(12, "x:agent-00"), "[6 6 1]", 0},
+		{"a child under a wrapped row at 200", 200, 50, many(12, "x:agent-00"), "[5 5 1]", 3},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

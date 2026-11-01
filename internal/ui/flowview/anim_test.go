@@ -415,3 +415,18 @@ func BenchmarkView(b *testing.B) {
 		sink = m.View()
 	}
 }
+
+func TestTokenSplitEases(t *testing.T) {
+	m := liveModel()
+	snap := m.st.Snap
+	snap.Lead.TokensIn, snap.Lead.TokensOut, snap.Lead.TokensCache = 1000, 2000, 4000
+	m.Apply(SnapshotEvent{snap})
+	m.Step(100 * time.Millisecond)
+	if l := m.frame().Snap.Lead; l.TokensIn != 250 || l.TokensOut != 500 || l.TokensCache != 1000 {
+		t.Errorf("after 100ms: in/out/cache %d/%d/%d, want 250/500/1000", l.TokensIn, l.TokensOut, l.TokensCache)
+	}
+	m.Apply(EndEvent{})
+	if l := m.frame().Snap.Lead; l.TokensIn != 1000 || l.TokensOut != 2000 || l.TokensCache != 4000 {
+		t.Errorf("after the end: in/out/cache %d/%d/%d, want the targets", l.TokensIn, l.TokensOut, l.TokensCache)
+	}
+}

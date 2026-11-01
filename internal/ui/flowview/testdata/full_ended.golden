@@ -2,42 +2,42 @@
 ══════════════════════════════════════════════════════════════════════════════════════════
                                ■ opus   ■ sonnet   ■ haiku                                
 ╭─ session ──────────╮                 ╭──────────────────────────────────╮               
-│ ◇ working          │                 │         opus 4.1 · lead          │               
-│ ◇ asking           │                 │        Agent implementer         │               
-│ ◇ waiting          │                 │          ■ ended 12m03s          │               
+│ issue-196   12m03s │                 │         opus 4.1 · lead          │               
+│ ctx █████▓░░░  61% │                 │        Agent implementer         │               
+│ effort ▮▮▮▯ high   │                 │          ■ ended 12m03s          │               
 │                    │                 ╰──────────────────────────────────╯               
-│ last:              │                                   │                                
-│ Slice 2 is next:   │                                   ▼                                
-│ the layered layout │                 ╭──────────────────────────────────╮               
-│ and the static…    │                 │ tools                   calls 48 │               
-│ turns           12 │                 │ Read     ███████▓░░░░░░░░░░  42% │               
-│ tools           48 │                 │ Bash     █████▒░░░░░░░░░░░░  29% │               
-│ tokens        1.2M │                 │ Agent    ███▓░░░░░░░░░░░░░░  19% │               
-╰────────────────────╯                 ╰──────────────────────────────────╯               
-                                                         │                                
-                             ┌───────────────────────────┴──┐                             
-                             ▼                              ▼                             
-               ╭─ implementer ────────────╮   ╭─ triager ────────────────╮                
-               │    opus 4.1 ▮▮▮▯ high    │   │    haiku 4.5 ▮▯▯▯ low    │                
-               │ ctx ██████░░░░░░░░░  42% │   │ ctx █░░░░░░░░░░░░░░   7% │                
-               │     slice 2 of #196      │   │       triage #201        │                
-               ╰─ ■ stopped 9m00s ────────╯   ╰─ ✓ done 1m00s ───────────╯                
-                             │                                                            
-                             └───────────────┐                                            
-                                             ▼                                            
-                               ╭─ code-reviewer ──────────╮                               
-                               │  sonnet 4.5 ▮▮▯▯ medium  │                               
-                               │ ctx ░░░░░░░░░░░░░░░   -- │                               
-                               │     review the diff      │                               
-                               ╰─ ■ stopped 2m00s ────────╯                               
-                                             │                                            
-                                             │                                            
-                                             ▼                                            
-                               ╭─ validator ──────────────╮                               
-                               │        sonnet 4.5        │                               
-                               │ ctx █▓░░░░░░░░░░░░░  12% │                               
-                               │    validate a finding    │                               
-                               ╰─ ✗ failed 1m00s ─────────╯                               
+│ activity     3/min │                                   │                                
+│ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄    │                                   ▼                                
+│                    │                 ╭──────────────────────────────────╮               
+│ ◇ working          │                 │ tools                   calls 48 │               
+│ ┆                  │                 │ Read     ███████▓░░░░░░░░░░  42% │               
+│ ◇ asking           │                 │ Bash     █████▒░░░░░░░░░░░░  29% │               
+│ ┆                  │                 │ Agent    ███▓░░░░░░░░░░░░░░  19% │               
+│ ◇ waiting          │                 ╰──────────────────────────────────╯               
+│                    │                                   │                                
+│ turns           12 │                  ┌────────────────┴───────────────┐                
+│ tools           48 │                  ▼                                ▼                
+│ tokens   1,234,567 │   ╭─ implementer ──────────────╮   ╭─ triager ──────────────────╮  
+│   in        12,345 │   │     opus 4.1 ▮▮▮▯ high     │   │     haiku 4.5 ▮▯▯▯ low     │  
+│   out       98,765 │   │ ctx ███████░░░░░░░░░░  42% │   │ ctx █░░░░░░░░░░░░░░░░   7% │  
+│   cache  1,123,457 │   │      slice 2 of #196       │   │        triage #201         │  
+│ agents    ■0 ✓1 ✗1 │   ╰─ ■ stopped 9m00s ──────────╯   ╰─ ✓ done 1m00s ─────────────╯  
+│                    │                  │                                                 
+│ files              │                  └───────────────┐                                 
+│ render_panels.go   │                                  ▼                                 
+│ state.go           │                   ╭─ code-reviewer ────────────╮                   
+│ layout.go          │                   │   sonnet 4.5 ▮▮▯▯ medium   │                   
+│ README.md          │                   │ ctx ░░░░░░░░░░░░░░░░░   -- │                   
+│                    │                   │      review the diff       │                   
+│ last:              │                   ╰─ ■ stopped 2m00s ──────────╯                   
+│ Slice 2 is next:   │                                  │                                 
+│ the layered layout │                                  │                                 
+│ and the static…    │                                  ▼                                 
+│                    │                   ╭─ validator ────────────────╮                   
+│ advisor   opus 4.1 │                   │         sonnet 4.5         │                   
+│   calls          3 │                   │ ctx ██░░░░░░░░░░░░░░░  12% │                   
+│                    │                   │     validate a finding     │                   
+╰────────────────────╯                   ╰─ ✗ failed 1m00s ───────────╯                   
                                                                                           
 ──┤ session log ├─────────────────────────────────────────────────────────────────────────
  14:28:00 implementer   spawned code-reviewer                                             

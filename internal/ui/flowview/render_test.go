@@ -1,6 +1,7 @@
 package flowview
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -140,7 +141,7 @@ func TestAgentBoxTitleFitsTheName(t *testing.T) {
 	}{
 		{"a name wider than the default box widens it", 200, 50, "a-rather-long-agent-name-here", "─ a-rather-long-agent-name-here ─", 200},
 		{"in the compact layout too", 70, 30, "code-reviewer", "─ code-reviewer ─", 70},
-		{"a name wider than the row is cut", 90, 46, strings.Repeat(long, 3), "─ " + strings.Repeat("x", 83) + "… ─", 90},
+		{"a name wider than the row is cut", 90, 46, strings.Repeat(long, 3), "─ " + strings.Repeat("x", 60) + "… ─", 90},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -242,5 +243,90 @@ func TestStatusLineColorsFamilies(t *testing.T) {
 		if got := c.At(x, l.Status).Role; got != role {
 			t.Errorf("%s drawn in role %d, want %d", fam, got, role)
 		}
+	}
+}
+
+func TestSessionColumn(t *testing.T) {
+	noEffort, noAdvisor, ended, noFiles := fixtureState(), fixtureState(), fixtureState(), fixtureState()
+	noEffort.Snap.Lead.Effort = ""
+	noAdvisor.Snap.Lead.AdvisorModel = ""
+	ended.Ended = true
+	noFiles.Snap.Files = nil
+	tenAgents := fixtureState()
+	for i := 0; i < 8; i++ {
+		tenAgents.Snap.Agents = append(tenAgents.Snap.Agents, session.Agent{ID: fmt.Sprint(i)})
+	}
+	tests := []struct {
+		name    string
+		st      State
+		h       int
+		want    map[int]string // row → what it holds, spaces collapsed
+		without []string       // must not appear anywhere in the column
+	}{
+		{"the whole dashboard", fixtureState(), 37, map[int]string{
+			0:  "╭─ session ─",
+			1:  "│ issue-196 12m03s │",
+			2:  "│ ctx █████▓░░░ 61% │",
+			3:  "│ effort ▮▮▮▯ high │",
+			5:  "│ activity 3/min │",
+			6:  "│ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄ │",
+			8:  "│ ◆ working │",
+			9:  "│ ┆ │",
+			10: "│ ◇ asking │",
+			11: "│ ┆ │",
+			12: "│ ◇ waiting │",
+			14: "│ turns 12 │",
+			15: "│ tools 48 │",
+			16: "│ tokens 1,234,567 │",
+			17: "│ in 12,345 │",
+			18: "│ out 98,765 │",
+			19: "│ cache 1,123,457 │",
+			20: "│ agents ◓2 ✓1 ✗1 │",
+			22: "│ files │",
+			23: "│ render_panels.go │",
+			26: "│ README.md │",
+			28: "│ last: │",
+			29: "│ Slice 2 is next: │",
+			33: "│ advisor opus 4.1 │",
+			34: "│ calls 3 │",
+			36: "╰──",
+		}, nil},
+		{"unknown effort omits its row", noEffort, 37, map[int]string{3: "", 4: "│ activity 3/min │"}, []string{"effort", "▮"}},
+		{"no advisor, no advisor rows", noAdvisor, 37, map[int]string{33: "", 34: ""}, []string{"advisor"}},
+		{"no files, no files rows", noFiles, 37, map[int]string{22: "│ last: │"}, []string{"files"}},
+		{"ended: no checkpoint is active and no agent runs", ended, 37, map[int]string{8: "│ ◇ working │", 20: "│ agents ■0 ✓1 ✗1 │"}, []string{"◆", "◓"}},
+		{"double-digit agent counts fit", tenAgents, 37, map[int]string{20: "│ agents ◓10 ✓1 ✗1 │"}, nil},
+		{"rows past the bottom are left out", fixtureState(), 10, map[int]string{8: "│ ◆ working │", 9: "╰──"}, []string{"asking", "last:"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCanvas(22, tt.h, nil)
+			tt.st.drawSession(c, Rect{0, 0, 22, tt.h})
+			got := rows(c)
+			for i, w := range tt.want {
+				g := strings.Join(strings.Fields(got[i]), " ")
+				if w == "" && strings.Trim(g, "│ ") != "" || w != "" && !strings.Contains(g, w) {
+					t.Errorf("row %d = %q, want it to hold %q", i, got[i], w)
+				}
+			}
+			for _, w := range tt.without {
+				if strings.Contains(c.String(), w) {
+					t.Errorf("column shows %q:\n%s", w, c.String())
+				}
+			}
+		})
+	}
+}
+
+func TestSessionColumnHighlightsTheHookState(t *testing.T) {
+	c := NewCanvas(22, 37, nil)
+	fixtureState().drawSession(c, Rect{0, 0, 22, 37})
+	for x := 1; x < 21; x++ {
+		if got := c.At(x, 8).Role; got != RoleSelected {
+			t.Fatalf("cell %d of the working row has role %d, want the selection", x, got)
+		}
+	}
+	if got := c.At(2, 6).Role; got != RoleOpus {
+		t.Errorf("sparkline drawn in role %d, want the lead's family", got)
 	}
 }

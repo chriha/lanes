@@ -6,6 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/chriha/lanes/internal/session"
 )
 
 var border = lipgloss.RoundedBorder()
@@ -114,29 +116,98 @@ func (s State) drawHeader(c *Canvas, l Layout) {
 	}
 }
 
+// drawSession draws the session column as the lead's dashboard: the session's name and age, the lead's context and
+// effort; the tool calls per minute as a sparkline; the hook states on a timeline; the counters; the files touched
+// last; the lead's last text; and the advisor when there is one. Rows past the column's bottom are left out.
 func (s State) drawSession(c *Canvas, r Rect) {
 	c.titled(r, "session", RoleDim, RoleBold)
-	x, w, y := r.X+2, r.W-4, r.Y+1
-	for i, h := range hookStates {
-		mark, role := '◇', RoleText
-		if h == s.Hook && !s.Ended {
-			mark, role = '◆', RoleSelected
-			c.HLine(r.X+1, r.X+r.W-2, y+i, ' ', role)
-		}
-		c.Set(x, y+i, mark, role)
-		c.Text(x+2, y+i, h, role)
+	x, w := r.X+2, r.W-4
+	lead := s.Snap.Lead
+	role := ModelRole(lead.Model)
+	label := func(name, value string, vr Role) func(y int) {
+		return func(y int) { c.spread(x, y, w, name, value, RoleDim, vr) }
 	}
-	c.Text(x, y+4, "last:", RoleDim)
-	lines := strings.Split(ansi.Wrap(strings.Join(strings.Fields(s.Snap.Lead.LastText), " "), w, ""), "\n")
+	rows := []func(y int){
+		label(s.Title, since(s.Start, s.Now), RoleText),
+		func(y int) { c.ctxRow(x, y, w, lead.Ctx, s.Phase, role, RoleBold) },
+	}
+	if m := effortMeter(lead.Effort); m != "" {
+		rows = append(rows, func(y int) {
+			c.segs(x, y, w, seg{"effort ", RoleDim}, seg{m, role}, seg{" " + strings.ToLower(lead.Effort), RoleText})
+		})
+	}
+	counts := activity(s.Snap.ToolTimes, s.Now)
+	rows = append(rows, nil,
+		label("activity", fmt.Sprintf("%d/min", counts[len(counts)-1]), RoleBold),
+		func(y int) { c.Spark(x, y, counts, role, RoleDim) },
+		nil)
+	for i, h := range hookStates {
+		if i > 0 {
+			rows = append(rows, func(y int) { c.Set(x, y, '┆', RoleDim) })
+		}
+		rows = append(rows, func(y int) {
+			mark, mr := '◇', RoleText
+			if h == s.Hook && !s.Ended {
+				mark, mr = '◆', RoleSelected
+				c.HLine(r.X+1, r.X+r.W-2, y, ' ', mr)
+			}
+			c.Set(x, y, mark, mr)
+			c.Text(x+2, y, h, mr)
+		})
+	}
+	done, failed := 0, 0
+	for _, a := range s.Snap.Agents {
+		switch a.Status {
+		case session.AgentDone:
+			done++
+		case session.AgentError:
+			failed++
+		}
+	}
+	mark := s.spin()
+	if s.Ended {
+		mark = '■'
+	}
+	agents := []seg{
+		{fmt.Sprintf("%c%d", mark, s.running()), role},
+		{fmt.Sprintf(" ✓%d", done), RoleOK},
+		{fmt.Sprintf(" ✗%d", failed), RoleBad},
+	}
+	rows = append(rows, nil,
+		label("turns", fmtThousands(lead.Turns), RoleBold),
+		label("tools", fmtThousands(lead.Calls), RoleBold),
+		label("tokens", fmtThousands(lead.Tokens), RoleBold),
+		label("  in", fmtThousands(lead.TokensIn), RoleText),
+		label("  out", fmtThousands(lead.TokensOut), RoleText),
+		label("  cache", fmtThousands(lead.TokensCache), RoleText),
+		func(y int) {
+			c.Text(x, y, "agents", RoleDim)
+			n := min(segsLen(agents), w-7)
+			c.segs(x+w-n, y, n, agents...)
+		})
+	if len(s.Snap.Files) > 0 {
+		rows = append(rows, nil, func(y int) { c.Text(x, y, "files", RoleDim) })
+		for _, f := range s.Snap.Files {
+			rows = append(rows, func(y int) { c.textIn(x, y, w, f, RoleText) })
+		}
+	}
+	rows = append(rows, nil, func(y int) { c.Text(x, y, "last:", RoleDim) })
+	lines := strings.Split(ansi.Wrap(strings.Join(strings.Fields(lead.LastText), " "), w, ""), "\n")
 	if len(lines) > 3 {
 		lines[2] += "…"
 	}
-	for i := 0; i < min(len(lines), 3); i++ {
-		c.textIn(x, y+5+i, w, lines[i], RoleText)
+	for _, ln := range lines[:min(len(lines), 3)] {
+		rows = append(rows, func(y int) { c.textIn(x, y, w, ln, RoleText) })
 	}
-	lead := s.Snap.Lead
-	for i, kv := range [][2]string{{"turns", fmt.Sprint(lead.Turns)}, {"tools", fmt.Sprint(lead.Calls)}, {"tokens", fmtCount(lead.Tokens)}} {
-		c.spread(x, y+8+i, w, kv[0], kv[1], RoleDim, RoleBold)
+	if lead.AdvisorModel != "" {
+		rows = append(rows, nil,
+			label("advisor", shortModel(lead.AdvisorModel), ModelRole(lead.AdvisorModel)),
+			label("  calls", fmtThousands(lead.AdvisorCalls), RoleBold))
+	}
+	for i, draw := range rows[:min(len(rows), r.H-2)] {
+		if draw != nil {
+			draw(r.Y + 1 + i)
+		}
 	}
 }
 

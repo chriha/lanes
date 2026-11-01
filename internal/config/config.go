@@ -369,6 +369,9 @@ func Load() (*Config, error) {
 		if a.Jump && a.Type == "run" {
 			return nil, fmt.Errorf("%s: action %q: jump needs type session", p, name)
 		}
+		if a.Resume != "" && a.Type == "run" {
+			return nil, fmt.Errorf("%s: action %q: resume needs type session", p, name)
+		}
 		for _, o := range []struct{ field, text string }{{"run", a.Run}, {"cwd", a.Cwd}} {
 			if usesField(o.text, ClaudeSessionField) {
 				return nil, fmt.Errorf("%s: action %q: {{.%s}} is only defined in resume, not in %s", p, name, ClaudeSessionField, o.field)

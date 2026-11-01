@@ -289,6 +289,8 @@ func TestActionResumeValidation(t *testing.T) {
 		{"resume uses claude_session", `resume = 'claude --resume {{.claude_session}}'`, "echo work", "", "claude --resume {{.claude_session}}"},
 		{"resume without claude_session", `resume = 'claude --continue'`, "echo work", "", "claude --continue"},
 		{"no resume", "", "echo work", "", ""},
+		{"resume on a run action", "type = 'run'\nresume = 'claude --continue'", "echo work", "resume needs type session", ""},
+		{"resume on a session action", "type = 'session'\nresume = 'claude --continue'", "echo work", "", "claude --continue"},
 		{"run uses claude_session", "", "claude --resume {{.claude_session}}", "not in run", ""},
 		{"run uses it through $", "", "claude --resume {{$.claude_session}}", "not in run", ""},
 		{"run pipes it", "", "claude --resume {{.claude_session | raw}}", "not in run", ""},
@@ -319,8 +321,8 @@ run = '`+tt.run+`'
 `)
 			c, err := Load()
 			if tt.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), `action "work"`) || !strings.Contains(err.Error(), "claude_session") || !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("err = %v, want one naming action \"work\", claude_session and %q", err, tt.wantErr)
+				if err == nil || !strings.Contains(err.Error(), `action "work"`) || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want one naming action \"work\" and %q", err, tt.wantErr)
 				}
 				return
 			}

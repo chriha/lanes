@@ -20,6 +20,12 @@ func hookStatePath(name string) string {
 	return filepath.Join(os.Getenv("LANES_STATE_DIR"), "sessions", name+".json")
 }
 
+// ClaudeSession returns the id of the newest Claude session the hooks saw in the session, or "".
+func ClaudeSession(name string) string { return "" }
+
+// ForgetClaude removes the Claude session ids the hooks recorded for the session.
+func ForgetClaude(name string) {}
+
 func readState(name string) string {
 	b, err := os.ReadFile(statePath(name))
 	if err != nil {

@@ -693,23 +693,41 @@ selected session. `esc`, `q` or `A` go back. It needs the [hooks](#claude-code-i
 (`--settings {{.settings}}`): they record where Claude keeps the session's transcript. Without them, or before
 Claude has started, the footer says `no Claude session for this item`.
 
-The view shows, top to bottom:
+The view is a dashboard across the whole terminal. It shows, top to bottom:
 
-- **session** (left column) — the hook state (`◆ working`, `◇ asking`, `◇ waiting`; the active one highlighted),
-  `last:` the lead's newest text, and counters for `turns`, `tools` (tool calls) and `tokens` (input + cache
-  write + output).
+- **session** (left column, full height) — the lead's dashboard:
+  - the item's name and how long the session has run, the lead's `ctx` bar with its % and its `effort` meter;
+  - `activity` — tool calls of the lead and its agents per minute over the last 15 minutes, as a sparkline
+    (`▁▂▃▄▅▆▇█`, one cell per minute);
+  - the hook state on a dashed `┆` timeline (`◆ working`, `◇ asking`, `◇ waiting`; the active one highlighted);
+  - counters for `turns`, `tools` (tool calls), `tokens` (input + cache write + output), split into `in`, `out`
+    and `cache` (read + write), and `agents` running `◓`, done `✓` and failed `✗`;
+  - `files` — the last 4 files that Edit, Write or NotebookEdit touched, newest first;
+  - `last:` — the lead's newest text, typed out;
+  - `advisor` — the advisor model and its `calls`, when the session uses one.
 - **lead** — the main Claude: its model, current tool and argument, state and elapsed time.
 - **tools** — the lead's three most used tools, with their share of all its calls.
 - **agents** — the subagents as a layered tree, one row per spawn depth, each connected to the agent that
-  spawned it (or to the lead). Each box shows the agent's name, model, `ctx` %, task and status: a spinner with
-  elapsed time and current tool while running, `✓` with its duration when done, `✗` when it failed. Finished
-  agents are dimmed; a row with more agents than fit ends in a `+n more` box. Packets run down a connector when
-  an agent is spawned and back up when it finishes.
-- **session log** — spawns, finishes and failures, with their time.
-- **status line** — lead state and how many agents are running.
+  spawned it (or to the lead). Each box has the agent's full name in its top border, then its model and `effort`
+  meter, a `ctx` bar with its %, and its task; the bottom border shows the status: a spinner with elapsed time and
+  `▸ <tool> <argument>` while running, `✓ done` with its duration, `✗` when it failed. The border takes the
+  model family's color; finished agents are dimmed. As many boxes as fit go side by side; a depth that doesn't fit
+  one line wraps into a second, and what still doesn't fit ends in a `+n more` box.
+- **session log** — spawns, finishes and failures, with their time. The name column fits names of up to 20
+  characters.
+- **status line** — one entry per model family in its color, e.g. `opus [2 running]`, `sonnet [1 failed]`,
+  `haiku [done]`; then `agents [running/total]`, `tools [n]`, `tokens [n]` and `● live` or `■ ended`.
 
 Colors follow the model family: opus purple, sonnet orange, haiku blue (your [theme](#theme)'s `accent`, `warn`
-and `info`).
+and `info`). Labels are dim and values bright; numbers have thousands separators.
+
+**Effort** is the newest `effort` in the lead's or the agent's transcript, shown as a 4-cell meter: `low ▮▯▯▯`,
+`medium ▮▮▯▯`, `high ▮▮▮▯`, `xhigh` / `max ▮▮▮▮`. When a transcript has none, the meter is left out.
+
+**Packets.** Connectors show where work happens. While an agent runs, packets in its parent's color stream down
+its connector, about one every 1.2 seconds (each connector at its own pace). When it finishes or fails, a burst
+of 3 packets runs back up, then the connector goes quiet and dim. While the lead is `working`, packets stream from
+it to the tool layer.
 
 **Where the data comes from.** The hooks note where Claude writes the session's
 transcript (`<session>.jsonl` under Claude's config dir). While the view is open, `lanes` reads what was added to it every
@@ -724,11 +742,13 @@ model's context window: 1,000,000 for model ids ending in `[1m]`, otherwise 200,
 1M window).
 
 **Ended sessions.** When Claude exits or the session finishes, the view reads the transcripts once more and
-freezes on that final state; the header says `ended` instead of `live`.
+freezes on that final state; the header says `ended` instead of `live`. Nothing moves, no packets run, and no
+agent counts as running: agents that hadn't finished show as `stopped` in the status line.
 
-**Size.** The full diagram needs 90×46 (larger terminals center it). From 60×24 a compact layout drops the session
-column and the tool panel (their numbers move to the status line) and uses smaller agent boxes. Below that the
-view only says `resize to ≥ 60×24`.
+**Size.** The full dashboard needs 90×46 and uses the whole terminal width: the wider the terminal, the more
+agent boxes (28–30 columns each, wider when a name needs it) fit side by side, e.g. 5 at 200 columns. From 60×24
+a compact layout drops the session column and the tool panel (their numbers move to the status line) and uses
+smaller agent boxes without the task. Below that the view only says `resize to ≥ 60×24`.
 
 ### Notifications
 

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"text/template/parse"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -167,9 +168,62 @@ func (a *Action) CompileWhen() error {
 // ClaudeSessionField is the template field holding the Claude session id to resume; only resume templates define it.
 const ClaudeSessionField = "claude_session"
 
-// usesField reports whether template text refers to the top-level field name ({{.name}}, {{$.name}}).
+// usesField reports whether template text refers to the top-level field name ({{.name}}, {{$.name}}). Inside
+// with/range the dot is rebound, but a field of that name is still taken as a use. Text that does not parse reports
+// false: doctor and running the action report the parse error with the template functions the UI defines.
 func usesField(text, name string) bool {
+	tree := parse.New("")
+	tree.Mode = parse.SkipFuncCheck
+	if _, err := tree.Parse(text, "", "", map[string]*parse.Tree{}); err != nil || tree.Root == nil {
+		return false
+	}
+	return nodeUsesField(tree.Root, name)
+}
+
+func nodeUsesField(n parse.Node, name string) bool {
+	switch n := n.(type) {
+	case *parse.FieldNode:
+		return len(n.Ident) > 0 && n.Ident[0] == name
+	case *parse.VariableNode:
+		return len(n.Ident) > 1 && n.Ident[0] == "$" && n.Ident[1] == name
+	case *parse.ChainNode:
+		return nodeUsesField(n.Node, name)
+	case *parse.ListNode:
+		for _, c := range n.Nodes {
+			if nodeUsesField(c, name) {
+				return true
+			}
+		}
+	case *parse.ActionNode:
+		return nodeUsesField(n.Pipe, name)
+	case *parse.PipeNode:
+		for _, c := range n.Cmds {
+			if nodeUsesField(c, name) {
+				return true
+			}
+		}
+	case *parse.CommandNode:
+		for _, a := range n.Args {
+			if nodeUsesField(a, name) {
+				return true
+			}
+		}
+	case *parse.IfNode:
+		return branchUsesField(&n.BranchNode, name)
+	case *parse.RangeNode:
+		return branchUsesField(&n.BranchNode, name)
+	case *parse.WithNode:
+		return branchUsesField(&n.BranchNode, name)
+	case *parse.TemplateNode:
+		return n.Pipe != nil && nodeUsesField(n.Pipe, name)
+	}
 	return false
+}
+
+func branchUsesField(b *parse.BranchNode, name string) bool {
+	return nodeUsesField(b.Pipe, name) ||
+		(b.List != nil && nodeUsesField(b.List, name)) ||
+		(b.ElseList != nil && nodeUsesField(b.ElseList, name))
 }
 
 // ShellAction is the name of the built-in shell session (key t); config actions cannot use it.
@@ -315,9 +369,9 @@ func Load() (*Config, error) {
 		if a.Jump && a.Type == "run" {
 			return nil, fmt.Errorf("%s: action %q: jump needs type session", p, name)
 		}
-		for field, text := range map[string]string{"run": a.Run, "cwd": a.Cwd} {
-			if usesField(text, ClaudeSessionField) {
-				return nil, fmt.Errorf("%s: action %q: {{.%s}} is only defined in resume, not in %s", p, name, ClaudeSessionField, field)
+		for _, o := range []struct{ field, text string }{{"run", a.Run}, {"cwd", a.Cwd}} {
+			if usesField(o.text, ClaudeSessionField) {
+				return nil, fmt.Errorf("%s: action %q: {{.%s}} is only defined in resume, not in %s", p, name, ClaudeSessionField, o.field)
 			}
 		}
 		if err := a.CompileWhen(); err != nil {

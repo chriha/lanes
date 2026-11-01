@@ -278,6 +278,62 @@ run = "echo work"
 	}
 }
 
+func TestActionResumeValidation(t *testing.T) {
+	tests := []struct {
+		name       string
+		action     string // TOML lines for the action, after its run line
+		run        string
+		wantErr    string // substring of the error naming the offending option; "" = loads
+		wantResume string
+	}{
+		{"resume uses claude_session", `resume = 'claude --resume {{.claude_session}}'`, "echo work", "", "claude --resume {{.claude_session}}"},
+		{"resume without claude_session", `resume = 'claude --continue'`, "echo work", "", "claude --continue"},
+		{"no resume", "", "echo work", "", ""},
+		{"run uses claude_session", "", "claude --resume {{.claude_session}}", "not in run", ""},
+		{"run uses it through $", "", "claude --resume {{$.claude_session}}", "not in run", ""},
+		{"run pipes it", "", "claude --resume {{.claude_session | raw}}", "not in run", ""},
+		{"run uses it inside if", "", "claude {{if .claude_session}}--resume {{.claude_session}}{{end}}", "not in run", ""},
+		{"cwd uses claude_session", "cwd = '/tmp/{{.claude_session}}'", "echo work", "not in cwd", ""},
+		{"run uses a var of that name", "", "echo {{.vars.claude_session}}", "", ""},
+		{"run mentions it as text", "", "echo claude_session", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+			t.Setenv("HOME", tmp)
+			old, _ := os.Getwd()
+			defer os.Chdir(old)
+			if err := os.Chdir(tmp); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[action.work]
+run = '`+tt.run+`'
+`+tt.action+`
+`)
+			c, err := Load()
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), `action "work"`) || !strings.Contains(err.Error(), "claude_session") || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want one naming action \"work\", claude_session and %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("err = %v, want none", err)
+			}
+			if got := c.Action["work"].Resume; got != tt.wantResume {
+				t.Errorf("Resume = %q, want %q", got, tt.wantResume)
+			}
+		})
+	}
+}
+
 func TestReservedShellAction(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))

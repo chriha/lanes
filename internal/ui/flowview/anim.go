@@ -15,14 +15,23 @@ const (
 	easeTime   = 400 * time.Millisecond // a counter covers a step's share dt/easeTime of the gap to its target
 	typeRate   = 40.0                   // runes per second the typewriter types
 	maxLog     = 100                    // session log lines kept
+
+	streamEvery = 1200 * time.Millisecond // a running edge sends a packet about this often, jittered per edge
+	streamJit   = 400 * time.Millisecond  // the spread of the per-edge interval around streamEvery
+	maxInFlight = 3                       // packets one edge streams at once; more are dropped
+	burstSize   = 3                       // packets a finished or failed agent sends up its edge
+	burstGap    = 0.2                     // the share of a trip between two packets of a burst
 )
 
-// Packet is a dot travelling along an agent's connector: down from the parent when the agent spawns, up to the
-// parent when it finishes.
+// toolEdge is the Agent of packets on the lead's connector to the tool layer. Agent ids are never empty.
+const toolEdge = ""
+
+// Packet is a dot travelling along a connector: down from the parent while the agent runs, up to the parent in a
+// burst when it finishes or fails. Packets on the toolEdge run from the lead to the tool layer while it works.
 type Packet struct {
-	Agent string  // the agent whose connector it travels
-	Up    bool    // child to parent (finish) instead of parent to child (spawn)
-	Pos   float64 // progress along the connector, 0..1
+	Agent string  // the agent whose connector it travels, or toolEdge
+	Up    bool    // child to parent (finish) instead of parent to child
+	Pos   float64 // progress along the connector, 0..1; a burst's later packets start below 0 and show from 0
 }
 
 // Step advances the animation by dt: the clock, packets, counters, the typewriter, the spinner and the shimmer.

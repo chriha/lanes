@@ -94,7 +94,11 @@ func TestUpdateNoticeKeepsExistingNotice(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m, _ := newUpdateModel(t, "v1.0.0", latest("v1.1.0"), false, true)
 			m.say(tt.level, "config: boom")
-			m.Update(m.updateCheck()())
+			cmd := m.updateCheck()
+			if cmd == nil {
+				t.Fatal("updateCheck = nil, want a check")
+			}
+			m.Update(cmd())
 			if m.notice != "config: boom" || m.level != tt.level {
 				t.Errorf("notice = %q (level %v), want the earlier %q (level %v)", m.notice, m.level, "config: boom", tt.level)
 			}

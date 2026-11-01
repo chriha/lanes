@@ -50,24 +50,65 @@ func (m *Model) SetSize(w, h int) {
 	m.layout = NewLayout(w, h)
 }
 
-// Init starts the animation tick; call it once, when the view opens.
-func (m Model) Init() tea.Cmd { return nil }
+// Init starts the animation tick; call it once, when the view opens. Nil when paused or the session ended.
+func (m Model) Init() tea.Cmd {
+	if m.paused || m.st.Ended {
+		return nil
+	}
+	return m.tick()
+}
 
-// Update steps the animation on its own ticks and applies events; other messages are ignored.
-func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) { return m, nil }
+func (m Model) tick() tea.Cmd {
+	id, gen := m.id, m.gen
+	return tea.Tick(tickEvery, func(t time.Time) tea.Msg { return tickMsg{id: id, gen: gen, t: t} })
+}
+
+// Update steps the animation on its own ticks and applies events; other messages are ignored. The tick is not
+// re-armed while paused or once the session ended, so a hidden or frozen view costs nothing.
+func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tickMsg:
+		if msg.id != m.id || msg.gen != m.gen || m.paused || m.st.Ended {
+			return m, nil
+		}
+		dt := tickEvery
+		if !m.last.IsZero() {
+			dt = min(max(msg.t.Sub(m.last), 0), maxStep)
+		}
+		m.last = msg.t
+		m.Step(dt)
+		return m, m.tick()
+	case Event:
+		m.Apply(msg)
+	}
+	return m, nil
+}
 
 // Pause stops the animation tick, for a hidden view.
-func (m *Model) Pause() {}
+func (m *Model) Pause() { m.paused = true }
 
-// Resume restarts the animation tick of a paused view; nil when the session ended.
-func (m *Model) Resume() tea.Cmd { return nil }
+// Resume restarts the animation tick of a paused view, replacing a tick still in flight; nil when the session
+// ended.
+func (m *Model) Resume() tea.Cmd {
+	m.paused = false
+	m.gen++
+	m.last = time.Time{}
+	if m.st.Ended {
+		return nil
+	}
+	return m.tick()
+}
 
-// SetState sets what the view shows.
-func (m *Model) SetState(st State) { m.st = st }
+// SetState sets what the view shows, without animating toward it: later snapshots animate from here.
+func (m *Model) SetState(st State) {
+	m.st = st
+	m.track(st.Snap.Agents)
+	m.settle()
+}
 
 // View draws the frame: the whole diagram, the compact layout or a resize hint, by size.
 func (m Model) View() string {
-	c, l, s := m.canvas, m.layout, m.st
+	c, l, s := m.canvas, m.layout, m.frame()
 	c.Clear()
 	if l.Mode == ModeTooSmall {
 		hint := "resize to ≥ 60×24"
@@ -80,7 +121,8 @@ func (m Model) View() string {
 		s.drawTools(c, l.Tools)
 	}
 	s.drawLead(c, l.Lead)
-	s.drawTree(c, l)
+	nodes, paths := s.drawTree(c, l)
+	s.drawPackets(c, m.packets, nodes, paths)
 	s.drawLog(c, l.Log)
 	s.drawStatus(c, l)
 	return c.String()

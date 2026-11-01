@@ -21,14 +21,16 @@ func treePaths(nodes []Node, root Rect) [][]Point {
 	return paths
 }
 
-func (s State) drawTree(c *Canvas, l Layout) {
+// drawTree draws the agent boxes and their connectors and returns the boxes and each one's connector.
+func (s State) drawTree(c *Canvas, l Layout) ([]Node, [][]Point) {
 	root := l.Lead
 	if l.Mode == ModeFull {
 		root = l.Tools
 		c.drawPaths([][]Point{elbow(Point{l.Lead.X + l.Lead.W/2, l.Lead.Y + l.Lead.H}, Point{l.Tools.X + l.Tools.W/2, l.Tools.Y - 1})}, RoleDim)
 	}
 	nodes := layoutTree(s.Snap.Agents, l.Tree, l.Box)
-	c.drawPaths(treePaths(nodes, root), RoleDim)
+	paths := treePaths(nodes, root)
+	c.drawPaths(paths, RoleDim)
 	for _, n := range nodes {
 		if n.Agent < 0 {
 			c.Box(n.Rect, border, RoleDim)
@@ -37,6 +39,7 @@ func (s State) drawTree(c *Canvas, l Layout) {
 		}
 		s.drawAgent(c, n.Rect, s.Snap.Agents[n.Agent], l.Mode == ModeFull)
 	}
+	return nodes, paths
 }
 
 // drawAgent draws an agent box: name in the border, model and ctx %, the task (full only) and the status.

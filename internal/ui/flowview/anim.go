@@ -15,14 +15,23 @@ const (
 	easeTime   = 400 * time.Millisecond // a counter covers a step's share dt/easeTime of the gap to its target
 	typeRate   = 40.0                   // runes per second the typewriter types
 	maxLog     = 100                    // session log lines kept
+
+	streamEvery = 1200 * time.Millisecond // a running edge sends a packet about this often, jittered per edge
+	streamJit   = 400 * time.Millisecond  // the spread of the per-edge interval around streamEvery
+	maxInFlight = 3                       // packets one edge streams at once; more are dropped
+	burstSize   = 3                       // packets a finished or failed agent sends up its edge
+	burstGap    = 0.2                     // the share of a trip between two packets of a burst
 )
 
-// Packet is a dot travelling along an agent's connector: down from the parent when the agent spawns, up to the
-// parent when it finishes.
+// toolEdge is the Agent of packets on the lead's connector to the tool layer. Agent ids are never empty.
+const toolEdge = ""
+
+// Packet is a dot travelling along a connector: down from the parent while the agent runs, up to the parent in a
+// burst when it finishes or fails. Packets on the toolEdge run from the lead to the tool layer while it works.
 type Packet struct {
-	Agent string  // the agent whose connector it travels
-	Up    bool    // child to parent (finish) instead of parent to child (spawn)
-	Pos   float64 // progress along the connector, 0..1
+	Agent string  // the agent whose connector it travels, or toolEdge
+	Up    bool    // child to parent (finish) instead of parent to child
+	Pos   float64 // progress along the connector, 0..1; a burst's later packets start below 0 and show from 0
 }
 
 // Step advances the animation by dt: the clock, packets, counters, the typewriter, the spinner and the shimmer.
@@ -44,6 +53,7 @@ func (m *Model) Step(dt time.Duration) {
 		}
 	}
 	m.packets = kept
+	m.stream(dt)
 	lead := m.st.Snap.Lead
 	m.turns = ease(m.turns, lead.Turns, dt)
 	m.calls = ease(m.calls, lead.Calls, dt)
@@ -52,6 +62,69 @@ func (m *Model) Step(dt time.Duration) {
 	m.tokOut = ease(m.tokOut, lead.TokensOut, dt)
 	m.tokCache = ease(m.tokCache, lead.TokensCache, dt)
 	m.typed = min(m.typed+typeRate*dt.Seconds(), float64(len([]rune(lead.LastText))))
+}
+
+// stream sends the packets due after dt on the streaming edges: the lead's to the tool layer while it works and
+// each running agent's from its parent. An edge that starts streaming sends its first packet after its jitter, so
+// edges don't move in lockstep; a packet due while the edge has maxInFlight on their way is dropped.
+func (m *Model) stream(dt time.Duration) {
+	ids := make([]string, 0, len(m.st.Snap.Agents)+1)
+	if m.st.Hook == "working" {
+		ids = append(ids, toolEdge)
+	}
+	for _, a := range m.st.Snap.Agents {
+		if a.Status == session.AgentRunning {
+			ids = append(ids, a.ID)
+		}
+	}
+	due := make(map[string]time.Duration, len(ids))
+	for _, id := range ids {
+		next, ok := m.due[id]
+		if !ok {
+			next = jitter(id) % every(id)
+		}
+		for next -= dt; next <= 0; next += every(id) {
+			if m.inFlight(id) < maxInFlight {
+				m.packets = append(m.packets, Packet{Agent: id, Pos: float64(-next) / float64(packetTime)})
+			}
+		}
+		due[id] = next
+	}
+	m.due = due
+}
+
+// jitter is a fixed pseudo-random duration of up to streamJit per edge.
+func jitter(id string) time.Duration {
+	h := uint32(2166136261) // FNV-1a
+	for i := 0; i < len(id); i++ {
+		h = (h ^ uint32(id[i])) * 16777619
+	}
+	return time.Duration(h%uint32(streamJit/time.Millisecond)) * time.Millisecond
+}
+
+// every is the edge's interval between two packets: streamEvery, jittered by up to half of streamJit.
+func every(id string) time.Duration { return streamEvery - streamJit/2 + jitter(id) }
+
+// drop removes the packets on their way down the edge.
+func (m *Model) drop(id string) {
+	var kept []Packet
+	for _, p := range m.packets {
+		if p.Agent != id || p.Up {
+			kept = append(kept, p)
+		}
+	}
+	m.packets = kept
+}
+
+// inFlight counts the packets on their way down the edge.
+func (m *Model) inFlight(id string) int {
+	n := 0
+	for _, p := range m.packets {
+		if p.Agent == id && !p.Up {
+			n++
+		}
+	}
+	return n
 }
 
 // ease moves cur toward target by the share dt/easeTime of the gap, at least 1, never past target.
@@ -72,8 +145,8 @@ func ease(cur, target int, dt time.Duration) int {
 	return cur + step
 }
 
-// Apply takes an event into the view's state: a snapshot sends packets and log lines for agents that spawned or
-// finished since the last one, a hook event moves the checkpoint, the end event freezes the view.
+// Apply takes an event into the view's state: a snapshot sends a packet down for agents that spawned, a burst up
+// for those that finished, and log lines for both since the last one, a hook event moves the checkpoint, the end event freezes the view.
 func (m *Model) Apply(ev Event) {
 	switch ev := ev.(type) {
 	case SnapshotEvent:
@@ -111,6 +184,10 @@ func (m *Model) applySnapshot(snap session.Snapshot) {
 			lines = append(lines, LogLine{At: m.at(a.Start), Actor: actor, Model: model, Text: "spawned " + a.Name})
 			if m.primed && a.Status == session.AgentRunning {
 				m.packets = append(m.packets, Packet{Agent: a.ID})
+				if m.due == nil {
+					m.due = map[string]time.Duration{}
+				}
+				m.due[a.ID] = every(a.ID)
 			}
 		}
 		if a.Status == session.AgentRunning || seen && prev != session.AgentRunning {
@@ -122,7 +199,10 @@ func (m *Model) applySnapshot(snap session.Snapshot) {
 		}
 		lines = append(lines, LogLine{At: m.at(a.End), Actor: a.Name, Model: a.Model, Text: text})
 		if m.primed {
-			m.packets = append(m.packets, Packet{Agent: a.ID, Up: true})
+			m.drop(a.ID) // the burst replaces the stream: at most burstSize packets on the edge
+			for i := 0; i < burstSize; i++ {
+				m.packets = append(m.packets, Packet{Agent: a.ID, Up: true, Pos: -burstGap * float64(i)})
+			}
 		}
 	}
 	sort.SliceStable(lines, func(i, j int) bool { return lines[i].At.Before(lines[j].At) })
@@ -148,13 +228,13 @@ func (m *Model) track(agents []session.Agent) {
 	m.primed = true
 }
 
-// settle ends the animation: counters and the typewriter at their targets, no packets.
+// settle ends the animation: counters and the typewriter at their targets, no packets and no streams.
 func (m *Model) settle() {
 	lead := m.st.Snap.Lead
 	m.turns, m.calls, m.tokens = lead.Turns, lead.Calls, lead.Tokens
 	m.tokIn, m.tokOut, m.tokCache = lead.TokensIn, lead.TokensOut, lead.TokensCache
 	m.typed = float64(len([]rune(lead.LastText)))
-	m.packets = nil
+	m.packets, m.due = nil, nil
 }
 
 // Packets returns the packets on their way.
@@ -170,21 +250,49 @@ func (m Model) frame() State {
 	return f
 }
 
-// drawPackets draws each packet on its agent's connector: a head with a fading tail behind it. Packets of agents
-// folded into a "+n more" box aren't drawn.
-func (s State) drawPackets(c *Canvas, packets []Packet, nodes []Node, paths [][]Point) {
+// drawPackets draws each packet on its connector: a head with a fading tail behind it, in the sender's color: the
+// parent's on the way down, the agent's on the way up. Packets further along are drawn last, so their heads win
+// where connectors share cells. Packets of agents folded into a "+n more" box, and burst packets not started yet,
+// aren't drawn.
+func (s State) drawPackets(c *Canvas, packets []Packet, nodes []Node, paths [][]Point, tools []Point) {
 	node := map[string]int{}
 	for i, n := range nodes {
 		if n.Agent >= 0 {
 			node[s.Snap.Agents[n.Agent].ID] = i
 		}
 	}
+	model := map[string]string{"": s.Snap.Lead.Model} // the senders' models by agent id, the lead's by ""
+	for _, a := range s.Snap.Agents {
+		model[a.ID] = a.Model
+	}
+	order := make([]Packet, 0, len(packets))
 	for _, p := range packets {
-		i, ok := node[p.Agent]
-		if !ok || len(paths[i]) == 0 {
+		if p.Pos >= 0 {
+			order = append(order, p)
+		}
+	}
+	sort.SliceStable(order, func(i, j int) bool { return order[i].Pos < order[j].Pos })
+	for _, p := range order {
+		var path []Point
+		var role Role
+		if p.Agent == toolEdge {
+			path, role = tools, ModelRole(s.Snap.Lead.Model)
+		} else {
+			i, ok := node[p.Agent]
+			if !ok {
+				continue
+			}
+			a := s.Snap.Agents[nodes[i].Agent]
+			path, role = paths[i], ModelRole(a.Model)
+			if pm, ok := model[a.Parent]; !p.Up && ok {
+				role = ModelRole(pm)
+			} else if !p.Up {
+				role = ModelRole(s.Snap.Lead.Model) // an unknown parent is the lead
+			}
+		}
+		if len(path) == 0 {
 			continue
 		}
-		path, role := paths[i], ModelRole(s.Snap.Agents[nodes[i].Agent].Model)
 		k := int(p.Pos * float64(len(path)-1))
 		for back, r := range []rune{'·', '•', '●'} { // tail first, so the head wins
 			j := k - (2 - back)

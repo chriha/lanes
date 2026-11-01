@@ -1,6 +1,7 @@
 package flowview
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -39,14 +40,15 @@ func TestSnapshotSendsPackets(t *testing.T) {
 		snap.Agents[0].Status, snap.Agents[0].End = s, t0.Add(time.Minute)
 		return snap
 	}
+	burst := []Packet{{Agent: "a1", Up: true}, {Agent: "a1", Up: true, Pos: -burstGap}, {Agent: "a1", Up: true, Pos: -2 * burstGap}}
 	tests := []struct {
 		name string
 		snap session.Snapshot
 		want []Packet
 	}{
-		{"a spawned agent gets a packet down", withAgents(liveModel(), child), []Packet{{Agent: "a2"}}},
-		{"a finished agent gets a packet up", done(session.AgentDone), []Packet{{Agent: "a1", Up: true}}},
-		{"a failed agent gets a packet up", done(session.AgentError), []Packet{{Agent: "a1", Up: true}}},
+		{"a spawned agent gets a packet down at once", withAgents(liveModel(), child), []Packet{{Agent: "a2"}}},
+		{"a finished agent bursts up", done(session.AgentDone), burst},
+		{"a failed agent bursts up", done(session.AgentError), burst},
 		{"an unchanged agent gets none", liveModel().st.Snap, nil},
 	}
 	for _, tt := range tests {
@@ -58,7 +60,7 @@ func TestSnapshotSendsPackets(t *testing.T) {
 				t.Fatalf("packets = %v, want %v", got, tt.want)
 			}
 			for i := range got {
-				if got[i] != tt.want[i] {
+				if got[i].Agent != tt.want[i].Agent || got[i].Up != tt.want[i].Up || !near(got[i].Pos, tt.want[i].Pos) {
 					t.Errorf("packet %d = %+v, want %+v", i, got[i], tt.want[i])
 				}
 			}
@@ -66,8 +68,180 @@ func TestSnapshotSendsPackets(t *testing.T) {
 	}
 }
 
+func near(a, b float64) bool { return a-b < 1e-9 && b-a < 1e-9 }
+
+// edgeTally is what one edge's packets did over a run of fixed steps.
+type edgeTally struct {
+	down, up  int // packets sent down and up during the run
+	most      int // most packets on the edge at once
+	downAfter int // packets sent down in the run's second half
+}
+
+// run steps m n times by dt and tallies each edge's packets. A packet down is new in a step when its position is
+// below the step's share of a trip; packets up are new when more of them are on the edge than a step before.
+func run(m *Model, n int, dt time.Duration) map[string]*edgeTally {
+	tally := map[string]*edgeTally{}
+	get := func(id string) *edgeTally {
+		if tally[id] == nil {
+			tally[id] = &edgeTally{}
+		}
+		return tally[id]
+	}
+	ups := func() map[string]int {
+		out := map[string]int{}
+		for _, p := range m.Packets() {
+			if p.Up {
+				out[p.Agent]++
+			}
+		}
+		return out
+	}
+	fresh, upBefore := float64(dt)/float64(packetTime), ups()
+	for i := 0; i < n; i++ {
+		m.Step(dt)
+		on := map[string]int{}
+		for _, p := range m.Packets() {
+			on[p.Agent]++
+			if p.Up || p.Pos >= fresh {
+				continue
+			}
+			e := get(p.Agent)
+			e.down++
+			if i >= n/2 {
+				e.downAfter++
+			}
+		}
+		upNow := ups()
+		for id, k := range upNow {
+			if k > upBefore[id] {
+				get(id).up += k - upBefore[id]
+			}
+		}
+		upBefore = upNow
+		for id, k := range on {
+			e := get(id)
+			e.most = max(e.most, k)
+		}
+	}
+	return tally
+}
+
+func TestRunningEdgesStream(t *testing.T) {
+	const dt, steps = 100 * time.Millisecond, 120 // 12 s
+	minSent := int(12*time.Second/(streamEvery+streamJit/2)) - 1
+	maxSent := int(12*time.Second/(streamEvery-streamJit/2)) + 1
+	finished := func(s session.AgentStatus) func(m *Model) {
+		return func(m *Model) {
+			snap := m.st.Snap
+			snap.Agents = []session.Agent{snap.Agents[0]}
+			snap.Agents[0].Status, snap.Agents[0].End = s, t0
+			m.Apply(SnapshotEvent{snap})
+		}
+	}
+	tests := []struct {
+		name               string
+		prep               func(m *Model)
+		edge               string
+		wantStream, wantUp bool
+	}{
+		{"a running agent's edge streams down", func(m *Model) {}, "a1", true, false},
+		{"a finished agent bursts up once, then is quiet", finished(session.AgentDone), "a1", false, false},
+		{"a failed agent bursts up once, then is quiet", finished(session.AgentError), "a1", false, false},
+		{"an agent finished before the view opened gets none", func(m *Model) {
+			st := m.st
+			st.Snap.Agents = []session.Agent{st.Snap.Agents[0]}
+			st.Snap.Agents[0].Status = session.AgentDone
+			m.SetState(st)
+		}, "a1", false, false},
+		{"the lead streams to the tools while working", func(m *Model) {}, toolEdge, true, false},
+		{"the lead doesn't stream while asking", func(m *Model) { m.Apply(HookEvent{"asking"}) }, toolEdge, false, false},
+		{"the lead doesn't stream while waiting", func(m *Model) { m.Apply(HookEvent{"waiting"}) }, toolEdge, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := liveModel()
+			tt.prep(&m)
+			got := run(&m, steps, dt)[tt.edge]
+			if got == nil {
+				got = &edgeTally{}
+			}
+			if tt.wantStream && (got.down < minSent || got.down > maxSent || got.downAfter == 0) {
+				t.Errorf("sent %d down (%d in the second half), want %d..%d and still sending", got.down, got.downAfter, minSent, maxSent)
+			}
+			if !tt.wantStream && got.down != 0 {
+				t.Errorf("sent %d down, want none", got.down)
+			}
+			if got.up != 0 {
+				t.Errorf("sent %d up during the run, want none", got.up)
+			}
+			if got.most > maxInFlight {
+				t.Errorf("%d packets on the edge at once, want at most %d", got.most, maxInFlight)
+			}
+		})
+	}
+}
+
+func TestBurstPacketsAllArrive(t *testing.T) {
+	m := liveModel()
+	m.Apply(HookEvent{"waiting"}) // no tool stream
+	snap := m.st.Snap
+	snap.Agents[0].Status, snap.Agents[0].End = session.AgentDone, t0
+	m.Apply(SnapshotEvent{snap})
+	most := 0 // burst packets on their way and showing at once
+	for i := 0; i < 40; i++ {
+		shown := 0
+		for _, p := range m.Packets() {
+			if p.Agent == "a1" && p.Up && p.Pos >= 0 {
+				shown++
+			}
+		}
+		most = max(most, shown)
+		m.Step(50 * time.Millisecond)
+	}
+	if most != burstSize {
+		t.Errorf("at most %d burst packets showed at once, want %d", most, burstSize)
+	}
+	if len(m.Packets()) != 0 {
+		t.Errorf("packets left after the burst: %v", m.Packets())
+	}
+}
+
+func TestHookChangeStartsAndStopsTheToolStream(t *testing.T) {
+	const dt = 100 * time.Millisecond
+	m := liveModel()
+	m.Apply(HookEvent{"asking"})
+	if got := run(&m, 30, dt)[toolEdge]; got != nil && got.down != 0 {
+		t.Fatalf("asking: sent %d to the tools, want none", got.down)
+	}
+	m.Apply(HookEvent{"working"})
+	if got := run(&m, 30, dt)[toolEdge]; got == nil || got.down == 0 {
+		t.Fatalf("working: sent nothing to the tools")
+	}
+	m.Apply(HookEvent{"waiting"})
+	if got := run(&m, 30, dt)[toolEdge]; got != nil && got.down != 0 {
+		t.Errorf("waiting: sent %d to the tools, want none", got.down)
+	}
+}
+
+func TestEndedSessionHasNoPackets(t *testing.T) {
+	m := liveModel()
+	run(&m, 20, 100*time.Millisecond)
+	if len(m.Packets()) == 0 {
+		t.Fatal("a live session with a running agent had no packets after 2s")
+	}
+	m.Apply(EndEvent{})
+	if len(m.Packets()) != 0 {
+		t.Fatalf("packets after the end: %v", m.Packets())
+	}
+	run(&m, 30, 100*time.Millisecond)
+	if len(m.Packets()) != 0 {
+		t.Errorf("an ended session sent packets: %v", m.Packets())
+	}
+}
+
 func TestPacketsAdvanceAndEnd(t *testing.T) {
 	m := liveModel()
+	m.Apply(HookEvent{"waiting"})
 	m.Apply(SnapshotEvent{withAgents(m, session.Agent{ID: "a2", Parent: "a1", Name: "reviewer", Start: t0, Ctx: -1})})
 	steps := []struct {
 		dt      time.Duration
@@ -80,12 +254,17 @@ func TestPacketsAdvanceAndEnd(t *testing.T) {
 	}
 	for i, st := range steps {
 		m.Step(st.dt)
-		got := m.Packets()
+		var got []Packet
+		for _, p := range m.Packets() {
+			if p.Agent == "a2" {
+				got = append(got, p)
+			}
+		}
 		if len(got) != len(st.wantPos) {
-			t.Fatalf("step %d: packets = %v, want positions %v", i, got, st.wantPos)
+			t.Fatalf("step %d: a2's packets = %v, want positions %v", i, got, st.wantPos)
 		}
 		for j := range got {
-			if d := got[j].Pos - st.wantPos[j]; d > 1e-9 || d < -1e-9 {
+			if !near(got[j].Pos, st.wantPos[j]) {
 				t.Errorf("step %d: pos = %v, want %v", i, got[j].Pos, st.wantPos[j])
 			}
 		}
@@ -399,16 +578,30 @@ func TestUpdateAppliesEvents(t *testing.T) {
 	}
 }
 
+// BenchmarkView draws the widest frame the issue budgets for (< 2 ms): 200×50, twelve running agents over three
+// depths, every edge streaming.
 func BenchmarkView(b *testing.B) {
 	m := New(NewTheme(testPalette()))
-	m.SetSize(90, 46)
+	m.SetSize(200, 50)
 	st := fixtureState()
-	running := st.Snap.Agents[2]
-	st.Snap.Agents = st.Snap.Agents[:2]
+	st.Snap.Agents = nil
+	for i := 0; i < 12; i++ {
+		parent := ""
+		if i >= 6 {
+			parent = fmt.Sprintf("b%d", i-6+(i-6)/3)
+		}
+		st.Snap.Agents = append(st.Snap.Agents, session.Agent{
+			ID: fmt.Sprintf("b%d", i), Parent: parent, Name: fmt.Sprintf("worker-%d", i), Model: "claude-sonnet-4-5",
+			Task: "scan a package", Start: st.Now.Add(-time.Minute), Tool: "Read", ToolArg: "state.go", Ctx: 10 + i,
+		})
+	}
 	m.SetState(st)
-	st.Snap.Agents = append(st.Snap.Agents, running)
-	m.Apply(SnapshotEvent{st.Snap}) // a packet on its way
-	m.Step(packetTime / 3)
+	for i := 0; i < 40; i++ { // 2.8 s: every edge has sent
+		m.Step(tickEvery)
+	}
+	if len(m.Packets()) == 0 {
+		b.Fatal("no packets streaming")
+	}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

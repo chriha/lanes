@@ -26,12 +26,20 @@ func treePaths(nodes []Node, root, area Rect) [][]Point {
 	return paths
 }
 
+// toolPath is the full layout's connector from the lead to the tool layer, nil in the other layouts.
+func toolPath(l Layout) []Point {
+	if l.Mode != ModeFull {
+		return nil
+	}
+	return elbow(Point{l.Lead.X + l.Lead.W/2, l.Lead.Y + l.Lead.H}, Point{l.Tools.X + l.Tools.W/2, l.Tools.Y - 1})
+}
+
 // drawTree draws the agent boxes and their connectors and returns the boxes and each one's connector.
 func (s State) drawTree(c *Canvas, l Layout) ([]Node, [][]Point) {
 	root := l.Lead
 	if l.Mode == ModeFull {
 		root = l.Tools
-		c.drawPaths([][]Point{elbow(Point{l.Lead.X + l.Lead.W/2, l.Lead.Y + l.Lead.H}, Point{l.Tools.X + l.Tools.W/2, l.Tools.Y - 1})}, RoleDim)
+		c.drawPaths([][]Point{toolPath(l)}, RoleDim)
 	}
 	box := l.Box
 	box.W = s.boxWidth(l)

@@ -27,10 +27,11 @@ type Model struct {
 	primed                  bool                           // a state is set: snapshots are diffed against seen
 	seen                    map[string]session.AgentStatus // each agent's status in the last snapshot
 	packets                 []Packet
-	turns, calls, tokens    int           // the lead's counters as shown, easing toward the state's
-	tokIn, tokOut, tokCache int           // the lead's token split as shown, easing like the counters
-	typed                   float64       // runes of the lead's last text shown
-	phaseClock              time.Duration // time since the last phase step
+	due                     map[string]time.Duration // each streaming edge's time to its next packet
+	turns, calls, tokens    int                      // the lead's counters as shown, easing toward the state's
+	tokIn, tokOut, tokCache int                      // the lead's token split as shown, easing like the counters
+	typed                   float64                  // runes of the lead's last text shown
+	phaseClock              time.Duration            // time since the last phase step
 }
 
 // tickMsg is a model's animation tick.
@@ -130,7 +131,7 @@ func (m Model) View() string {
 	}
 	s.drawLead(c, l.Lead)
 	nodes, paths := s.drawTree(c, l)
-	s.drawPackets(c, m.packets, nodes, paths)
+	s.drawPackets(c, m.packets, nodes, paths, toolPath(l))
 	s.drawLog(c, l.Log)
 	s.drawStatus(c, l)
 	return c.String()

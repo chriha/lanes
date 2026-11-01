@@ -38,7 +38,8 @@ func script() []cue {
 	}
 }
 
-// play replays the script into m with fixed steps of dt and returns the most packets on the way at once.
+// play replays the script into m with fixed steps of dt and returns the most packets on the way on one connector
+// at once.
 func play(m *Model, cues []cue, dt time.Duration) int {
 	most := 0
 	for clock := time.Duration(0); len(cues) > 0; clock += dt {
@@ -46,7 +47,11 @@ func play(m *Model, cues []cue, dt time.Duration) int {
 			m.Apply(cues[0].ev)
 			cues = cues[1:]
 		}
-		most = max(most, len(m.Packets()))
+		on := map[string]int{}
+		for _, p := range m.Packets() {
+			on[p.Agent]++
+			most = max(most, on[p.Agent])
+		}
 		m.Step(dt)
 	}
 	return most
@@ -62,8 +67,8 @@ func TestScriptedSession(t *testing.T) {
 	if !f.Ended || f.Hook != "waiting" {
 		t.Errorf("ended %v, hook %q; want ended, waiting", f.Ended, f.Hook)
 	}
-	if most != 1 {
-		t.Errorf("most packets at once = %d, want 1 (each event's packet lands before the next)", most)
+	if most != burstSize {
+		t.Errorf("most packets on one connector at once = %d, want %d (a finish's burst)", most, burstSize)
 	}
 	if len(m.Packets()) != 0 {
 		t.Errorf("packets left after the end: %v", m.Packets())

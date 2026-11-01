@@ -64,8 +64,11 @@ func (s State) topTools(n int) []toolShare {
 	return out
 }
 
-// running counts the agents still running.
+// running counts the agents still running; none once the session ended, whatever the transcripts say.
 func (s State) running() int {
+	if s.Ended {
+		return 0
+	}
 	n := 0
 	for _, a := range s.Snap.Agents {
 		if a.Status == session.AgentRunning {
@@ -73,6 +76,87 @@ func (s State) running() int {
 		}
 	}
 	return n
+}
+
+// knownFamilies are the model families the status line lists first, in this order.
+var knownFamilies = [...]string{"opus", "sonnet", "haiku"}
+
+// family is a model id's family: opus, sonnet or haiku, else its short name without the version.
+func family(model string) string {
+	m := strings.ToLower(model)
+	for _, f := range knownFamilies {
+		if strings.Contains(m, f) {
+			return f
+		}
+	}
+	name, _, _ := strings.Cut(shortModel(model), " ")
+	if name == "" {
+		return "other"
+	}
+	return name
+}
+
+// familyStatus is one status line entry: a model family of the agents and how they stand.
+type familyStatus struct {
+	Family string
+	Model  string // a model id of the family, for its color
+	Status string // "2 running", "1 failed", "stopped" or "done"
+}
+
+// familyStatuses returns an entry per model family of the agents: opus, sonnet and haiku first, then the others
+// by name. Running agents win over failed ones, failed over stopped, stopped over done. Once the session ended no
+// agent runs: those the transcripts still show running count as stopped.
+func (s State) familyStatuses() []familyStatus {
+	type counts struct {
+		model           string
+		run, fail, stop int
+	}
+	byFam := map[string]*counts{}
+	var names []string
+	for _, a := range s.Snap.Agents {
+		f := family(a.Model)
+		c := byFam[f]
+		if c == nil {
+			c = &counts{model: a.Model}
+			byFam[f] = c
+			names = append(names, f)
+		}
+		switch {
+		case a.Status == session.AgentRunning && s.Ended:
+			c.stop++
+		case a.Status == session.AgentRunning:
+			c.run++
+		case a.Status == session.AgentError:
+			c.fail++
+		}
+	}
+	rank := func(f string) int {
+		for i, k := range knownFamilies {
+			if f == k {
+				return i
+			}
+		}
+		return len(knownFamilies)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		ri, rj := rank(names[i]), rank(names[j])
+		return ri < rj || ri == rj && names[i] < names[j]
+	})
+	out := make([]familyStatus, 0, len(names))
+	for _, f := range names {
+		c := byFam[f]
+		status := "done"
+		switch {
+		case c.run > 0:
+			status = fmt.Sprintf("%d running", c.run)
+		case c.fail > 0:
+			status = fmt.Sprintf("%d failed", c.fail)
+		case c.stop > 0:
+			status = "stopped"
+		}
+		out = append(out, familyStatus{Family: f, Model: c.model, Status: status})
+	}
+	return out
 }
 
 // shortModel turns a model id into family and version: claude-opus-4-1-20250805 → opus 4.1.
@@ -131,4 +215,13 @@ func fmtCount(n int) string {
 		return fmt.Sprintf("%.1fk", float64(n)/1e3)
 	}
 	return fmt.Sprintf("%.1fM", float64(n)/1e6)
+}
+
+// fmtThousands is n with thousands separators: 1,234,567.
+func fmtThousands(n int) string {
+	s := fmt.Sprint(n)
+	for i := len(s) - 3; i > 0 && s[i-1] != '-'; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
 }

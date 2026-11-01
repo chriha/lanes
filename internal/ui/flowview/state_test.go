@@ -75,3 +75,12 @@ func TestSinceUnknownTimes(t *testing.T) {
 		}
 	}
 }
+
+func TestFmtThousands(t *testing.T) {
+	tests := map[int]string{0: "0", 999: "999", 1000: "1,000", 12_345: "12,345", 1_234_567: "1,234,567", -4200: "-4,200"}
+	for n, want := range tests {
+		if got := fmtThousands(n); got != want {
+			t.Errorf("fmtThousands(%d) = %q, want %q", n, got, want)
+		}
+	}
+}

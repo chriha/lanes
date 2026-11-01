@@ -34,6 +34,53 @@ func (c *Canvas) center(r Rect, y int, s string, role Role) {
 	c.Text(r.X+(r.W-len(t))/2, y, string(t), role)
 }
 
+// runeLen is the cells s takes once fit strips its escape sequences.
+func runeLen(s string) int { return len([]rune(ansi.Strip(s))) }
+
+// seg is a run of text in one role.
+type seg struct {
+	s    string
+	role Role
+}
+
+// segs draws the runs from x, y one after the other, cut to w cells in all, and returns the x after the last.
+func (c *Canvas) segs(x, y, w int, runs ...seg) int {
+	end := x + w
+	for _, r := range runs {
+		if x >= end {
+			break
+		}
+		x = c.textIn(x, y, end-x, r.s, r.role)
+	}
+	return x
+}
+
+// segsLen is the cells the runs take.
+func segsLen(runs []seg) int {
+	n := 0
+	for _, r := range runs {
+		n += runeLen(r.s)
+	}
+	return n
+}
+
+// centerSegs draws the runs centered in rect's inside on row y, cut to fit.
+func (c *Canvas) centerSegs(r Rect, y int, runs ...seg) {
+	n := min(segsLen(runs), r.W-2)
+	c.segs(r.X+(r.W-n)/2, y, n, runs...)
+}
+
+// ctxRow draws a context gauge in w cells from x: the label, a shimmering bar and the percent, or -- when unknown.
+func (c *Canvas) ctxRow(x, y, w, ctx, phase int, fill, text Role) {
+	pct := "  --"
+	if ctx >= 0 {
+		pct = fmt.Sprintf("%3d%%", ctx)
+	}
+	c.Text(x, y, "ctx", RoleDim)
+	c.Bar(x+4, y, w-9, float64(max(ctx, 0))/100, phase, fill, RoleDim)
+	c.Text(x+w-4, y, pct, text)
+}
+
 // spread draws left at the start and right at the end of w cells from x.
 func (c *Canvas) spread(x, y, w int, left, right string, lr, rr Role) {
 	n := len([]rune(right))
@@ -45,7 +92,7 @@ func (c *Canvas) spread(x, y, w int, left, right string, lr, rr Role) {
 func (c *Canvas) titled(r Rect, title string, role, titleRole Role) {
 	c.Box(r, border, role)
 	if title != "" {
-		c.textIn(r.X+2, r.Y, r.W-4, " "+title+" ", titleRole)
+		c.Text(r.X+2, r.Y, " "+string(fit(title, r.W-6))+" ", titleRole)
 	}
 }
 
@@ -60,7 +107,7 @@ func (s State) drawHeader(c *Canvas, l Layout) {
 	c.HLine(f.X, f.X+f.W-1, f.Y+1, '═', RoleDim)
 	if l.Mode == ModeFull {
 		x := f.X + (f.W-28)/2
-		for _, fam := range []string{"opus", "sonnet", "haiku"} {
+		for _, fam := range knownFamilies {
 			c.Set(x, f.Y+2, '■', ModelRole(fam))
 			x = c.Text(x+2, f.Y+2, fam, RoleDim) + 3
 		}
@@ -129,23 +176,62 @@ func (s State) drawTools(c *Canvas, r Rect) {
 func (s State) drawLog(c *Canvas, r Rect) {
 	c.HLine(r.X, r.X+r.W-1, r.Y, '─', RoleDim)
 	c.Text(r.X+2, r.Y, "┤ session log ├", RoleDim)
+	aw := s.actorWidth()
 	n := r.H - 1
 	lines := s.Log[max(len(s.Log)-n, 0):]
 	for i, ln := range lines {
 		y := r.Y + 1 + i
 		x := c.Text(r.X+1, y, ln.At.Format("15:04:05"), RoleDim) + 1
-		c.textIn(x, y, 12, ln.Actor, ModelRole(ln.Model))
-		c.textIn(x+13, y, r.X+r.W-x-14, ln.Text, RoleText)
+		c.textIn(x, y, aw, ln.Actor, ModelRole(ln.Model))
+		c.textIn(x+aw+1, y, r.X+r.W-x-aw-2, ln.Text, RoleText)
 	}
 }
 
-func (s State) drawStatus(c *Canvas, l Layout) {
-	hook := s.leadState()
-	line := fmt.Sprintf("lead [%s]   agents [%d/%d running]", hook, s.running(), len(s.Snap.Agents))
-	if l.Mode == ModeCompact {
-		lead := s.Snap.Lead
-		line = fmt.Sprintf("lead [%s]  agents [%d/%d]  turns %d  tools %d  tokens %s",
-			hook, s.running(), len(s.Snap.Agents), lead.Turns, lead.Calls, fmtCount(lead.Tokens))
+// maxActorW is the widest the session log's actor column gets.
+const maxActorW = 20
+
+// actorWidth is the session log's actor column width: the longest agent or log actor name, up to maxActorW.
+func (s State) actorWidth() int {
+	w := len("lead")
+	for _, a := range s.Snap.Agents {
+		w = max(w, runeLen(a.Name))
 	}
-	c.textIn(l.Frame.X+1, l.Status, l.Frame.W-2, line, RoleText)
+	for _, ln := range s.Log {
+		w = max(w, runeLen(ln.Actor))
+	}
+	return min(w, maxActorW)
+}
+
+// drawStatus draws the status line: an entry per model family of the agents in its color, the totals and whether
+// the session is live at the right end. Entries that don't fit whole before it are left out, from the end.
+func (s State) drawStatus(c *Canvas, l Layout) {
+	var entries [][]seg
+	for _, f := range s.familyStatuses() {
+		entries = append(entries, []seg{{f.Family + " [" + f.Status + "]", ModelRole(f.Model)}})
+	}
+	lead := s.Snap.Lead
+	for _, kv := range [][2]string{
+		{"agents", fmt.Sprintf("%d/%d", s.running(), len(s.Snap.Agents))},
+		{"tools", fmtThousands(lead.Calls)},
+		{"tokens", fmtThousands(lead.Tokens)},
+	} {
+		entries = append(entries, []seg{{kv[0] + " ", RoleDim}, {"[" + kv[1] + "]", RoleBold}})
+	}
+	state := seg{"● live", RoleOK}
+	if s.Ended {
+		state = seg{"■ ended", RoleBad}
+	}
+	x, end := l.Frame.X+1, l.Frame.X+l.Frame.W-1-runeLen(state.s)
+	c.Text(end, l.Status, state.s, state.role)
+	end -= 2
+	for i, e := range entries {
+		n := segsLen(e)
+		if i > 0 {
+			x += 2
+		}
+		if x+n > end {
+			break
+		}
+		x = c.segs(x, l.Status, n, e...)
+	}
 }

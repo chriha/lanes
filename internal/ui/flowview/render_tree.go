@@ -33,7 +33,9 @@ func (s State) drawTree(c *Canvas, l Layout) ([]Node, [][]Point) {
 		root = l.Tools
 		c.drawPaths([][]Point{elbow(Point{l.Lead.X + l.Lead.W/2, l.Lead.Y + l.Lead.H}, Point{l.Tools.X + l.Tools.W/2, l.Tools.Y - 1})}, RoleDim)
 	}
-	nodes := layoutTree(s.Snap.Agents, l.Tree, l.Box, l.Gap)
+	box := l.Box
+	box.W = s.boxWidth(l)
+	nodes := layoutTree(s.Snap.Agents, l.Tree, box, l.Gap)
 	paths := treePaths(nodes, root, l.Tree)
 	c.drawPaths(paths, RoleDim)
 	for _, n := range nodes {
@@ -47,38 +49,64 @@ func (s State) drawTree(c *Canvas, l Layout) ([]Node, [][]Point) {
 	return nodes, paths
 }
 
-// drawAgent draws an agent box: name in the border, model and ctx %, the task (full only) and the status.
-func (s State) drawAgent(c *Canvas, r Rect, a session.Agent, full bool) {
-	role, text := ModelRole(a.Model), RoleText
-	if a.Status != session.AgentRunning {
-		role, text = RoleDim, RoleDim
+// boxWidth is the agent box width: the layout's, widened so the longest agent name fits the box title, at most
+// the tree area's width.
+func (s State) boxWidth(l Layout) int {
+	w := l.Box.W
+	for _, a := range s.Snap.Agents {
+		w = max(w, runeLen(a.Name)+6) // corner, rule and a space on each side
 	}
-	c.titled(r, a.Name, role, role)
+	return min(w, l.Tree.W)
+}
+
+// drawAgent draws an agent box: the name in the top border; the model and effort meter, the context bar and the
+// task (full only) inside; the status and, while running, the current activity in the bottom border. A finished
+// agent's box is dim and still.
+func (s State) drawAgent(c *Canvas, r Rect, a session.Agent, full bool) {
+	running := a.Status == session.AgentRunning && !s.Ended // an ended session's agents are stopped
+	role, title, text, phase := ModelRole(a.Model), RoleBold, RoleText, s.Phase
+	if !running {
+		role, title, text, phase = RoleDim, RoleDim, RoleDim, 0
+	}
+	c.titled(r, a.Name, role, title)
 	model := shortModel(a.Model)
 	if !full {
 		model, _, _ = strings.Cut(model, " ")
 	}
-	if a.Ctx >= 0 {
-		model = strings.TrimSpace(fmt.Sprintf("%s ctx %d%%", model, a.Ctx))
+	row := []seg{{model, role}}
+	if m := effortMeter(a.Effort); m != "" {
+		row = append(row, seg{" " + m, role})
+		if full {
+			row = append(row, seg{" " + strings.ToLower(a.Effort), RoleDim})
+		}
 	}
-	c.center(r, r.Y+1, model, text)
+	c.centerSegs(r, r.Y+1, row...)
+	c.ctxRow(r.X+2, r.Y+2, r.W-4, a.Ctx, phase, role, text)
 	if full {
-		c.center(r, r.Y+2, a.Task, text)
+		c.center(r, r.Y+3, a.Task, text)
 	}
-	var status string
-	srole := RoleText
+	y := r.Y + r.H - 1
+	x := c.Text(r.X+2, y, " ", role)
+	x = c.segs(x, y, r.W-6, s.agentStatus(a, role)...)
+	c.Text(x, y, " ", role)
+}
+
+// agentStatus is an agent's status line: spinner, elapsed time and current activity while running; stopped once the
+// session ended; done or failed with the duration otherwise.
+func (s State) agentStatus(a session.Agent, role Role) []seg {
+	join := func(parts ...string) string { return strings.Join(strings.Fields(strings.Join(parts, " ")), " ") }
 	switch a.Status {
 	case session.AgentRunning:
-		mark := s.spin()
-		if s.Ended { // frozen: no spinner
-			mark = '■'
+		if s.Ended {
+			return []seg{{join("■ stopped", since(a.Start, s.Now)), RoleDim}}
 		}
-		status = fmt.Sprintf("%c %s %s", mark, since(a.Start, s.Now), a.Tool)
+		mark := string(s.spin())
+		if a.Tool == "" {
+			return []seg{{join(mark, "running", since(a.Start, s.Now)), role}}
+		}
+		return []seg{{join(mark, since(a.Start, s.Now)), role}, {" ▸ ", RoleDim}, {join(a.Tool, a.ToolArg), RoleText}}
 	case session.AgentDone:
-		status, srole = "✓ "+since(a.Start, a.End), RoleOK
-	default:
-		status, srole = "✗ "+since(a.Start, a.End), RoleBad
+		return []seg{{join("✓ done", since(a.Start, a.End)), RoleOK}}
 	}
-	status = strings.Join(strings.Fields(status), " ")
-	c.center(r, r.Y+r.H-2, status, srole)
+	return []seg{{join("✗ failed", since(a.Start, a.End)), RoleBad}}
 }

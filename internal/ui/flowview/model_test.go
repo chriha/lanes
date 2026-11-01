@@ -39,9 +39,9 @@ func fixtureState() State {
 				LastText:  "Slice 2 is next: the layered layout and the static panels.",
 			},
 			Agents: []session.Agent{
-				{ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Task: "slice 2 of #196", Start: ago(9 * time.Minute), Tool: "Bash", Ctx: 42},
-				{ID: "a2", Name: "triager", Model: "claude-haiku-4-5", Task: "triage #201", Status: session.AgentDone, Start: ago(11 * time.Minute), End: ago(10 * time.Minute), Ctx: 7},
-				{ID: "a3", Parent: "a1", Name: "code-reviewer", Model: "claude-sonnet-4-5", Task: "review the diff", Start: ago(2 * time.Minute), Tool: "Grep", Ctx: -1},
+				{ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Task: "slice 2 of #196", Start: ago(9 * time.Minute), Tool: "Bash", ToolArg: "go test ./...", Ctx: 42, Effort: "high"},
+				{ID: "a2", Name: "triager", Model: "claude-haiku-4-5", Task: "triage #201", Status: session.AgentDone, Start: ago(11 * time.Minute), End: ago(10 * time.Minute), Ctx: 7, Effort: "low"},
+				{ID: "a3", Parent: "a1", Name: "code-reviewer", Model: "claude-sonnet-4-5", Task: "review the diff", Start: ago(2 * time.Minute), Tool: "Grep", ToolArg: "drawAgent", Ctx: -1, Effort: "medium"},
 				{ID: "a4", Parent: "a3", Name: "validator", Model: "claude-sonnet-4-5", Task: "validate a finding", Status: session.AgentError, Start: ago(90 * time.Second), End: ago(30 * time.Second), Ctx: 12},
 			},
 		},

@@ -70,12 +70,23 @@ an env var).
 - Vim keys: `h j k l`, `gg G`, `ctrl-d/u`, `space` mark, `V` mark all, `esc` clear.
 - `/` fuzzy filter, `:` command line, `?` help, `enter` open session/jump in, `o` open URL, `x` close session
   (always confirms), `X` interrupt the session's command and keep its output (confirm; again: SIGKILL), `R` refresh, `i` item history, `n` jump to the next session asking/waiting (asking first, oldest
-  first, cycles), `S` sessions screen (every session, also of items no longer listed; jump / close), `q` quit.
+  first, cycles), `S` sessions screen (every session, also of items no longer listed; jump / close), `A` agent view
+  (below), `q` quit.
 - Live: background poll (default 30s) diffs into the list, preserving cursor + marks. First paint from disk
   cache (stale-while-revalidate). Terminal focus reporting (`tea.WithReportFocus`) slows the poll to
   `poll_interval_blurred` (default 5m) while blurred; focus-in fetches every provider older than `poll_interval`.
   lanes starts focused, so terminals without focus events poll as before.
 - Jump into a session: `tmux display-popup` / `switch-client` when inside tmux, `attach` otherwise.
+- **Agent view** (`A` on an item or on the sessions screen) — a full-screen animated diagram of a Claude
+  session: session column (hook state, last text, counters), lead box, tool layer, layered agent tree with
+  animated connectors, session log, status line. Lives in `internal/ui/flowview`: a character-grid canvas with
+  run-length styled output, a pure `State` changed by events (`Apply`) and stepped by `dt` (`Step`), panel
+  renderers and the tree layout; it has its own tick (~70 ms) that runs only while the view is open. Its data
+  comes from `session.Tailer` (`internal/session/transcript.go`), which reads only the new bytes of the
+  transcript the hooks recorded (`transcript_path` in the session's sidecar) and of `<session>/subagents/
+  agent-<id>.{jsonl,meta.json}`; `internal/ui/agents.go` polls it in a `tea.Cmd` every 500 ms and hands the
+  snapshot over as a message. Context % uses one model-id table (`session.ContextWindow`, 200k default, 1M for
+  `[1m]`). An ended session is read once more and frozen. Full layout from 90×46, compact from 60×24.
 
 ## Config (`~/.config/lanes/config.toml`, hot reloaded)
 
@@ -118,11 +129,12 @@ confirm = "none"
     item/       Item type, fields
     provider/   Provider iface; gitlab, github + github-issues (graphql), linear (http), auto (forge from origin), command
     filter/     expr env + helpers (has_label, approved_by_me, …)
-    session/    tmux backend, status, claude hooks
+    session/    tmux backend, status, claude hooks, transcript tailer
     history/    per-item log
     notes/      per-item notes (<state>/notes.json)
     snooze/     snoozed items, until a time or a changed fingerprint (<state>/snoozes.json)
     ui/         bubbletea models: root, list, preview, cmdline, confirm, help; theme
+      flowview/ agent view: canvas, state, animation, layered tree layout, panels
 ```
 
 ## Phases
@@ -153,6 +165,8 @@ confirm = "none"
    lists a repo's open issues as `kind = "ticket"` items (ticket field set shared with the Linear provider).
 10. **Linear — DONE.** A `linear` provider lists a team's open issues with the same ticket fields, via the Linear
     GraphQL API over `net/http` (API key from `token_env`, default `LINEAR_API_KEY`; `lanes doctor` checks it is set).
+11. **Agent view — DONE.** `A` opens an animated, live diagram of a Claude session's agents (`internal/ui/flowview`),
+    fed by an incremental transcript tailer (`internal/session/transcript.go`).
 
 ## Later
 

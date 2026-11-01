@@ -47,6 +47,7 @@ you what each session is doing (running, working, asking a question, waiting for
   - [Restricting actions (`when`)](#restricting-actions-when)
   - [Sessions: jump, close, status](#sessions-jump-close-status)
   - [Claude Code integration](#claude-code-integration)
+  - [Agent view](#agent-view)
   - [Notifications](#notifications)
 - [Providers](#providers)
   - [gitlab](#gitlab)
@@ -97,6 +98,8 @@ look at a list, press a key, and the work starts in the background in a session 
 - **Item history** — per-item log of which actions ran, when and how they ended.
 - **Notes** — your own note per item (`N`), shown in every view, usable in filters and templates.
 - **Snooze** — put an item aside (`z`) until a time or until it changes; it leaves every view until then.
+- **Agent view** — `A` shows a Claude session as a live diagram: which agents run, who spawned whom, their
+  model, context use and current tool.
 - **Preview pane** — details of the selected item, its sessions and last run.
 - **Notifications** — desktop notification when a session needs you or ends.
 - **Global + project config** — one config for you, optional `.lanes.toml` per project that overrides only what
@@ -338,6 +341,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `z`                 | [snooze](#snoozing) the item (all marked items, if any are marked); on a snoozed item: unsnooze it |
 | `n`                 | jump into the next session that is asking or waiting (any view) |
 | `S`                 | sessions screen: every session, also of items no longer listed |
+| `A`                 | [agent view](#agent-view) of the item's newest Claude session |
 | `p`                 | toggle the preview pane                            |
 | `F`                 | edit the current view's filter                     |
 | `R`                 | refresh data now                                   |
@@ -616,7 +620,8 @@ provider sets it in its fields, if at all).
 - **Sessions screen** — `S` (or `:sessions`) lists every session on the `lanes` tmux server, newest first:
   item ID and title (or the item key when no provider returns the item any more), status badge and age.
   Sessions whose item is in no view — filtered out, or merged/closed — are marked `(not in any view)`. `enter`
-  jumps in, `X` interrupts, `x` closes (after confirming), `j`/`k`, `gg`/`G` move, `q` / `esc` / `S` go back.
+  jumps in, `A` opens its [agent view](#agent-view), `X` interrupts, `x` closes (after confirming), `j`/`k`,
+  `gg`/`G` move, `q` / `esc` / `S` go back.
 - **Resume** — `gr` (or `:resume`) starts the item's newest finished Claude session again, see
   [Resuming a Claude session](#resuming-a-claude-session).
 - **Quit** — `q` asks first (`y`/`enter` quits, any other key cancels); `ctrl-c` and `:quit` leave at once. Sessions keep running and reappear when you start it again.
@@ -680,6 +685,50 @@ lanes shows `text` as is, so it matches your Claude statusline. The file only ch
 session of that profile runs; after 10 minutes the text shows its age. Each profile has its own
 dir (e.g. `~/.claude` and `~/.claude-personal` for `CLAUDE_CONFIG_DIR=~/.claude-personal claude`), and a
 project's `.lanes.toml` can point at a different one than the global config. Unset, or no file: nothing is shown.
+
+### Agent view
+
+`A` on an item opens a full-screen, animated view of its newest Claude session; on the sessions screen, of the
+selected session. `esc`, `q` or `A` go back. It needs the [hooks](#claude-code-integration)
+(`--settings {{.settings}}`): they record where Claude keeps the session's transcript. Without them, or before
+Claude has started, the footer says `no Claude session for this item`.
+
+The view shows, top to bottom:
+
+- **session** (left column) — the hook state (`◆ working`, `◇ asking`, `◇ waiting`; the active one highlighted),
+  `last:` the lead's newest text, and counters for `turns`, `tools` (tool calls) and `tokens` (input + cache
+  write + output).
+- **lead** — the main Claude: its model, current tool and argument, state and elapsed time.
+- **tools** — the lead's three most used tools, with their share of all its calls.
+- **agents** — the subagents as a layered tree, one row per spawn depth, each connected to the agent that
+  spawned it (or to the lead). Each box shows the agent's name, model, `ctx` %, task and status: a spinner with
+  elapsed time and current tool while running, `✓` with its duration when done, `✗` when it failed. Finished
+  agents are dimmed; a row with more agents than fit ends in a `+n more` box. Packets run down a connector when
+  an agent is spawned and back up when it finishes.
+- **session log** — spawns, finishes and failures, with their time.
+- **status line** — lead state and how many agents are running.
+
+Colors follow the model family: opus purple, sonnet orange, haiku blue (your [theme](#theme)'s `accent`, `warn`
+and `info`).
+
+**Where the data comes from.** The hooks note where Claude writes the session's
+transcript (`<session>.jsonl` under Claude's config dir). While the view is open, `lanes` reads what was added to it every
+half second, together with the subagents next to it: `<session>/subagents/agent-<id>.jsonl` (each agent's
+transcript) and `agent-<id>.meta.json` (type, name, task, parent, model, finished). Only new bytes are read;
+unknown lines and a half-written last line are skipped. Nothing is read or animated while the view is closed.
+An agent's name is the meta's `name`, else the brief its prompt says to follow (`Read and follow
+…/briefs/implementer.md` → `implementer`), else its agent type.
+
+**Context %.** An agent's `ctx` is the input + cache read + cache write tokens of its newest reply, divided by the
+model's context window: 1,000,000 for model ids ending in `[1m]`, otherwise 200,000 (more tokens than that mean a
+1M window).
+
+**Ended sessions.** When Claude exits or the session finishes, the view reads the transcripts once more and
+freezes on that final state; the header says `ended` instead of `live`.
+
+**Size.** The full diagram needs 90×46 (larger terminals center it). From 60×24 a compact layout drops the session
+column and the tool panel (their numbers move to the status line) and uses smaller agent boxes. Below that the
+view only says `resize to ≥ 60×24`.
 
 ### Notifications
 

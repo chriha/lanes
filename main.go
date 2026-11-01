@@ -56,8 +56,8 @@ type env struct {
 	wd             string
 	isTTY          bool
 	stdout, stderr io.Writer
-	ask            func(root string) (bool, error) // the trust dialog
-	initApp        func(dir string)                // app.Init: runs git in the project
+	ask            func(root string) (yes, always bool, err error) // the trust dialog
+	initApp        func(dir string)                                // app.Init: runs git in the project
 	hook           func(event string)
 	status         func()
 	doctor         func() int
@@ -74,6 +74,9 @@ func run(args []string, e env) int {
 	if cmd == "--version" || cmd == "version" {
 		fmt.Fprintln(e.stdout, app.Name, version)
 		return 0
+	}
+	if cmd == "--untrust" { // lowering trust is safe: no terminal needed, and nothing of the project runs
+		return untrust(e)
 	}
 	// Nothing below may run git, load the config or start a provider before the project is trusted.
 	root := trust.Root(e.wd)
@@ -103,7 +106,7 @@ func run(args []string, e env) int {
 			fmt.Fprintf(e.stderr, "%s is not trusted; run %s in a terminal to trust it\n", root, app.Name)
 			return 1
 		}
-		yes, err := e.ask(root)
+		yes, always, err := e.ask(root)
 		if err != nil {
 			fmt.Fprintf(e.stderr, "%s: %v\n", app.Name, err)
 			return 1
@@ -112,7 +115,12 @@ func run(args []string, e env) int {
 			fmt.Fprintf(e.stderr, "%s: not trusted\n", app.Name)
 			return 1
 		}
-		if err := trust.Trust(root, hash); err != nil {
+		if always {
+			err = trust.TrustAlways(root)
+		} else {
+			err = trust.Trust(root, hash)
+		}
+		if err != nil {
 			fmt.Fprintf(e.stderr, "%s: %v\n", app.Name, err)
 			return 1
 		}
@@ -132,6 +140,22 @@ func run(args []string, e env) int {
 		return code
 	}
 	return e.tui()
+}
+
+// untrust removes the cwd root's trust entry, hash or always, so the next start asks again.
+func untrust(e env) int {
+	root := trust.Root(e.wd)
+	removed, err := trust.Untrust(root)
+	if err != nil {
+		fmt.Fprintf(e.stderr, "%s: %v\n", app.Name, err)
+		return 1
+	}
+	if removed {
+		fmt.Fprintf(e.stdout, "%s is no longer trusted\n", root)
+	} else {
+		fmt.Fprintf(e.stdout, "%s was not trusted\n", root)
+	}
+	return 0
 }
 
 // runStatus prints the cwd project's sessions that need input, for tmux status bars and shell prompts.
@@ -165,7 +189,7 @@ func usageError(args []string) string {
 	if len(args) == 0 {
 		return ""
 	}
-	want := map[string]int{"hook": 1, "doctor": 0, "init": 0, "status": 0, "version": 0, "--version": 0}
+	want := map[string]int{"hook": 1, "doctor": 0, "init": 0, "status": 0, "version": 0, "--version": 0, "--untrust": 0}
 	n, ok := want[args[0]]
 	if !ok || len(args)-1 == n {
 		return ""

@@ -23,12 +23,14 @@ func TestUsageError(t *testing.T) {
 		{"init", []string{"init"}, false},
 		{"version", []string{"version"}, false},
 		{"--version", []string{"--version"}, false},
+		{"--untrust", []string{"--untrust"}, false},
 		{"hook with event", []string{"hook", "Stop"}, false},
 		{"doctor extra", []string{"doctor", "x"}, true},
 		{"status extra", []string{"status", "x"}, true},
 		{"init extra", []string{"init", "x"}, true},
 		{"version extra", []string{"version", "x"}, true},
 		{"--version extra", []string{"--version", "x"}, true},
+		{"--untrust extra", []string{"--untrust", "x"}, true},
 		{"hook without event", []string{"hook"}, true},
 		{"hook two args", []string{"hook", "a", "b"}, true},
 	}
@@ -47,7 +49,7 @@ func fakeEnv(dir string, tty, yes bool, calls *[]string) (env, *bytes.Buffer, *b
 	rec := func(s string) { *calls = append(*calls, s) }
 	return env{
 		wd: dir, isTTY: tty, stdout: &stdout, stderr: &stderr,
-		ask:     func(string) (bool, error) { rec("ask"); return yes, nil },
+		ask:     func(string) (bool, bool, error) { rec("ask"); return yes, false, nil },
 		initApp: func(string) { rec("initApp") },
 		hook:    func(string) { rec("hook") },
 		status:  func() { rec("status") },
@@ -124,6 +126,186 @@ func TestRunGate(t *testing.T) {
 			}
 			if ok, err := trust.IsTrusted(root, hash); err != nil || ok != tt.wantStored {
 				t.Errorf("stored = %v (err %v), want %v", ok, err, tt.wantStored)
+			}
+		})
+	}
+}
+
+// gateRoot makes a git root in a temp dir with a .lanes.toml in its sub dir and returns the root and the sub dir.
+func gateRoot(t *testing.T) (root, dir string) {
+	t.Helper()
+	root = t.TempDir()
+	dir = filepath.Join(root, "sub")
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, config.ProjectFile), []byte("# x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root, dir
+}
+
+func TestRunStoresAlways(t *testing.T) {
+	tests := []struct {
+		name       string
+		yes        bool
+		always     bool // the dialog's checkbox
+		wantCode   int
+		wantCalls  string
+		wantHash   bool // trust.json trusts the current hash afterwards
+		wantAlways bool // trust.json trusts the root whatever the hash
+	}{
+		{"yes, unchecked stores the hash", true, false, 0, "ask initApp tui", true, false},
+		{"yes, checked stores always", true, true, 0, "ask initApp tui", true, true},
+		{"no, unchecked stores nothing", false, false, 1, "ask", false, false},
+		{"no, checked stores nothing", false, true, 1, "ask", false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			root, dir := gateRoot(t)
+			var calls []string
+			e, _, stderr := fakeEnv(dir, true, tt.yes, &calls)
+			e.ask = func(string) (bool, bool, error) {
+				calls = append(calls, "ask")
+				return tt.yes, tt.always, nil
+			}
+			if code := run(nil, e); code != tt.wantCode {
+				t.Errorf("exit code = %d, want %d", code, tt.wantCode)
+			}
+			if got := strings.Join(calls, " "); got != tt.wantCalls {
+				t.Errorf("calls = %q, want %q", got, tt.wantCalls)
+			}
+			if !tt.yes && !strings.Contains(stderr.String(), "not trusted") {
+				t.Errorf("stderr = %q, want not trusted", stderr.String())
+			}
+			hash, _ := trust.HashRoot(root)
+			if ok, err := trust.IsTrusted(root, hash); err != nil || ok != tt.wantHash {
+				t.Errorf("hash trusted = %v (err %v), want %v", ok, err, tt.wantHash)
+			}
+			if ok, err := trust.IsTrusted(root, "other"); err != nil || ok != tt.wantAlways {
+				t.Errorf("always trusted = %v (err %v), want %v", ok, err, tt.wantAlways)
+			}
+		})
+	}
+}
+
+func TestRunAlwaysTrustedRootIgnoresChanges(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		tty       bool
+		wantCalls string
+	}{
+		{"tui", nil, true, "initApp tui"},
+		{"tui without tty", nil, false, "initApp tui"},
+		{"doctor", []string{"doctor"}, true, "initApp doctor"},
+		{"status", []string{"status"}, false, "initApp status"},
+		{"hook", []string{"hook", "Stop"}, false, "hook"},
+		{"init keeps always", []string{"init"}, true, "initApp init"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			root, dir := gateRoot(t)
+			var calls []string
+			e, _, stderr := fakeEnv(dir, tt.tty, true, &calls)
+			e.ask = func(string) (bool, bool, error) {
+				calls = append(calls, "ask")
+				return true, true, nil
+			}
+			e.isTTY = true
+			run(nil, e) // trust it always through the dialog
+			e.isTTY = tt.tty
+			if err := os.WriteFile(filepath.Join(dir, config.ProjectFile), []byte("# changed\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			calls = nil
+			if code := run(tt.args, e); code != 0 {
+				t.Errorf("exit code = %d, want 0 (stderr %q)", code, stderr.String())
+			}
+			if got := strings.Join(calls, " "); got != tt.wantCalls {
+				t.Errorf("calls = %q, want %q", got, tt.wantCalls)
+			}
+			if ok, err := trust.IsTrusted(root, "other"); err != nil || !ok {
+				t.Errorf("always trusted = %v (err %v), want true", ok, err)
+			}
+		})
+	}
+}
+
+func TestRunUntrust(t *testing.T) {
+	tests := []struct {
+		name       string
+		stored     string // trust.json entry for the root: "" none, "hash", "always", "corrupt" (the file is broken)
+		tty        bool
+		wantCode   int
+		wantStdout string
+		wantStderr string // substring; "" = stderr must be empty
+	}{
+		{"hash entry", "hash", true, 0, "%ROOT% is no longer trusted\n", ""},
+		{"always entry", "always", true, 0, "%ROOT% is no longer trusted\n", ""},
+		{"hash entry, no tty", "hash", false, 0, "%ROOT% is no longer trusted\n", ""},
+		{"always entry, no tty", "always", false, 0, "%ROOT% is no longer trusted\n", ""},
+		{"no entry", "", true, 0, "%ROOT% was not trusted\n", ""},
+		{"no entry, no tty", "", false, 0, "%ROOT% was not trusted\n", ""},
+		{"corrupt store", "corrupt", false, 1, "", "trust.json"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := t.TempDir()
+			t.Setenv("XDG_STATE_HOME", state)
+			store := filepath.Join(state, "lanes", "trust.json")
+			root, dir := gateRoot(t)
+			hash, _ := trust.HashRoot(root)
+			switch tt.stored {
+			case "hash":
+				if err := trust.Trust(root, hash); err != nil {
+					t.Fatal(err)
+				}
+			case "always":
+				if err := trust.TrustAlways(root); err != nil {
+					t.Fatal(err)
+				}
+			case "corrupt":
+				if err := os.MkdirAll(filepath.Dir(store), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(store, []byte("{broken"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var calls []string
+			e, stdout, stderr := fakeEnv(dir, tt.tty, true, &calls)
+			if code := run([]string{"--untrust"}, e); code != tt.wantCode {
+				t.Errorf("exit code = %d, want %d", code, tt.wantCode)
+			}
+			if len(calls) > 0 {
+				t.Errorf("calls = %q, want none: no dialog, no git, no config", calls)
+			}
+			if want := strings.ReplaceAll(tt.wantStdout, "%ROOT%", root); stdout.String() != want {
+				t.Errorf("stdout = %q, want %q", stdout.String(), want)
+			}
+			if tt.wantStderr == "" && stderr.Len() > 0 || !strings.Contains(stderr.String(), tt.wantStderr) {
+				t.Errorf("stderr = %q, want %q", stderr.String(), tt.wantStderr)
+			}
+			if tt.stored == "corrupt" {
+				if b, _ := os.ReadFile(store); string(b) != "{broken" {
+					t.Errorf("trust.json was rewritten: %q", b)
+				}
+				return
+			}
+			if ok, err := trust.IsTrusted(root, hash); err != nil || ok {
+				t.Errorf("trusted after untrust = %v (err %v), want false", ok, err)
+			}
+			calls = nil
+			e.isTTY = true
+			run(nil, e)
+			if len(calls) == 0 || calls[0] != "ask" {
+				t.Errorf("the next start ran %q, want the dialog first", calls)
 			}
 		})
 	}

@@ -365,7 +365,7 @@ func (m *Model) clamp() {
 }
 
 func (m *Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{tick(), m.pollSessions()}
+	cmds := []tea.Cmd{tick(), m.pollSessions(), m.updateCheck()}
 	for name := range m.providers {
 		cmds = append(cmds, m.fetch(name))
 	}

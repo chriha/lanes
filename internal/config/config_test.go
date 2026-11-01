@@ -61,6 +61,7 @@ info = "#cccccc"
 [settings]
 preview = false
 claude_dir = "~/.claude-personal"
+no_update_check = true
 [[view]]
 name = "b"
 provider = "gl"
@@ -95,7 +96,7 @@ warn = "#eeeeee"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Settings.PollInterval != "45s" || c.Settings.Preview || c.Settings.ClaudeDir != "~/.claude-personal" {
+	if c.Settings.PollInterval != "45s" || c.Settings.Preview || c.Settings.ClaudeDir != "~/.claude-personal" || !c.Settings.NoUpdateCheck {
 		t.Errorf("settings should merge per field: %+v", c.Settings)
 	}
 	if got := len(c.View); got != 3 || c.View[1].Filter != "draft" || c.View[2].Name != "c" {

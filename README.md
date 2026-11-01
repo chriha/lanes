@@ -26,6 +26,7 @@ you what each session is doing (running, working, asking a question, waiting for
 - [Features](#features)
 - [Requirements](#requirements)
 - [Install](#install)
+  - [Updates](#updates)
 - [Quick start](#quick-start)
 - [Using lanes](#using-lanes)
   - [Views](#views)
@@ -149,6 +150,15 @@ make build           # ./bin/lanes
 make install         # into $GOPATH/bin
 lanes --version
 ```
+
+### Updates
+
+At most once a day, `lanes` asks GitHub in the background whether a newer release exists. If so, the footer shows
+`lanes vX.Y.Z available` with the command that fits how you installed it (`brew upgrade lanes`, `go install
+github.com/chriha/lanes@latest`, or the releases page). `lanes version` prints the same hint from the last check,
+without asking the network; it needs a trusted project, since the result is cached per project. A failed check stays
+silent and is retried at the next start. `lanes` never replaces its own binary. Turn the check off with
+`no_update_check = true` under `[settings]`. Builds without a release version (`dev`) never check.
 
 ## Quick start
 
@@ -930,6 +940,7 @@ poll_interval = "30s"   # how often lists refresh (minimum 5s)
 poll_interval_blurred = "5m"  # how often lists refresh while the terminal is unfocused (never below poll_interval)
 preview       = false   # open the preview pane at startup
 no_notify     = false   # disable desktop notifications
+no_update_check = false # never check GitHub for a newer lanes release (see Updates under Install)
 claude_dir    = "~/.claude"   # show this Claude profile's usage in the footer (see Claude Code integration)
 
 [provider.<name>]
@@ -1019,7 +1030,7 @@ on reload, and `lanes doctor` reports a failing `config` line.
 | Item notes                             | `~/.local/state/lanes/<project>/notes.json`             |
 | Snoozed items                          | `~/.local/state/lanes/<project>/snoozes.json`           |
 | Session status files, tmux config      | `~/.local/state/lanes/<project>/`                       |
-| Cached lists                           | `~/.cache/lanes/<project>/`                             |
+| Cached lists, last update check        | `~/.cache/lanes/<project>/`                             |
 
 `<project>` is the git root's directory name plus a short hash of its path (for example `payments-3fa9c1`), so
 two projects never share history, views or sessions. The `$XDG_*` variables are honoured.

@@ -114,10 +114,6 @@ func run(args []string, e env) int {
 	if len(args) > 0 {
 		cmd = args[0]
 	}
-	if cmd == "--version" || cmd == "version" {
-		fmt.Fprintln(e.stdout, app.Name, e.version)
-		return 0
-	}
 	if cmd == "--untrust" { // lowering trust is safe: no terminal needed, and nothing of the project runs
 		return untrust(e)
 	}
@@ -129,6 +125,13 @@ func run(args []string, e env) int {
 		trusted, err = trust.IsTrusted(root, hash)
 	}
 	switch cmd {
+	case "version", "--version": // never prompts; the update hint reads the project's cache, so only when trusted
+		fmt.Fprintln(e.stdout, app.Name, e.version)
+		if trusted {
+			e.initApp(e.wd)
+			printUpdateHint(e)
+		}
+		return 0
 	case "hook": // called by Claude inside sessions: never prompts, does nothing untrusted
 		if trusted {
 			e.hook(args[1])
@@ -183,6 +186,16 @@ func run(args []string, e env) int {
 		return code
 	}
 	return e.tui(e.updates(), e.upgrade())
+}
+
+// printUpdateHint prints the newer release the last check found, from the cache only: it never asks the network.
+func printUpdateHint(e env) {
+	if e.updateOff() {
+		return
+	}
+	if tag, newer := e.updates().Cached(); newer {
+		fmt.Fprintf(e.stdout, "%s available · %s\n", tag, e.upgrade())
+	}
 }
 
 // untrust removes the cwd root's trust entry, hash or always, so the next start asks again.

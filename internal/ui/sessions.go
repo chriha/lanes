@@ -94,6 +94,10 @@ func (m *Model) keySessions(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.sessCursor < len(m.sessions) {
 			return m, m.interruptSessions(m.sessions[m.sessCursor : m.sessCursor+1])
 		}
+	case "A":
+		if m.sessCursor < len(m.sessions) {
+			return m, m.agentsOfSession(m.sessions[m.sessCursor])
+		}
 	}
 	m.restoreSessCursor("")
 	return m, nil
@@ -154,7 +158,7 @@ func (m *Model) sessionsView() string {
 	case m.notice != "":
 		b.WriteString(m.level.style().Render(" " + strings.SplitN(m.notice, "\n", 2)[0]))
 	default:
-		b.WriteString(sDim.Render(" j/k move · enter jump · x close · q back"))
+		b.WriteString(sDim.Render(" j/k move · enter jump · A agents · x close · q back"))
 	}
 	return b.String()
 }

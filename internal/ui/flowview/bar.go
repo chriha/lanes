@@ -26,3 +26,9 @@ func (c *Canvas) Bar(x, y, w int, v float64, phase int, fill, track Role) {
 		}
 	}
 }
+
+// effortMeter is the 4-cell meter of an effort level: low ▮▯▯▯, medium ▮▮▯▯, high ▮▮▮▯, xhigh and max ▮▮▮▮; ""
+// for an unknown level.
+func effortMeter(level string) string {
+	return ""
+}

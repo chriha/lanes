@@ -132,3 +132,8 @@ func fmtCount(n int) string {
 	}
 	return fmt.Sprintf("%.1fM", float64(n)/1e6)
 }
+
+// fmtThousands is n with thousands separators: 1,234,567.
+func fmtThousands(n int) string {
+	return ""
+}

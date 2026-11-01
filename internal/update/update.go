@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -24,6 +25,9 @@ const Interval = 24 * time.Hour
 
 // Timeout bounds one request to GitHub.
 const Timeout = 5 * time.Second
+
+// maxBody caps how much of GitHub's answer is read; a release is a few KiB.
+const maxBody = 1 << 20
 
 // repo is the GitHub repository releases come from.
 var repo = "chriha/" + app.Name
@@ -52,8 +56,9 @@ type state struct {
 
 // Latest returns the newest release tag and whether it is newer than Current. The network is asked only when
 // the cache is missing, unreadable or older than Interval; otherwise the cached tag is used. A failed fetch
-// returns an error, no tag, and leaves the cache untouched so the next start tries again. A non-semver Current
-// never fetches and returns no tag and no error.
+// returns an error, no tag, and leaves the cache untouched so the next start tries again. When only saving the
+// cache fails, the tag and newer are still valid and the error says the next start will ask again. A
+// non-semver Current never fetches and returns no tag and no error.
 func (c Checker) Latest(ctx context.Context) (string, bool, error) {
 	if !valid(c.Current) {
 		return "", false, nil
@@ -139,7 +144,7 @@ func fetchFrom(ctx context.Context, client *http.Client, url string) (string, er
 	var rel struct {
 		TagName string `json:"tag_name"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&rel); err != nil {
 		return "", fmt.Errorf("latest release: %w", err)
 	}
 	if rel.TagName == "" {
@@ -200,7 +205,7 @@ func parse(s string) (version, bool) {
 	if hasPre {
 		v.pre = strings.Split(pre, ".")
 		for _, id := range v.pre {
-			if id == "" {
+			if !identifier(id) {
 				return v, false
 			}
 		}
@@ -213,9 +218,22 @@ func valid(s string) bool {
 	return ok
 }
 
-// number parses a non-negative decimal of digits only (no sign, no spaces).
+// identifier reports whether id is a valid prerelease identifier: [0-9A-Za-z-]+, numeric ones without
+// leading zeros.
+func identifier(id string) bool {
+	if id == "" || strings.Trim(id, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-") != "" {
+		return false
+	}
+	if strings.Trim(id, "0123456789") == "" {
+		_, ok := number(id)
+		return ok
+	}
+	return true
+}
+
+// number parses a non-negative decimal of digits only: no sign, no spaces, no leading zeros.
 func number(s string) (int, bool) {
-	if s == "" || strings.Trim(s, "0123456789") != "" {
+	if s == "" || strings.Trim(s, "0123456789") != "" || (len(s) > 1 && s[0] == '0') {
 		return 0, false
 	}
 	n, err := strconv.Atoi(s)

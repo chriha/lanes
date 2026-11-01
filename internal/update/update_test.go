@@ -43,6 +43,13 @@ func TestNewer(t *testing.T) {
 		{"v-1.0.0", "v0.9.0", false},
 		{"v1.0.0-", "v0.9.0", false},
 		{"v1.0.0-rc..1", "v0.9.0", false},
+		{"v01.0.0", "v0.9.0", false}, // leading zeros
+		{"v1.00.0", "v0.9.0", false},
+		{"v1.0.0-01", "v0.9.0", false},
+		{"v1.0.0-rc_1", "v0.9.0", false}, // outside [0-9A-Za-z-]
+		{"v1.0.0-rcé", "v0.9.0", false},
+		{"v1.0.0-0", "v0.9.0", true}, // zero itself is fine
+		{"v1.0.0-x-y.0a", "v0.9.0", true},
 		{"", "", false},
 	}
 	for _, tt := range tests {

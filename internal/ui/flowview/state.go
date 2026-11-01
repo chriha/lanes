@@ -43,12 +43,15 @@ type toolShare struct {
 	Share float64
 }
 
-// topTools returns the lead's n most called tools, most calls first, ties by name.
+// topTools returns the lead's n most called tools, most calls first, ties by name. Shares are of the calls per
+// tool, not of Calls, which the animation eases.
 func (s State) topTools(n int) []toolShare {
 	lead := s.Snap.Lead
 	names := make([]string, 0, len(lead.ToolCalls))
-	for name := range lead.ToolCalls {
+	total := 0
+	for name, k := range lead.ToolCalls {
 		names = append(names, name)
+		total += k
 	}
 	sort.Slice(names, func(i, j int) bool {
 		a, b := lead.ToolCalls[names[i]], lead.ToolCalls[names[j]]
@@ -56,7 +59,7 @@ func (s State) topTools(n int) []toolShare {
 	})
 	var out []toolShare
 	for _, name := range names[:min(n, len(names))] {
-		out = append(out, toolShare{name, float64(lead.ToolCalls[name]) / float64(max(lead.Calls, 1))})
+		out = append(out, toolShare{name, float64(lead.ToolCalls[name]) / float64(max(total, 1))})
 	}
 	return out
 }

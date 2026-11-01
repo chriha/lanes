@@ -52,6 +52,14 @@ var fixtureLead = Lead{
 	ToolCalls: map[string]int{"Read": 1, "Agent": 2, "Bash": 1},
 	Tokens:    298,
 	LastText:  "Waiting for the agents.",
+
+	Effort:       "medium",
+	Ctx:          1,
+	TokensIn:     22,
+	TokensOut:    56,
+	TokensCache:  15820,
+	AdvisorModel: "claude-opus-5-5",
+	AdvisorCalls: 1,
 }
 
 func TestTailerFixture(t *testing.T) {
@@ -65,11 +73,21 @@ func TestTailerFixture(t *testing.T) {
 			{ID: "a2", Depth: 1, Name: "Explore", Type: "Explore", Model: "haiku", Task: "Find callers",
 				Status: AgentError, Ctx: -1},
 			{ID: "a1", Depth: 1, Name: "implementer", Type: "general-purpose", Model: "claude-opus-5-5",
-				Task: "Implement ticket 7", Status: AgentRunning, Start: at("00:05"), Tool: "Grep", ToolArg: "func Poll", Ctx: 5},
+				Task: "Implement ticket 7", Status: AgentRunning, Start: at("00:05"), Tool: "Grep", ToolArg: "func Poll", Ctx: 5,
+				Effort: "low"},
 			{ID: "b1", Parent: "a1", Depth: 2, Name: "reviewer", Type: "general-purpose", Model: "claude-sonnet-5-5[1m]",
-				Task: "Review the diff", Status: AgentDone, Start: at("00:08"), End: at("00:14"), Ctx: 25},
+				Task: "Review the diff", Status: AgentDone, Start: at("00:08"), End: at("00:14"), Ctx: 25, Effort: "xhigh"},
 			{ID: "c1", Depth: 1, Name: "verifier", Model: "claude-haiku-5-5", Status: AgentRunning, Start: at("00:20"), Ctx: 0},
 		},
+		ToolTimes: []time.Time{at("00:03"), at("00:05"), at("00:05"), at("00:06"), at("00:06"), at("00:06"),
+			at("00:06.5"), at("00:07"), at("00:09"), at("00:10"), at("00:10"), at("00:11"), at("00:20")},
+		Files: []string{"design.md", "x.go", "a.go", "n.ipynb"},
+	}
+	if !reflect.DeepEqual(got.ToolTimes, want.ToolTimes) {
+		t.Errorf("tool times =\n%v\nwant\n%v", got.ToolTimes, want.ToolTimes)
+	}
+	if !reflect.DeepEqual(got.Files, want.Files) {
+		t.Errorf("files = %q, want %q", got.Files, want.Files)
 	}
 	if !reflect.DeepEqual(got.Lead, want.Lead) {
 		t.Errorf("lead =\n%+v\nwant\n%+v", got.Lead, want.Lead)
@@ -384,6 +402,172 @@ func TestCtxPercent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := ctxPercent(tt.tokens, tt.model); got != tt.want {
 				t.Errorf("ctxPercent(%d, %q) = %d, want %d", tt.tokens, tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTailerLeadDashboardFields(t *testing.T) {
+	const (
+		bare     = `{"type":"assistant","message":{"id":"m1","content":[{"type":"text","text":"hi"}]}}`
+		high     = `{"type":"assistant","effort":"high","message":{"id":"m1","usage":{"input_tokens":10,"output_tokens":20}}}`
+		low      = `{"type":"assistant","effort":"low","perTurnEffort":"low","message":{"id":"m2"}}`
+		noEffort = `{"type":"assistant","message":{"id":"m3"}}`
+		use1     = `{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":1,"output_tokens":2,"cache_read_input_tokens":5,"cache_creation_input_tokens":3}}}`
+		use1b    = `{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":1,"output_tokens":50,"cache_read_input_tokens":5,"cache_creation_input_tokens":3}}}`
+		use2     = `{"type":"assistant","message":{"id":"m2","usage":{"input_tokens":4,"output_tokens":1,"cache_read_input_tokens":100000,"cache_creation_input_tokens":0}}}`
+		adv1     = `{"type":"assistant","advisorModel":"claude-opus-5-5","message":{"id":"m1","content":[{"type":"server_tool_use","id":"s1","name":"advisor","input":{}}]}}`
+		adv2     = `{"type":"assistant","advisorModel":"claude-opus-5-6","message":{"id":"m2","content":[{"type":"server_tool_use","id":"s2","name":"advisor","input":{}},{"type":"server_tool_use","id":"s3","name":"web_search","input":{}}]}}`
+		advNone  = `{"type":"assistant","message":{"id":"m3","content":[{"type":"text","text":"done"}]}}`
+		synth    = `{"type":"assistant","effort":"max","advisorModel":"x","message":{"id":"syn","model":"<synthetic>","usage":{"input_tokens":9}}}`
+	)
+	type fields struct {
+		effort                string
+		ctx, in, out, cache   int
+		advisor               string
+		advisorCalls, outTool int
+	}
+	tests := []struct {
+		name  string
+		lines []string
+		want  fields
+	}{
+		{"lines without the fields", []string{bare}, fields{ctx: -1}},
+		{"effort of the newest message wins", []string{high, low}, fields{effort: "low", ctx: -1, in: 10, out: 20}},
+		{"a message without effort keeps the last one", []string{high, noEffort}, fields{effort: "high", ctx: -1, in: 10, out: 20}},
+		{"token split: later usage of a message replaces the earlier", []string{use1, use1b}, fields{ctx: 0, in: 1, out: 50, cache: 8}},
+		{"token split sums messages; ctx of the newest", []string{use1, use2}, fields{ctx: 50, in: 5, out: 3, cache: 100008}},
+		{"advisor model newest, calls counted", []string{adv1, adv2, advNone}, fields{ctx: -1, advisor: "claude-opus-5-6", advisorCalls: 2}},
+		{"synthetic messages are ignored", []string{bare, synth}, fields{ctx: -1}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "s.jsonl")
+			l := pollLines(t, NewTailer(path), path, tt.lines...).Lead
+			got := fields{l.Effort, l.Ctx, l.TokensIn, l.TokensOut, l.TokensCache, l.AdvisorModel, l.AdvisorCalls, l.Calls}
+			if got != tt.want {
+				t.Errorf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+// writeSession writes the lead's transcript lines and each agent's transcript lines under dir and returns the
+// lead's path.
+func writeSession(t *testing.T, dir string, lead []string, agents map[string][]string) string {
+	t.Helper()
+	join := func(lines []string) []byte {
+		var b []byte
+		for _, l := range lines {
+			b = append(b, l+"\n"...)
+		}
+		return b
+	}
+	path := filepath.Join(dir, "s.jsonl")
+	if err := os.WriteFile(path, join(lead), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(dir, "s", "subagents")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for id, lines := range agents {
+		if err := os.WriteFile(filepath.Join(sub, "agent-"+id+".jsonl"), join(lines), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return path
+}
+
+// toolLine is an assistant line at 10:<ts> with one tool call; ts "" leaves the timestamp out.
+func toolLine(ts, name, input string) string {
+	stamp := ""
+	if ts != "" {
+		stamp = `"timestamp":"2026-11-01T10:` + ts + `Z",`
+	}
+	return `{"type":"assistant",` + stamp + `"message":{"id":"` + name + ts + `","content":[{"type":"tool_use","id":"t` + ts +
+		`","name":"` + name + `","input":` + input + `}]}}`
+}
+
+func TestTailerToolTimes(t *testing.T) {
+	text := func(ts string) string {
+		return `{"type":"assistant","timestamp":"2026-11-01T10:` + ts + `Z","message":{"id":"x` + ts + `","content":[{"type":"text","text":"hi"}]}}`
+	}
+	tests := []struct {
+		name   string
+		lead   []string
+		agents map[string][]string
+		want   []time.Time
+	}{
+		{"none", []string{text("00:00")}, nil, nil},
+		{"older than the window before the newest line dropped, the boundary kept",
+			[]string{toolLine("00:00", "Read", `{}`), toolLine("05:00", "Read", `{}`), toolLine("20:00", "Bash", `{}`)}, nil,
+			[]time.Time{at("05:00"), at("20:00")}},
+		{"a newer non-tool line moves the window",
+			[]string{toolLine("05:00", "Read", `{}`), toolLine("10:00", "Read", `{}`), text("21:00")}, nil,
+			[]time.Time{at("10:00")}},
+		{"agents' calls merged in order; an agent's newer line moves the window",
+			[]string{toolLine("00:00", "Read", `{}`), toolLine("12:00", "Read", `{}`)},
+			map[string][]string{"a": {toolLine("11:00", "Grep", `{}`), text("26:00")}},
+			[]time.Time{at("11:00"), at("12:00")}},
+		{"a call without a timestamp is left out",
+			[]string{toolLine("", "Read", `{}`), toolLine("01:00", "Read", `{}`)}, nil,
+			[]time.Time{at("01:00")}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewTailer(writeSession(t, t.TempDir(), tt.lead, tt.agents)).Poll()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got.ToolTimes, tt.want) {
+				t.Errorf("tool times = %v, want %v", got.ToolTimes, tt.want)
+			}
+		})
+	}
+}
+
+func TestTailerFiles(t *testing.T) {
+	path := func(p string) string { return `{"file_path":"` + p + `"}` }
+	tests := []struct {
+		name   string
+		lead   []string
+		agents map[string][]string
+		want   []string
+	}{
+		{"none", []string{toolLine("00:00", "Read", path("/a/r.go"))}, nil, nil},
+		{"Edit, Write and NotebookEdit, newest first, base names",
+			[]string{toolLine("00:01", "Edit", path("/a/e.go")), toolLine("00:02", "Write", path("/a/w.go")),
+				toolLine("00:03", "NotebookEdit", `{"notebook_path":"/a/n.ipynb"}`), toolLine("00:04", "Read", path("/a/r.go"))}, nil,
+			[]string{"n.ipynb", "w.go", "e.go"}},
+		{"a file touched again moves to the front, once",
+			[]string{toolLine("00:01", "Edit", path("/a/e.go")), toolLine("00:02", "Write", path("/a/w.go")),
+				toolLine("00:03", "Edit", path("/a/e.go"))}, nil,
+			[]string{"e.go", "w.go"}},
+		{"at most four",
+			[]string{toolLine("00:01", "Edit", path("/a/1.go")), toolLine("00:02", "Edit", path("/a/2.go")),
+				toolLine("00:03", "Edit", path("/a/3.go")), toolLine("00:04", "Edit", path("/a/4.go")),
+				toolLine("00:05", "Edit", path("/a/5.go"))}, nil,
+			[]string{"5.go", "4.go", "3.go", "2.go"}},
+		{"lead and agents merged by time",
+			[]string{toolLine("00:01", "Edit", path("/a/lead1.go")), toolLine("00:04", "Edit", path("/a/lead4.go"))},
+			map[string][]string{
+				"a": {toolLine("00:02", "Write", path("/a/a2.go")), toolLine("00:05", "Edit", path("/a/a5.go"))},
+				"b": {toolLine("00:03", "Edit", path("/a/lead1.go"))},
+			},
+			[]string{"a5.go", "lead4.go", "lead1.go", "a2.go"}},
+		{"calls without a path are left out",
+			[]string{toolLine("00:01", "Edit", `{}`), toolLine("00:02", "Write", path("  ")), toolLine("00:03", "Edit", `"bad"`)}, nil,
+			nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewTailer(writeSession(t, t.TempDir(), tt.lead, tt.agents)).Poll()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got.Files, tt.want) {
+				t.Errorf("files = %q, want %q", got.Files, tt.want)
 			}
 		})
 	}

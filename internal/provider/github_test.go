@@ -14,7 +14,8 @@ import (
 )
 
 // A trimmed `gh api graphql` response: one approved PR with an open thread by me and failing CI, one draft PR
-// approved only through a review, behind its target and in conflict, with pending checks.
+// approved only through a review, behind its target and in conflict, with pending checks. The first closes an
+// issue of its own repository (#5), one of another repository (#9) and one of its repository spelled in other case (#7).
 const ghResponse = `{"data":{"viewer":{"login":"me"},"repository":{"pullRequests":{"nodes":[
 {"number":12,"title":"ABC-7 add thing","url":"https://github.com/o/r/pull/12","isDraft":false,
  "headRefName":"feature/abc-7","baseRefName":"main","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN",
@@ -26,7 +27,11 @@ const ghResponse = `{"data":{"viewer":{"login":"me"},"repository":{"pullRequests
  "commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"FAILURE"}}}]},
  "reviewThreads":{"nodes":[
    {"id":"T1","isResolved":false},
-   {"id":"T2","isResolved":true}]}},
+   {"id":"T2","isResolved":true}]},
+ "closingIssuesReferences":{"nodes":[
+   {"number":5,"repository":{"nameWithOwner":"o/r"}},
+   {"number":9,"repository":{"nameWithOwner":"other/r"}},
+   {"number":7,"repository":{"nameWithOwner":"O/R"}}]}},
 {"number":13,"title":"wip","url":"https://github.com/o/r/pull/13","isDraft":true,
  "headRefName":"wip","baseRefName":"main","mergeable":"CONFLICTING","mergeStateStatus":"BEHIND",
  "reviewDecision":null,"author":{"login":"me"},
@@ -185,7 +190,7 @@ func TestGitHubFetch(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(args, " ")
-	for _, want := range []string{"api graphql", "owner=o", "name=r", "states:OPEN"} {
+	for _, want := range []string{"api graphql", "owner=o", "name=r", "states:OPEN", "closingIssuesReferences(first:10)"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("gh args %q missing %q", joined, want)
 		}
@@ -203,6 +208,7 @@ func TestGitHubFetch(t *testing.T) {
 		"approved_by_me": true, "open_threads": 1, "open_thread_by_me": true, "ci": "failed", "conflicts": false,
 		"diverged": false, "reviewers": []string{"sam", "me", "kim"}, "assignees": []string{"alex"},
 		"branch": "feature/abc-7", "target": "main", "ticket": "ABC-7", "number": 12, "kind": "pr",
+		"closes": []string{"#5", "#7"},
 	}
 	if !reflect.DeepEqual(a.Fields, wantFields) {
 		t.Errorf("item 0 fields:\n got %#v\nwant %#v", a.Fields, wantFields)
@@ -218,7 +224,7 @@ func TestGitHubFetch(t *testing.T) {
 	}
 	for k, want := range map[string]any{
 		"approved": true, "approved_by": []string{"kim"}, "approved_by_me": false, "ci": "running",
-		"conflicts": true, "diverged": true, "open_threads": 0, "open_thread_by_me": false,
+		"conflicts": true, "diverged": true, "open_threads": 0, "open_thread_by_me": false, "closes": []string{},
 	} {
 		if !reflect.DeepEqual(b.Fields[k], want) {
 			t.Errorf("item 1 %s = %#v, want %#v", k, b.Fields[k], want)

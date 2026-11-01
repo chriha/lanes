@@ -43,6 +43,7 @@ const ghQuery = `query($owner:String!,$name:String!){
     latestReviews(first:50){nodes{state author{login}}}
     commits(last:1){nodes{commit{statusCheckRollup{state}}}}
     reviewThreads(first:100){nodes{id isResolved}}
+    closingIssuesReferences(first:10){nodes{number repository{nameWithOwner}}}
   }}}
 }`
 
@@ -72,6 +73,10 @@ type ghPR struct {
 	ReviewThreads nodes[struct {
 		ID         string
 		IsResolved bool
+	}]
+	ClosingIssuesReferences nodes[struct {
+		Number     int
+		Repository struct{ NameWithOwner string }
 	}]
 }
 
@@ -104,6 +109,7 @@ func (g *GitHub) Fetch(ctx context.Context) ([]item.Item, error) {
 	authors := g.threadAuthors(ctx, prs)
 	for _, pr := range prs {
 		it := ghToItem(pr, me, authors)
+		it.Fields["closes"] = ghCloses(pr, g.Project)
 		for _, t := range pr.ReviewThreads.Nodes {
 			if _, ok := authors[t.ID]; !t.IsResolved && !ok {
 				it.Pending = []string{"open_thread_by_me"} // inherit the previous value, like gitlab's Quick
@@ -203,6 +209,18 @@ func ghGraphQL(ctx context.Context, typ string, project *string, run func(contex
 		return out, fmt.Errorf("gh: %w", err) // out: gh prints a GraphQL error response to stdout before exiting 1
 	}
 	return out, nil
+}
+
+// ghCloses returns the issues pr closes in project (owner/repo) as "#n"; issues of other repositories are left
+// out, since their numbers would not match the project's tickets.
+func ghCloses(pr ghPR, project string) []string {
+	closes := []string{}
+	for _, is := range pr.ClosingIssuesReferences.Nodes {
+		if strings.EqualFold(is.Repository.NameWithOwner, project) {
+			closes = append(closes, "#"+strconv.Itoa(is.Number))
+		}
+	}
+	return closes
 }
 
 // ghToItem maps a PR onto gitlab's MR shape so both providers share fields and badges.

@@ -2,7 +2,7 @@ package provider
 
 import "slices"
 
-// prFields are the keys of a merge/pull request item (toItem); gitlab adds iid, github number.
+// prFields are the keys of a merge/pull request item (toItem); gitlab adds iid, github closes and number.
 var prFields = []string{"approved", "approved_by", "approved_by_me", "assignees", "branch", "ci", "conflicts", "diverged",
 	"kind", "labels", "me", "open_thread_by_me", "open_threads", "reviewers", "target", "ticket"}
 
@@ -18,7 +18,7 @@ func Fields(typ string) []string {
 	case "gitlab":
 		keys = append(slices.Clone(prFields), "iid")
 	case "github":
-		keys = append(slices.Clone(prFields), "number")
+		keys = append(slices.Clone(prFields), "closes", "number")
 	case "github-issues":
 		keys = append(slices.Clone(ticketFields), "number")
 	case "linear":

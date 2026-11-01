@@ -7,16 +7,21 @@ import (
 	"github.com/chriha/lanes/internal/session"
 )
 
-// treePaths returns each node's connector from its parent; the lead's connectors start below root.
-func treePaths(nodes []Node, root Rect) [][]Point {
+// treePaths returns each node's connector from its parent; the lead's connectors start below root. Connectors
+// stay inside area.
+func treePaths(nodes []Node, root, area Rect) [][]Point {
 	below := func(r Rect) Point { return Point{r.X + r.W/2, r.Y + r.H} }
 	paths := make([][]Point, len(nodes))
+	boxes := make([]Rect, len(nodes))
+	for i, n := range nodes {
+		boxes[i] = n.Rect
+	}
 	for i, n := range nodes {
 		from := below(root)
 		if n.Parent >= 0 {
 			from = below(nodes[n.Parent].Rect)
 		}
-		paths[i] = elbow(from, Point{n.Rect.X + n.Rect.W/2, n.Rect.Y - 1})
+		paths[i] = route(from, Point{n.Rect.X + n.Rect.W/2, n.Rect.Y - 1}, boxes, area)
 	}
 	return paths
 }
@@ -28,8 +33,8 @@ func (s State) drawTree(c *Canvas, l Layout) ([]Node, [][]Point) {
 		root = l.Tools
 		c.drawPaths([][]Point{elbow(Point{l.Lead.X + l.Lead.W/2, l.Lead.Y + l.Lead.H}, Point{l.Tools.X + l.Tools.W/2, l.Tools.Y - 1})}, RoleDim)
 	}
-	nodes := layoutTree(s.Snap.Agents, l.Tree, l.Box)
-	paths := treePaths(nodes, root)
+	nodes := layoutTree(s.Snap.Agents, l.Tree, l.Box, l.Gap)
+	paths := treePaths(nodes, root, l.Tree)
 	c.drawPaths(paths, RoleDim)
 	for _, n := range nodes {
 		if n.Agent < 0 {

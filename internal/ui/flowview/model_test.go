@@ -2,6 +2,7 @@ package flowview
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,6 +63,13 @@ func TestViewGolden(t *testing.T) {
 	})
 	ended := fixtureState()
 	ended.Ended = true
+	wide := fixtureState() // ten agents at depth 1 wrap into a second line; a3 hangs below it
+	for i := 0; i < 8; i++ {
+		wide.Snap.Agents = append(wide.Snap.Agents, session.Agent{
+			ID: fmt.Sprintf("w%d", i), Name: fmt.Sprintf("worker-%d", i), Model: "claude-haiku-4-5", Task: "scan a package",
+			Start: wide.Now.Add(-time.Minute), Tool: "Read", Ctx: 10 + i,
+		})
+	}
 	tests := []struct {
 		name string
 		w, h int
@@ -69,6 +77,7 @@ func TestViewGolden(t *testing.T) {
 	}{
 		{"full", 90, 46, fixtureState()},
 		{"full_ended", 90, 46, ended},
+		{"full_wide", 200, 50, wide},
 		{"compact", 70, 30, fixtureState()},
 		{"too_small", 50, 20, fixtureState()},
 	}

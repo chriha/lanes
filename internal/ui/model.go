@@ -672,10 +672,17 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	m.notice = ""
 	s := k.String()
+	n := len(m.items())
+	if m.pendingG && s == "r" { // gr: the g prefix wins over a keymap binding for r
+		m.pendingG = false
+		if n > 0 {
+			return m, m.resume(m.items()[m.cursor])
+		}
+		return m, nil
+	}
 	if s != "g" {
 		m.pendingG = false
 	}
-	n := len(m.items())
 	switch s {
 	case "ctrl+c":
 		return m, tea.Quit
@@ -1192,6 +1199,7 @@ func (m *Model) helpLines() []string {
 		{"x", "close sessions of marked items / cursor item (after confirming)"},
 		{"X", "interrupt the running commands of marked items / cursor item; keeps output (again: SIGKILL)"},
 		{"t", "shell for the cursor item: jump into it (started, or restarted if finished)"},
+		{"gr", "resume the cursor item's newest finished Claude session (actions with resume)"},
 		{"i", "item history"},
 		{"N", "edit the item's note in $EDITOR (save empty to delete)"},
 		{"z", "snooze item(s): 2h, 3d, mon, 2026-11-03, empty = until it changes; on a snoozed one: unsnooze"},
@@ -1245,6 +1253,7 @@ func (m *Model) helpLines() []string {
 		{":snooze [when]", "snooze marked items / cursor item until when (empty: until it changes)"},
 		{":snoozed", "show / hide snoozed items (dimmed, marked z)"},
 		{":run <action>", "run an action by name"},
+		{":resume", "resume the cursor item's newest finished Claude session (same as gr)"},
 		{":sessions", "list every session (same as S)"},
 		{":prune [failed]", "kill every finished session (only failed ones)"},
 		{":refresh  :reload  :edit  :config  :quit", ""},

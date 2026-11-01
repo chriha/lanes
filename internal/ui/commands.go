@@ -109,6 +109,11 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 			m.say(lvInfo, "showing snoozed items")
 		}
 		m.rebuild()
+	case "resume":
+		if it := m.items(); m.cursor < len(it) {
+			return m, m.resume(it[m.cursor])
+		}
+		m.say(lvWarn, "no item to resume")
 	case "run":
 		act, ok := m.cfg.Action[arg]
 		if !ok {

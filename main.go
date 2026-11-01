@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"runtime/debug"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -13,6 +17,7 @@ import (
 	"github.com/chriha/lanes/internal/session"
 	"github.com/chriha/lanes/internal/trust"
 	"github.com/chriha/lanes/internal/ui"
+	"github.com/chriha/lanes/internal/update"
 )
 
 // version is set at build time: -ldflags "-X main.version=v1.0.0".
@@ -26,11 +31,15 @@ func main() {
 	wd, _ := os.Getwd()
 	os.Exit(run(os.Args[1:], env{
 		wd: wd, isTTY: stdinIsTerminal(), stdout: os.Stdout, stderr: os.Stderr,
-		ask:     ui.AskTrust,
-		initApp: app.Init,
-		hook:    session.RunHook,
-		status:  runStatus,
-		doctor:  func() int { return runDoctor(os.Stdout, realDoctorEnv()) },
+		version:   version,
+		fetch:     update.GitHub(),
+		upgrade:   upgradeCommand,
+		updateOff: updateOff,
+		ask:       ui.AskTrust,
+		initApp:   app.Init,
+		hook:      session.RunHook,
+		status:    runStatus,
+		doctor:    func() int { return runDoctor(os.Stdout, realDoctorEnv()) },
 		init: func() int {
 			return runInit(os.Stdin, stdinIsTerminal(), os.Stdout, os.Stderr, wd, provider.OriginForge)
 		},
@@ -38,17 +47,37 @@ func main() {
 	}))
 }
 
-func runTUI() int {
+func runTUI(updates update.Checker, upgrade string) int {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)
 		return 1
 	}
-	if _, err := tea.NewProgram(ui.New(cfg), tea.WithAltScreen(), tea.WithReportFocus()).Run(); err != nil {
+	m := ui.New(cfg, ui.WithUpdateCheck(updates, upgrade))
+	if _, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus()).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)
 		return 1
 	}
 	return 0
+}
+
+// upgradeCommand is the upgrade command for how the running binary was installed.
+func upgradeCommand() string {
+	exe, err := os.Executable()
+	if err != nil {
+		exe = "" // Hint falls back to the build info and then the releases page
+	} else if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved // a Homebrew binary is a symlink into its Cellar
+	}
+	bi, _ := debug.ReadBuildInfo() // nil without build info
+	return update.Hint(exe, bi)
+}
+
+// updateOff reports whether the config turns the release check off; a config that doesn't load turns it off too,
+// so `lanes version` stays quiet about it.
+func updateOff() bool {
+	cfg, err := config.Load()
+	return err != nil || cfg.Settings.NoUpdateCheck
 }
 
 // env holds what run touches, so tests can see that nothing reads the project before it is trusted.
@@ -56,13 +85,27 @@ type env struct {
 	wd             string
 	isTTY          bool
 	stdout, stderr io.Writer
+	version        string                                          // the running release, e.g. "v1.2.0"; "dev" never checks
+	fetch          func(ctx context.Context) (string, error)       // asks GitHub for the newest release tag
+	upgrade        func() string                                   // the upgrade command for how lanes was installed
+	updateOff      func() bool                                     // settings.no_update_check (loads the config)
 	ask            func(root string) (yes, always bool, err error) // the trust dialog
 	initApp        func(dir string)                                // app.Init: runs git in the project
 	hook           func(event string)
 	status         func()
 	doctor         func() int
-	init           func() int // writes .lanes.toml
-	tui            func() int // loads the config and runs the TUI
+	init           func() int                                       // writes .lanes.toml
+	tui            func(updates update.Checker, upgrade string) int // loads the config and runs the TUI
+}
+
+// updates is the release checker of the current project; call it after initApp, which scopes the cache dir.
+func (e env) updates() update.Checker {
+	return update.Checker{
+		Current:   e.version,
+		Fetch:     e.fetch,
+		Now:       time.Now,
+		CachePath: filepath.Join(app.CacheDir(), "update.json"),
+	}
 }
 
 // run dispatches args (os.Args[1:], already checked by usageError) and returns the exit code.
@@ -72,7 +115,7 @@ func run(args []string, e env) int {
 		cmd = args[0]
 	}
 	if cmd == "--version" || cmd == "version" {
-		fmt.Fprintln(e.stdout, app.Name, version)
+		fmt.Fprintln(e.stdout, app.Name, e.version)
 		return 0
 	}
 	if cmd == "--untrust" { // lowering trust is safe: no terminal needed, and nothing of the project runs
@@ -139,7 +182,7 @@ func run(args []string, e env) int {
 		}
 		return code
 	}
-	return e.tui()
+	return e.tui(e.updates(), e.upgrade())
 }
 
 // untrust removes the cwd root's trust entry, hash or always, so the next start asks again.

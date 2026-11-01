@@ -20,11 +20,12 @@ import (
 )
 
 type Settings struct {
-	PollInterval string `toml:"poll_interval"`
-	PollBlurred  string `toml:"poll_interval_blurred"` // poll interval while the terminal is unfocused
-	Preview      bool   `toml:"preview"`               // show the detail pane at startup (toggle with p)
-	NoNotify     bool   `toml:"no_notify"`
-	ClaudeDir    string `toml:"claude_dir"` // Claude config dir whose usage the footer shows, e.g. ~/.claude
+	PollInterval  string `toml:"poll_interval"`
+	PollBlurred   string `toml:"poll_interval_blurred"` // poll interval while the terminal is unfocused
+	Preview       bool   `toml:"preview"`               // show the detail pane at startup (toggle with p)
+	NoNotify      bool   `toml:"no_notify"`
+	NoUpdateCheck bool   `toml:"no_update_check"` // never ask GitHub whether a newer lanes release exists
+	ClaudeDir     string `toml:"claude_dir"`      // Claude config dir whose usage the footer shows, e.g. ~/.claude
 }
 
 // Colors are hex colors like "#A78BFA" overriding the default adaptive palette.

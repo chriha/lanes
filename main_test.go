@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/trust"
+	"github.com/chriha/lanes/internal/update"
 )
 
 func TestUsageError(t *testing.T) {
@@ -43,22 +46,30 @@ func TestUsageError(t *testing.T) {
 	}
 }
 
-// fakeEnv returns an env for dir whose steps append their name to calls; ask answers yes.
+// fakeEnv returns an env for dir whose steps append their name to calls; ask answers yes. The release fetch
+// fails, so a test that reaches the network sees "fetch" in calls.
 func fakeEnv(dir string, tty, yes bool, calls *[]string) (env, *bytes.Buffer, *bytes.Buffer) {
 	var stdout, stderr bytes.Buffer
 	rec := func(s string) { *calls = append(*calls, s) }
 	return env{
 		wd: dir, isTTY: tty, stdout: &stdout, stderr: &stderr,
-		ask:     func(string) (bool, bool, error) { rec("ask"); return yes, false, nil },
-		initApp: func(string) { rec("initApp") },
-		hook:    func(string) { rec("hook") },
-		status:  func() { rec("status") },
-		doctor:  func() int { rec("doctor"); return 0 },
+		version: "dev",
+		fetch: func(context.Context) (string, error) {
+			rec("fetch")
+			return "", errors.New("no network in tests")
+		},
+		upgrade:   func() string { return update.Brew },
+		updateOff: func() bool { return false },
+		ask:       func(string) (bool, bool, error) { rec("ask"); return yes, false, nil },
+		initApp:   func(string) { rec("initApp") },
+		hook:      func(string) { rec("hook") },
+		status:    func() { rec("status") },
+		doctor:    func() int { rec("doctor"); return 0 },
 		init: func() int {
 			rec("init")
 			return 0
 		},
-		tui: func() int { rec("tui"); return 0 },
+		tui: func(update.Checker, string) int { rec("tui"); return 0 },
 	}, &stdout, &stderr
 }
 

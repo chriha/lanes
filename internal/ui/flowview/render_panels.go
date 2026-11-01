@@ -55,13 +55,18 @@ func (c *Canvas) segs(x, y, w int, runs ...seg) int {
 	return x
 }
 
+// segsLen is the cells the runs take.
+func segsLen(runs []seg) int {
+	n := 0
+	for _, r := range runs {
+		n += runeLen(r.s)
+	}
+	return n
+}
+
 // centerSegs draws the runs centered in rect's inside on row y, cut to fit.
 func (c *Canvas) centerSegs(r Rect, y int, runs ...seg) {
-	n := 0
-	for _, run := range runs {
-		n += runeLen(run.s)
-	}
-	n = min(n, r.W-2)
+	n := min(segsLen(runs), r.W-2)
 	c.segs(r.X+(r.W-n)/2, y, n, runs...)
 }
 
@@ -198,7 +203,7 @@ func (s State) actorWidth() int {
 }
 
 // drawStatus draws the status line: an entry per model family of the agents in its color, the totals and whether
-// the session is live. Entries that don't fit whole are left out, from the end.
+// the session is live at the right end. Entries that don't fit whole before it are left out, from the end.
 func (s State) drawStatus(c *Canvas, l Layout) {
 	var entries [][]seg
 	for _, f := range s.familyStatuses() {
@@ -216,13 +221,11 @@ func (s State) drawStatus(c *Canvas, l Layout) {
 	if s.Ended {
 		state = seg{"■ ended", RoleBad}
 	}
-	entries = append(entries, []seg{state})
-	x, end := l.Frame.X+1, l.Frame.X+l.Frame.W-1
+	x, end := l.Frame.X+1, l.Frame.X+l.Frame.W-1-runeLen(state.s)
+	c.Text(end, l.Status, state.s, state.role)
+	end -= 2
 	for i, e := range entries {
-		n := 0
-		for _, run := range e {
-			n += runeLen(run.s)
-		}
+		n := segsLen(e)
 		if i > 0 {
 			x += 2
 		}

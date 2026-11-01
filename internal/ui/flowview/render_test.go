@@ -92,6 +92,23 @@ func TestAgentBox(t *testing.T) {
 	}
 }
 
+func TestAgentBoxOfAnEndedSessionIsDim(t *testing.T) {
+	a := session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: 42, Start: time.Now()}
+	for _, ended := range []bool{false, true} {
+		c := NewCanvas(28, 5, nil)
+		State{Ended: ended, Phase: 1}.drawAgent(c, Rect{0, 0, 28, 5}, a, true)
+		want := RoleOpus
+		if ended {
+			want = RoleDim
+		}
+		for _, p := range []Point{{0, 0}, {6, 2}} { // the border and the gauge's fill
+			if got := c.At(p.X, p.Y).Role; got != want {
+				t.Errorf("ended %v: cell %v role %d, want %d", ended, p, got, want)
+			}
+		}
+	}
+}
+
 func TestAgentBoxContextGauge(t *testing.T) {
 	tests := []struct {
 		name string
@@ -185,11 +202,11 @@ func TestStatusLine(t *testing.T) {
 		without []string
 	}{
 		{"live lists each family and the totals", 200, live,
-			[]string{"opus [1 running]  sonnet [1 running]  haiku [done]  agents [2/4]  tools [48]  tokens [1,234,567]  ● live"}, nil},
+			[]string{"opus [1 running]  sonnet [1 running]  haiku [done]  agents [2/4]  tools [48]  tokens [1,234,567]", "● live"}, nil},
 		{"ended reports no running agents", 200, ended,
 			[]string{"opus [stopped]", "sonnet [1 failed]", "haiku [done]", "agents [0/4]", "■ ended"}, []string{"running"}},
 		{"no agents, no families", 200, none, []string{"agents [0/0]  tools [48]"}, []string{"opus ["}},
-		{"entries that don't fit are left out whole", 90, live, []string{"agents [2/4]"}, []string{"…", "● live"}},
+		{"entries that don't fit are left out whole", 90, live, []string{"agents [2/4]", "● live"}, []string{"…", "tokens"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

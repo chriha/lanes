@@ -32,8 +32,17 @@ func (c *Canvas) Bar(x, y, w int, v float64, phase int, fill, track Role) {
 // effortMeter is the 4-cell meter of an effort level: low ▮▯▯▯, medium ▮▮▯▯, high ▮▮▮▯, xhigh and max ▮▮▮▮; ""
 // for an unknown level.
 func effortMeter(level string) string {
-	n := map[string]int{"low": 1, "medium": 2, "high": 3, "xhigh": 4, "max": 4}[strings.ToLower(level)]
-	if n == 0 {
+	var n int
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "low":
+		n = 1
+	case "medium":
+		n = 2
+	case "high":
+		n = 3
+	case "xhigh", "max":
+		n = 4
+	default:
 		return ""
 	}
 	return strings.Repeat("▮", n) + strings.Repeat("▯", 4-n)

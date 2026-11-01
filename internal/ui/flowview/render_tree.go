@@ -63,7 +63,7 @@ func (s State) boxWidth(l Layout) int {
 // task (full only) inside; the status and, while running, the current activity in the bottom border. A finished
 // agent's box is dim and still.
 func (s State) drawAgent(c *Canvas, r Rect, a session.Agent, full bool) {
-	running := a.Status == session.AgentRunning
+	running := a.Status == session.AgentRunning && !s.Ended // an ended session's agents are stopped
 	role, title, text, phase := ModelRole(a.Model), RoleBold, RoleText, s.Phase
 	if !running {
 		role, title, text, phase = RoleDim, RoleDim, RoleDim, 0

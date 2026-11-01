@@ -43,4 +43,4 @@
  14:28:00 implementer   spawned code-reviewer                                             
  14:28:30 code-reviewer spawned validator                                                 
  14:29:30 validator     failed                                                            
- opus [1 running]  sonnet [1 running]  haiku [done]  agents [2/4]  tools [48]             
+ opus [1 running]  sonnet [1 running]  haiku [done]  agents [2/4]  tools [48]      ● live 

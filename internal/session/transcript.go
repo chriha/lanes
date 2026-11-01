@@ -61,7 +61,8 @@ type Agent struct {
 	End     time.Time // zero while running
 	Tool    string    // the tool the agent runs right now, "" when none
 	ToolArg string
-	Ctx     int // percent of the context window used by the newest assistant message, -1 when unknown
+	Ctx     int    // percent of the context window used by the newest assistant message, -1 when unknown
+	Effort  string // effort level of the newest assistant message that has one, "" when unknown
 }
 
 // Snapshot is the state of a Claude session derived from its transcripts.

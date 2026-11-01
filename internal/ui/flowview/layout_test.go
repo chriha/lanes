@@ -71,7 +71,7 @@ func TestLayoutTree(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			nodes := layoutTree(tt.agents, area, box)
+			nodes := layoutTree(tt.agents, area, box, colGap)
 			label := func(i int) string {
 				if i < 0 {
 					return "-"
@@ -104,14 +104,14 @@ func TestLayoutTree(t *testing.T) {
 func TestLayoutTreeFoldsDeeperAgentsIntoAFullLastRow(t *testing.T) {
 	// 2 slots, 2 rows: the last row holds a1 and b1, and x is one row deeper.
 	agents := agentsOf("a", "a1:a", "b1:a", "x:a1")
-	nodes := layoutTree(agents, Rect{0, 0, 44, 13}, Rect{W: 21, H: 5})
+	nodes := layoutTree(agents, Rect{0, 0, 44, 13}, Rect{W: 21, H: 5}, colGap)
 	if len(nodes) != 3 || nodes[1].Agent != 1 || nodes[2].Agent != -1 || nodes[2].More != 2 || nodes[2].Parent != 0 {
 		t.Fatalf("nodes = %+v, want a, a1 and a +2 more box under a", nodes)
 	}
 }
 
 func TestLayoutTreeCentersRows(t *testing.T) {
-	nodes := layoutTree(agentsOf("a"), Rect{10, 0, 41, 5}, Rect{W: 21, H: 5})
+	nodes := layoutTree(agentsOf("a"), Rect{10, 0, 41, 5}, Rect{W: 21, H: 5}, colGap)
 	if len(nodes) != 1 || nodes[0].Rect.X != 20 {
 		t.Fatalf("nodes = %+v, want one box at x 20", nodes)
 	}

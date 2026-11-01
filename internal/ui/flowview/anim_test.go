@@ -119,8 +119,8 @@ func TestPacketIsDrawnOnItsConnector(t *testing.T) {
 		frame := m.View()
 
 		l := m.layout
-		nodes := layoutTree(m.st.Snap.Agents, l.Tree, l.Box)
-		paths := treePaths(nodes, l.Tools)
+		nodes := layoutTree(m.st.Snap.Agents, l.Tree, l.Box, l.Gap)
+		paths := treePaths(nodes, l.Tools, l.Tree)
 		if len(paths) != 2 {
 			t.Fatalf("up=%v: %d connectors, want 2", up, len(paths))
 		}

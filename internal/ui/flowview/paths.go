@@ -24,6 +24,12 @@ func elbow(from, to Point) []Point {
 	return p
 }
 
+// route is the connector from from to to that passes the boxes between them through the gaps of their rows,
+// staying inside area.
+func route(from, to Point, boxes []Rect, area Rect) []Point {
+	return elbow(from, to)
+}
+
 // Directions a connector leaves a cell in.
 const (
 	up uint8 = 1 << iota

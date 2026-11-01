@@ -31,6 +31,7 @@ type Layout struct {
 	Tools   Rect
 	Tree    Rect // where the agent rows go
 	Box     Rect // the size (W, H) of one agent box
+	Gap     int  // columns between agent boxes side by side
 	Log     Rect // the log's title rule is its first row
 	Status  int  // row of the status line
 }
@@ -42,7 +43,7 @@ func NewLayout(w, h int) Layout {
 	}
 	fw, fh := min(w, fullW), min(h, fullH)
 	x, y := (w-fw)/2, (h-fh)/2
-	l := Layout{Frame: Rect{x, y, fw, fh}, Status: y + fh - 1}
+	l := Layout{Frame: Rect{x, y, fw, fh}, Status: y + fh - 1, Gap: colGap}
 	if w >= fullW && h >= fullH {
 		l.Mode = ModeFull
 		l.Session = Rect{x, y + 3, 22, 13}
@@ -77,7 +78,7 @@ type Node struct {
 // fit, and every agent deeper than the last row that fits, folds into a "+n more" box at the row's end, which hangs
 // off the parent of its first agent. An agent whose parent is unknown hangs off the lead; one whose parent was
 // folded hangs off the "+n more" box.
-func layoutTree(agents []session.Agent, area, box Rect) []Node {
+func layoutTree(agents []session.Agent, area, box Rect, gap int) []Node {
 	rows := (area.H + rowGap) / (box.H + rowGap)
 	slots := (area.W + colGap) / (box.W + colGap)
 	if rows < 1 || slots < 1 || len(agents) == 0 {

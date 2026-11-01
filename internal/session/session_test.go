@@ -625,3 +625,122 @@ func TestHookCommandQuotesExecutablePath(t *testing.T) {
 		}
 	}
 }
+
+func TestHookRecordsClaudeSession(t *testing.T) {
+	const payload = `{"session_id":"abc","transcript_path":"/t/abc.jsonl","reason":"prompt_input_exit"}`
+	tests := []struct {
+		name, event string
+	}{
+		{"prompt", "UserPromptSubmit"},
+		{"tool", "PreToolUse"},
+		{"stop", "Stop"},
+		{"notification", "Notification"},
+		{"session end keeps it", "SessionEnd"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateEnv(t)
+			t.Setenv("LANES_SESSION", "fix~1")
+			feedStdin(t, payload)
+			RunHook(tt.event)
+			if got := ClaudeSession("fix~1"); got != "abc" {
+				t.Errorf("ClaudeSession = %q, want abc", got)
+			}
+			p := filepath.Join(app.StateDir(), "sessions", "fix~1.claude.json")
+			fi, err := os.Stat(p)
+			if err != nil || fi.Mode().Perm() != 0o600 {
+				t.Fatalf("sidecar = %v, %v; want a 0600 file", fi, err)
+			}
+			b, _ := os.ReadFile(p)
+			var got struct {
+				SessionID      string `json:"session_id"`
+				TranscriptPath string `json:"transcript_path"`
+			}
+			if err := json.Unmarshal(b, &got); err != nil || got.SessionID != "abc" || got.TranscriptPath != "/t/abc.jsonl" {
+				t.Errorf("sidecar = %s (%v), want session_id and transcript_path", b, err)
+			}
+		})
+	}
+}
+
+func TestHookClaudeSessionNewestWins(t *testing.T) {
+	tests := []struct {
+		name   string
+		stdins []string
+		want   string
+	}{
+		{"later id replaces", []string{`{"session_id":"a"}`, `{"session_id":"b"}`}, "b"},
+		{"payload without id keeps it", []string{`{"session_id":"a"}`, `{}`}, "a"},
+		{"corrupt payload keeps it", []string{`{"session_id":"a"}`, `not json`}, "a"},
+		{"no id ever", []string{`{}`}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateEnv(t)
+			t.Setenv("LANES_SESSION", "fix~1")
+			for _, in := range tt.stdins {
+				feedStdin(t, in)
+				RunHook("Stop")
+			}
+			if got := ClaudeSession("fix~1"); got != tt.want {
+				t.Errorf("ClaudeSession = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHookClaudeSessionNeedsSession(t *testing.T) {
+	stateEnv(t)
+	t.Setenv("LANES_SESSION", "")
+	feedStdin(t, `{"session_id":"abc"}`)
+	RunHook("Stop")
+	files, _ := filepath.Glob(filepath.Join(app.StateDir(), "sessions", "*"))
+	if len(files) != 0 {
+		t.Errorf("unexpected files without a lanes session: %q", files)
+	}
+}
+
+func TestHookClaudeSessionUnwritableIsQuiet(t *testing.T) {
+	stateEnv(t)
+	t.Setenv("LANES_SESSION", "fix~1")
+	t.Setenv("LANES_STATE_DIR", filepath.Join(t.TempDir(), "missing"))
+	feedStdin(t, `{"session_id":"abc"}`)
+	RunHook("Stop") // must neither panic nor create the dir
+	if _, err := os.Stat(os.Getenv("LANES_STATE_DIR")); !os.IsNotExist(err) {
+		t.Errorf("state dir created: %v", err)
+	}
+}
+
+func TestForgetClaude(t *testing.T) {
+	stateEnv(t)
+	t.Setenv("LANES_SESSION", "fix~1")
+	feedStdin(t, `{"session_id":"abc"}`)
+	RunHook("Stop")
+	feedStdin(t, `{"session_id":"other"}`)
+	t.Setenv("LANES_SESSION", "fix~2")
+	RunHook("Stop")
+	ForgetClaude("fix~1")
+	if got := ClaudeSession("fix~1"); got != "" {
+		t.Errorf("ClaudeSession after forget = %q, want empty", got)
+	}
+	if got := ClaudeSession("fix~2"); got != "other" {
+		t.Errorf("other session's id = %q, want it kept", got)
+	}
+	if got := readState("fix~1"); got != "waiting" {
+		t.Errorf("hook state = %q, want it untouched by ForgetClaude", got)
+	}
+}
+
+func TestClaudeSessionUnreadable(t *testing.T) {
+	stateEnv(t)
+	if got := ClaudeSession("none"); got != "" {
+		t.Errorf("missing sidecar = %q", got)
+	}
+	p := filepath.Join(app.StateDir(), "sessions", "bad.claude.json")
+	if err := os.WriteFile(p, []byte("not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := ClaudeSession("bad"); got != "" {
+		t.Errorf("corrupt sidecar = %q", got)
+	}
+}

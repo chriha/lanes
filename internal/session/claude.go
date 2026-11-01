@@ -20,6 +20,37 @@ func hookStatePath(name string) string {
 	return filepath.Join(os.Getenv("LANES_STATE_DIR"), "sessions", name+".json")
 }
 
+// claudePath is the sidecar where the hooks keep the ids of the newest Claude session seen in session name.
+func claudePath(name string) string {
+	return filepath.Join(app.StateDir(), "sessions", name+".claude.json")
+}
+
+func hookClaudePath(name string) string {
+	return filepath.Join(os.Getenv("LANES_STATE_DIR"), "sessions", name+".claude.json")
+}
+
+// claudeIDs are the ids a Claude hook payload carries and the sidecar keeps.
+type claudeIDs struct {
+	SessionID      string `json:"session_id"`
+	TranscriptPath string `json:"transcript_path"`
+}
+
+// ClaudeSession returns the id of the newest Claude session the hooks saw in the session, or "".
+func ClaudeSession(name string) string {
+	b, err := os.ReadFile(claudePath(name))
+	if err != nil {
+		return ""
+	}
+	var ids claudeIDs
+	if json.Unmarshal(b, &ids) != nil {
+		return ""
+	}
+	return ids.SessionID
+}
+
+// ForgetClaude removes the Claude session ids the hooks recorded for the session.
+func ForgetClaude(name string) { _ = os.Remove(claudePath(name)) }
+
 func readState(name string) string {
 	b, err := os.ReadFile(statePath(name))
 	if err != nil {
@@ -31,18 +62,25 @@ func readState(name string) string {
 }
 
 // RunHook is the `<app> hook <event>` entry point called by Claude Code hooks. It maps the event to a
-// state and writes it (SessionEnd removes it) for the session named in $LANES_SESSION. Never fails loudly: it must not disturb claude.
+// state and writes it (SessionEnd removes it) for the session named in $LANES_SESSION. Every event also keeps the
+// payload's Claude session id in a sidecar (SessionEnd too), for lanes to record with the session's end. Never
+// fails loudly: it must not disturb claude.
 func RunHook(event string) {
 	name := os.Getenv("LANES_SESSION")
 	if name == "" {
 		return
 	}
 	var in struct {
+		claudeIDs
 		NotificationType string `json:"notification_type"`
 		Reason           string `json:"reason"`
 	}
 	if b, err := io.ReadAll(os.Stdin); err == nil {
 		_ = json.Unmarshal(b, &in)
+	}
+	if in.SessionID != "" {
+		b, _ := json.Marshal(in.claudeIDs)
+		_ = app.WriteFile(hookClaudePath(name), b)
 	}
 	if event == "SessionEnd" {
 		// /clear and resume end a session but Claude keeps running: keep the state then.

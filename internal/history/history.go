@@ -17,6 +17,8 @@ type Event struct {
 	Action string    `json:"action"`
 	Event  string    `json:"event"` // started | finished | failed | killed
 	Exit   int       `json:"exit,omitempty"`
+	// ClaudeSession is the Claude Code session id of a session's end event, when Claude ran in it.
+	ClaudeSession string `json:"claude_session,omitempty"`
 }
 
 func path() string { return filepath.Join(app.StateDir(), "history.jsonl") }

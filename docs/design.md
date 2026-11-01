@@ -78,15 +78,23 @@ an env var).
   lanes starts focused, so terminals without focus events poll as before.
 - Jump into a session: `tmux display-popup` / `switch-client` when inside tmux, `attach` otherwise.
 - **Agent view** (`A` on an item or on the sessions screen) — a full-screen animated diagram of a Claude
-  session: session column (hook state, last text, counters), lead box, tool layer, layered agent tree with
-  animated connectors, session log, status line. Lives in `internal/ui/flowview`: a character-grid canvas with
+  session as a dense dashboard: a full-height session column as the lead's dashboard (context bar, effort meter,
+  tool-call sparkline over 15 min, hook states on a `┆` timeline, counters incl. the token split and agent counts,
+  last 4 files touched, last text, advisor), lead box, tool layer, layered agent tree, session log and a status line
+  with one colored entry per model family plus totals (an ended session reports no running agents). Agent boxes
+  show full name, model, effort meter, ctx bar, task, `▸ tool arg` and status. The full layout uses the terminal's
+  whole width: boxes of 28–30 cols (widened for long names) as many per row as fit, a depth wrapping into at most 2
+  lines before `+n more`. Packets stream continuously: parent → child along a running agent's edge (~1.2 s,
+  jittered per edge, ≤ 3 in flight), a burst of 3 child → parent on finish/fail, lead → tool layer while
+  `working`, none when ended. Lives in `internal/ui/flowview`: a character-grid canvas with
   run-length styled output, a pure `State` changed by events (`Apply`) and stepped by `dt` (`Step`), panel
   renderers and the tree layout; it has its own tick (~70 ms) that runs only while the view is open. Its data
   comes from `session.Tailer` (`internal/session/transcript.go`), which reads only the new bytes of the
   transcript the hooks recorded (`transcript_path` in the session's sidecar) and of `<session>/subagents/
   agent-<id>.{jsonl,meta.json}`; `internal/ui/agents.go` polls it in a `tea.Cmd` every 500 ms and hands the
   snapshot over as a message. Context % uses one model-id table (`session.ContextWindow`, 200k default, 1M for
-  `[1m]`). An ended session is read once more and frozen. Full layout from 90×46, compact from 60×24.
+  `[1m]`). Effort is the newest `effort` field per transcript (absent → the meter is omitted). An ended session is
+  read once more and frozen. Full layout from 90×46, compact (no session column, tool layer or task) from 60×24.
 
 ## Config (`~/.config/lanes/config.toml`, hot reloaded)
 

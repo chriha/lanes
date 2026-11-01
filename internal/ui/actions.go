@@ -87,7 +87,7 @@ func (m *Model) onSessions(msg sessionsMsg) {
 			if s.Exit != 0 {
 				ev = "failed"
 			}
-			history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: ev, Exit: s.Exit})
+			recordEnd(s, ev, s.Exit)
 		}
 		m.sessByItem[s.ItemKey] = append(m.sessByItem[s.ItemKey], s)
 	}
@@ -99,6 +99,13 @@ func (m *Model) onSessions(msg sessionsMsg) {
 	sel := m.selectedSession()
 	m.sessions = msg.infos
 	m.restoreSessCursor(sel)
+}
+
+// recordEnd appends the end event of session s to the history with the id of the Claude session the hooks saw
+// in it, then forgets that id.
+func recordEnd(s session.Info, event string, exit int) {
+	history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: event, Exit: exit, ClaudeSession: session.ClaudeSession(s.Name)})
+	session.ForgetClaude(s.Name)
 }
 
 func (m *Model) sessionsOf(it item.Item) []session.Info { return m.sessByItem[session.Key(it.ID)] }
@@ -494,7 +501,7 @@ func (m *Model) killSessions(infos []session.Info) tea.Cmd {
 		return func() tea.Msg {
 			for _, s := range infos {
 				if !s.Dead {
-					history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: "killed"})
+					recordEnd(s, "killed", 0)
 				}
 				_ = mgr.Kill(s.Name)
 			}
@@ -547,7 +554,7 @@ func (m *Model) interruptSessions(infos []session.Info) tea.Cmd {
 				}
 				if sig {
 					done = append(done, s.Name)
-					history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: "interrupted"})
+					recordEnd(s, "interrupted", 0)
 				}
 			}
 			note, lv := fmt.Sprintf("interrupted %d session(s)", len(done)), lvInfo

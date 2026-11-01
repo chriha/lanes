@@ -3,6 +3,7 @@ package history
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -104,5 +105,34 @@ func TestAppendIsPrivate(t *testing.T) {
 	di, derr := os.Stat(filepath.Dir(path()))
 	if err != nil || derr != nil || fi.Mode().Perm() != 0o600 || di.Mode().Perm() != 0o700 {
 		t.Errorf("new file/dir = %v %v, %v %v; want 0600/0700", fi, err, di, derr)
+	}
+}
+
+func TestClaudeSessionField(t *testing.T) {
+	setup(t)
+	if err := os.MkdirAll(filepath.Dir(path()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"time":"2026-01-02T03:04:05Z","item":"a","action":"work","event":"finished"}` + "\n"
+	if err := os.WriteFile(path(), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	Append(Event{Item: "a", Action: "work", Event: "killed", ClaudeSession: "abc"})
+	Append(Event{Item: "a", Action: "work", Event: "started"})
+
+	got := For("a")
+	if len(got) != 3 {
+		t.Fatalf("want 3 events, got %+v", got)
+	}
+	want := []string{"", "abc", ""}
+	for i, e := range got {
+		if e.ClaudeSession != want[i] {
+			t.Errorf("event %d (%s) claude_session = %q, want %q", i, e.Event, e.ClaudeSession, want[i])
+		}
+	}
+	raw, _ := os.ReadFile(path())
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if !strings.Contains(lines[1], `"claude_session":"abc"`) || strings.Contains(lines[2], "claude_session") {
+		t.Errorf("lines = %q, want claude_session only where set", lines)
 	}
 }

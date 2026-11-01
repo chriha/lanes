@@ -314,6 +314,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `x`                 | close the item's sessions (asks first)             |
 | `X`                 | interrupt the item's running sessions and keep their output (asks first; again: `SIGKILL`) |
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
+| `gr`                | resume the item's newest finished Claude session (see [Resuming a Claude session](#resuming-a-claude-session)) |
 | `i`                 | show the item's history                            |
 | `N`                 | edit the item's note in `$VISUAL` / `$EDITOR` (save it empty to delete it) |
 | `z`                 | [snooze](#snoozing) the item (all marked items, if any are marked); on a snoozed item: unsnooze it |
@@ -354,6 +355,7 @@ narrows the view; it does not change its filter.
 | `:snooze [when]`          | snooze the selected / marked items until `when` (empty: until they change) |
 | `:snoozed`                | show / hide snoozed items                                             |
 | `:run <action>`           | run an action by name, even if it has no key                          |
+| `:resume`                 | resume the selected item's newest finished Claude session (same as `gr`) |
 | `:sessions`               | open the sessions screen (same as `S`)                                |
 | `:prune`                  | kill every finished session; running ones are never touched           |
 | `:prune failed`           | kill only finished sessions that exited non-zero                      |
@@ -501,7 +503,7 @@ run unlocks the item right away.
 
 ### Templates
 
-`run`, `cwd` are [Go templates](https://pkg.go.dev/text/template). Available fields:
+`run`, `resume`, `cwd` are [Go templates](https://pkg.go.dev/text/template). Available fields:
 
 | Field                           | Value                                                           |
 |---------------------------------|-----------------------------------------------------------------|
@@ -512,9 +514,10 @@ run unlocks the item right away.
 | `{{.vars.name}}`                | the action's `vars`                                             |
 | `{{.settings}}`                 | path to a Claude settings file that reports session status      |
 | `{{.session}}` `{{.action}}`    | the session / action name                                       |
+| `{{.claude_session}}`           | the Claude session id to resume; only in `resume` (an error in `run` or `cwd`) |
 
 `run` is shell code, and fields like `title` or `branch` are written by whoever opened the item, so `lanes`
-escapes every value a `run` template inserts, for the quoting it lands in:
+escapes every value a `run` (or `resume`) template inserts, for the quoting it lands in:
 
 | Template                       | `title` = `fix $(rm -rf ~)` becomes |
 |--------------------------------|-------------------------------------|
@@ -596,6 +599,8 @@ provider sets it in its fields, if at all).
   item ID and title (or the item key when no provider returns the item any more), status badge and age.
   Sessions whose item is in no view — filtered out, or merged/closed — are marked `(not in any view)`. `enter`
   jumps in, `X` interrupts, `x` closes (after confirming), `j`/`k`, `gg`/`G` move, `q` / `esc` / `S` go back.
+- **Resume** — `gr` (or `:resume`) starts the item's newest finished Claude session again, see
+  [Resuming a Claude session](#resuming-a-claude-session).
 - **Quit** — `q` asks first (`y`/`enter` quits, any other key cancels); `ctrl-c` and `:quit` leave at once. Sessions keep running and reappear when you start it again.
 - **Status** — shown as row badges and in the header summary, refreshed every second.
 
@@ -622,6 +627,25 @@ state for the session:
 
 The settings are merged with your own Claude settings (via `--settings`), they don't replace them. Commands
 without the flag simply show `▶` while running.
+
+#### Resuming a Claude session
+
+The hooks also note the Claude session id. When the `lanes` session ends (Claude finished or failed, or you
+closed or interrupted it), the item history keeps that id with the end event. Give the action a `resume`
+template to continue that conversation later:
+
+```toml
+[action.review]
+run    = 'claude --settings {{.settings}} "/review {{.url}}"'
+resume = 'claude --settings {{.settings}} --resume {{.claude_session}}'
+```
+
+`gr` (or `:resume`) on an item takes its newest history event that has a Claude session id and whose action
+has `resume`, renders `resume` like `run` (with the action's `cwd`, which Claude needs to find the session),
+plus `{{.claude_session}}`, and starts it in that action's session, restarting a finished one. Marks are
+ignored and kept. If the action's session is still running, the footer says `work is still running — enter
+jumps` and nothing starts; with nothing to resume, it says so. `gr` wins over a `[keymap]` binding of `r`.
+After `/clear` inside Claude, `gr` resumes the conversation that followed it.
 
 #### Usage in the footer
 
@@ -920,6 +944,7 @@ groups   = [{ name = "<name>", filter = '<expression>' }]   # first match wins; 
 [action.<name>]
 type    = "session"         # or "run"
 run     = '<templated shell command>'
+resume  = '<templated shell command>'   # gr: resume the newest finished Claude session; adds {{.claude_session}}
 cwd     = '<templated dir>'
 confirm = "none"            # or "single"
 vars    = { key = "value" }

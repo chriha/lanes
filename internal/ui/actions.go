@@ -337,6 +337,73 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 	return start()
 }
 
+// resume starts, in its action's session, the resume template of the action whose Claude session ended last on it
+// (the newest history event with a claude_session whose action has resume). A dead session is restarted; a
+// running one is left alone. Marks are ignored and kept.
+func (m *Model) resume(it item.Item) tea.Cmd {
+	if m.sess == nil {
+		m.say(lvWarn, "tmux unavailable")
+		return nil
+	}
+	key := session.Key(it.ID)
+	if b, ok := m.busy[key]; ok {
+		m.say(lvWarn, fmt.Sprintf("%s busy (%s)", it.ID, b.action))
+		return nil
+	}
+	var ev *history.Event
+	evs := history.For(key)
+	for i := len(evs) - 1; i >= 0; i-- {
+		if evs[i].ClaudeSession != "" && m.cfg.Action[evs[i].Action].Resume != "" {
+			ev = &evs[i]
+			break
+		}
+	}
+	if ev == nil {
+		m.say(lvWarn, "nothing to resume for "+it.ID)
+		return nil
+	}
+	name, act := ev.Action, m.cfg.Action[ev.Action]
+	sname := session.Name(name, it.ID)
+	restart := false
+	for _, s := range m.sessionsOf(it) {
+		if s.Name != sname {
+			continue
+		}
+		if !s.Dead {
+			m.say(lvWarn, "work is still running — enter jumps")
+			return nil
+		}
+		restart = true
+	}
+	vars := act.Vars
+	if vars == nil {
+		vars = map[string]any{}
+	}
+	data := it.Env()
+	data["settings"], data["session"], data["action"], data["vars"] = m.settings, sname, name, vars
+	data[config.ClaudeSessionField] = ev.ClaudeSession
+	cmd, err := render(act.Resume, data)
+	if err != nil {
+		m.say(lvErr, fmt.Sprintf("action %s resume: %v", name, err))
+		return nil
+	}
+	cwd, err := renderCwd(act.Cwd, data)
+	if err != nil {
+		m.say(lvErr, fmt.Sprintf("action %s cwd: %v", name, err))
+		return nil
+	}
+	jobs := []job{{sname, it.ID, key, cwd, cmd, restart}}
+	attach := ""
+	if act.Jump {
+		attach = sname
+	}
+	marks := m.marks
+	m.lock(name, jobs)
+	start := m.execute(name, jobs, 0, 0, "", attach)
+	m.marks = marks // execute consumes the marks; resume runs on the cursor item only
+	return start
+}
+
 // lock marks the jobs' items busy with action and says so in the footer; doneMsg releases them.
 func (m *Model) lock(action string, jobs []job) {
 	labels := make([]string, len(jobs))

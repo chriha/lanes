@@ -101,10 +101,14 @@ func (m *Model) onSessions(msg sessionsMsg) {
 	m.restoreSessCursor(sel)
 }
 
-// recordEnd appends the end event of session s to the history with the id of the Claude session the hooks saw
-// in it, then forgets that id.
-func recordEnd(s session.Info, event string, exit int) {
+// recordEvent appends an event of session s to the history with the id of the Claude session the hooks saw in it.
+func recordEvent(s session.Info, event string, exit int) {
 	history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: event, Exit: exit, ClaudeSession: session.ClaudeSession(s.Name)})
+}
+
+// recordEnd records the end of session s, then forgets its Claude session id.
+func recordEnd(s session.Info, event string, exit int) {
+	recordEvent(s, event, exit)
 	session.ForgetClaude(s.Name)
 }
 
@@ -621,7 +625,7 @@ func (m *Model) interruptSessions(infos []session.Info) tea.Cmd {
 				}
 				if sig {
 					done = append(done, s.Name)
-					recordEnd(s, "interrupted", 0)
+					recordEvent(s, "interrupted", 0) // the session may keep running: keep its Claude session id for the real end
 				}
 			}
 			note, lv := fmt.Sprintf("interrupted %d session(s)", len(done)), lvInfo

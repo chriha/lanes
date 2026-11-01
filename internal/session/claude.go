@@ -35,18 +35,21 @@ type claudeIDs struct {
 	TranscriptPath string `json:"transcript_path"`
 }
 
-// ClaudeSession returns the id of the newest Claude session the hooks saw in the session, or "".
-func ClaudeSession(name string) string {
-	b, err := os.ReadFile(claudePath(name))
-	if err != nil {
-		return ""
-	}
+// readClaudeIDs reads the sidecar of session name; a missing or corrupt one gives empty ids.
+func readClaudeIDs(name string) claudeIDs {
 	var ids claudeIDs
-	if json.Unmarshal(b, &ids) != nil {
-		return ""
+	b, err := os.ReadFile(claudePath(name))
+	if err != nil || json.Unmarshal(b, &ids) != nil {
+		return claudeIDs{}
 	}
-	return ids.SessionID
+	return ids
 }
+
+// ClaudeSession returns the id of the newest Claude session the hooks saw in the session, or "".
+func ClaudeSession(name string) string { return readClaudeIDs(name).SessionID }
+
+// ClaudeTranscript returns the transcript path of the newest Claude session the hooks saw in the session, or "".
+func ClaudeTranscript(name string) string { return readClaudeIDs(name).TranscriptPath }
 
 // ForgetClaude removes the Claude session ids the hooks recorded for the session.
 func ForgetClaude(name string) { _ = os.Remove(claudePath(name)) }

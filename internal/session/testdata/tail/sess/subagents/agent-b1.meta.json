@@ -1,0 +1,1 @@
+{"agentType": "general-purpose", "name": "reviewer", "description": "Review the diff", "toolUseId": "b1", "parentAgentId": "a1", "spawnDepth": 2, "model": "sonnet", "finished": true, "futureField": [1, 2]}

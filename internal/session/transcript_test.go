@@ -3,6 +3,7 @@ package session
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -285,5 +286,105 @@ func TestClaudeTranscript(t *testing.T) {
 	RunHook("Stop")
 	if got := ClaudeTranscript("fix~1"); got != "/t/abc.jsonl" {
 		t.Errorf("ClaudeTranscript = %q, want /t/abc.jsonl", got)
+	}
+}
+
+// pollLines writes lines as a transcript and returns the snapshot of one Poll.
+func pollLines(t *testing.T, tl *Tailer, path string, lines ...string) Snapshot {
+	t.Helper()
+	var b []byte
+	for _, l := range lines {
+		b = append(b, l+"\n"...)
+	}
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := tl.Poll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+func TestTailerLeadEdgeCases(t *testing.T) {
+	const (
+		read1 = `{"type":"assistant","message":{"id":"m1","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/a/x.go"}}]}}`
+		grep2 = `{"type":"assistant","message":{"id":"m1","content":[{"type":"tool_use","id":"t2","name":"Grep","input":{"pattern":"Poll"}}]}}`
+		done2 = `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t2"}]}}`
+		done1 = `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}`
+		use1  = `{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":1,"output_tokens":2}}}`
+		use1b = `{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":1,"output_tokens":50}}}`
+	)
+	tests := []struct {
+		name            string
+		lines           []string
+		wantTool, wantA string
+		wantTokens      int
+	}{
+		{"parallel calls: newest runs", []string{read1, grep2}, "Grep", "Poll", 0},
+		{"newest done: the older still runs", []string{read1, grep2, done2}, "Read", "x.go", 0},
+		{"all done", []string{read1, grep2, done2, done1}, "", "", 0},
+		{"later usage of a message replaces the earlier", []string{use1, use1b}, "", "", 51},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "s.jsonl")
+			got := pollLines(t, NewTailer(path), path, tt.lines...).Lead
+			if got.Tool != tt.wantTool || got.ToolArg != tt.wantA || got.Tokens != tt.wantTokens {
+				t.Errorf("tool %q %q, tokens %d; want %q %q, %d", got.Tool, got.ToolArg, got.Tokens, tt.wantTool, tt.wantA, tt.wantTokens)
+			}
+		})
+	}
+}
+
+func TestTailerRewrittenTranscriptStartsOver(t *testing.T) {
+	const msg = `{"type":"assistant","message":{"id":"%s","content":[{"type":"text","text":"%s"}]}}`
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	tl := NewTailer(path)
+	pollLines(t, tl, path, fmt.Sprintf(msg, "m1", "one"), fmt.Sprintf(msg, "m2", "two"))
+	got := pollLines(t, tl, path, fmt.Sprintf(msg, "n1", "new"))
+	if got.Lead.Turns != 1 || got.Lead.LastText != "new" {
+		t.Errorf("after rewrite: turns %d, text %q; want 1, new", got.Lead.Turns, got.Lead.LastText)
+	}
+}
+
+func TestAgentBriefAfterInjectedText(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "s", "subagents")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lines := `{"type":"user","message":{"content":"<system-reminder>context</system-reminder>"}}` + "\n" +
+		`{"type":"user","message":{"content":[{"type":"text","text":"Read and follow /p/briefs/verifier.md"}]}}` + "\n"
+	if err := os.WriteFile(filepath.Join(sub, "agent-x.jsonl"), []byte(lines), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := NewTailer(filepath.Join(dir, "s.jsonl")).Poll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Agents) != 1 || got.Agents[0].Name != "verifier" {
+		t.Errorf("agents = %+v, want one named verifier", got.Agents)
+	}
+}
+
+func TestCtxPercent(t *testing.T) {
+	tests := []struct {
+		name   string
+		tokens int
+		model  string
+		want   int
+	}{
+		{"200k window", 50_000, "claude-opus-5-5", 25},
+		{"1m suffix", 500_000, "claude-opus-5-5[1m]", 50},
+		{"over 200k without suffix: 1M window", 300_000, "claude-opus-5-5", 30},
+		{"never over 100", 1_200_000, "claude-opus-5-5", 100},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ctxPercent(tt.tokens, tt.model); got != tt.want {
+				t.Errorf("ctxPercent(%d, %q) = %d, want %d", tt.tokens, tt.model, got, tt.want)
+			}
+		})
 	}
 }

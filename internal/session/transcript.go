@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -67,7 +68,8 @@ const defaultContextWindow = 200_000
 // largeContextModels are model ids with a 1M context window besides those with the `[1m]` suffix.
 var largeContextModels = map[string]bool{}
 
-// ContextWindow is the context window in tokens of a model id.
+// ContextWindow is the context window in tokens of a model id. Transcripts don't always carry the `[1m]` suffix
+// of a 1M session: ctxPercent also takes the larger window when the tokens don't fit the smaller one.
 func ContextWindow(model string) int {
 	if strings.HasSuffix(model, "[1m]") || largeContextModels[model] {
 		return 1_000_000
@@ -90,6 +92,7 @@ type agent struct {
 	meta    agentMeta
 	hasMeta bool
 	metaMod time.Time
+	metaLen int64
 }
 
 type agentMeta struct {
@@ -157,7 +160,7 @@ func (a *agent) readMeta(path string) error {
 		}
 		return err
 	}
-	if a.hasMeta && fi.ModTime().Equal(a.metaMod) {
+	if a.hasMeta && (a.meta.Finished || fi.ModTime().Equal(a.metaMod) && fi.Size() == a.metaLen) {
 		return nil
 	}
 	b, err := os.ReadFile(path)
@@ -171,7 +174,7 @@ func (a *agent) readMeta(path string) error {
 	if json.Unmarshal(b, &m) != nil {
 		return nil // half-written: read it again next time
 	}
-	a.meta, a.hasMeta, a.metaMod = m, true, fi.ModTime()
+	a.meta, a.hasMeta, a.metaMod, a.metaLen = m, true, fi.ModTime(), fi.Size()
 	return nil
 }
 
@@ -179,8 +182,8 @@ func (t *Tailer) snapshot() Snapshot {
 	l := t.lead
 	s := Snapshot{Lead: Lead{
 		Model:     l.model,
-		Tool:      l.tool,
-		ToolArg:   l.toolArg,
+		Tool:      l.current().name,
+		ToolArg:   l.current().arg,
 		Turns:     len(l.msgs),
 		Calls:     l.calls,
 		ToolCalls: make(map[string]int, len(l.toolCalls)),
@@ -213,13 +216,13 @@ func (a *agent) snapshot(id string, failed map[string]bool) Agent {
 		Model:   tr.model,
 		Task:    m.Description,
 		Start:   tr.first,
-		Tool:    tr.tool,
-		ToolArg: tr.toolArg,
+		Tool:    tr.current().name,
+		ToolArg: tr.current().arg,
 		Ctx:     -1,
 	}
 	out.Name = m.Name
 	if out.Name == "" {
-		out.Name = briefName(tr.prompt)
+		out.Name = tr.brief
 	}
 	if out.Name == "" {
 		out.Name = m.AgentType
@@ -231,7 +234,7 @@ func (a *agent) snapshot(id string, failed map[string]bool) Agent {
 		out.Model = m.Model
 	}
 	if tr.ctxTokens > 0 {
-		out.Ctx = tr.ctxTokens * 100 / ContextWindow(out.Model)
+		out.Ctx = ctxPercent(tr.ctxTokens, out.Model)
 	}
 	switch {
 	case m.ToolUseID != "" && failed[m.ToolUseID]:
@@ -243,6 +246,15 @@ func (a *agent) snapshot(id string, failed map[string]bool) Agent {
 		out.End, out.Tool, out.ToolArg = tr.last, "", ""
 	}
 	return out
+}
+
+// ctxPercent is the share of the model's context window the tokens use.
+func ctxPercent(tokens int, model string) int {
+	w := ContextWindow(model)
+	if tokens > w {
+		w = max(1_000_000, tokens)
+	}
+	return tokens * 100 / w
 }
 
 var briefRe = regexp.MustCompile(`Read and follow \S*?briefs/([A-Za-z0-9_-]+)\.md`)
@@ -259,23 +271,31 @@ func briefName(prompt string) string {
 type transcript struct {
 	path      string
 	offset    int64
-	msgs      map[string]bool // assistant message ids seen: one message spans several lines
+	msgs      map[string]int // tokens counted per assistant message id: one message spans several lines
 	model     string
-	tool      string
-	toolArg   string
-	toolID    string
+	pending   []toolCall // tool calls without a result yet, oldest first
 	calls     int
 	toolCalls map[string]int
 	tokens    int
 	ctxTokens int // input + cache read + cache write of the newest assistant message
 	lastText  string
-	prompt    string // the first user prompt
+	brief     string // the brief named in the first user text that names one
 	first     time.Time
 	last      time.Time
 }
 
 func newTranscript(path string) *transcript {
-	return &transcript{path: path, msgs: map[string]bool{}, toolCalls: map[string]int{}}
+	return &transcript{path: path, msgs: map[string]int{}, toolCalls: map[string]int{}}
+}
+
+type toolCall struct{ id, name, arg string }
+
+// current is the newest tool call still running.
+func (t *transcript) current() toolCall {
+	if len(t.pending) == 0 {
+		return toolCall{}
+	}
+	return t.pending[len(t.pending)-1]
 }
 
 // read applies the complete lines appended since the last read; a half-written last line waits for the next one.
@@ -288,6 +308,13 @@ func (t *transcript) read(failed map[string]bool) error {
 		return err
 	}
 	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if fi.Size() < t.offset { // rewritten from scratch: start over
+		*t = *newTranscript(t.path)
+	}
 	if _, err := f.Seek(t.offset, io.SeekStart); err != nil {
 		return err
 	}
@@ -306,10 +333,16 @@ func (t *transcript) read(failed map[string]bool) error {
 	return nil
 }
 
+// noteBrief keeps the brief the first user text naming one says to follow; injected texts name none.
+func (t *transcript) noteBrief(text string) {
+	if t.brief == "" {
+		t.brief = briefName(text)
+	}
+}
+
 type transcriptLine struct {
 	Type      string    `json:"type"`
 	Timestamp time.Time `json:"timestamp"`
-	IsMeta    bool      `json:"isMeta"`
 	Message   struct {
 		ID      string          `json:"id"`
 		Model   string          `json:"model"`
@@ -351,27 +384,23 @@ func (t *transcript) apply(line []byte, failed map[string]bool) {
 	if l.Type == "user" {
 		var text string
 		if json.Unmarshal(l.Message.Content, &text) == nil {
-			if t.prompt == "" && !l.IsMeta {
-				t.prompt = text
-			}
+			t.noteBrief(text)
 			return
 		}
 	}
-	if json.Unmarshal(l.Message.Content, &blocks) != nil {
+	if len(l.Message.Content) > 0 && json.Unmarshal(l.Message.Content, &blocks) != nil {
 		return
 	}
 	if l.Type == "user" {
 		for _, c := range blocks {
-			switch {
-			case c.Type == "text" && t.prompt == "" && !l.IsMeta:
-				t.prompt = c.Text
-			case c.Type == "tool_result":
+			switch c.Type {
+			case "text":
+				t.noteBrief(c.Text)
+			case "tool_result":
 				if c.IsError {
 					failed[c.ToolUseID] = true
 				}
-				if c.ToolUseID == t.toolID {
-					t.tool, t.toolArg, t.toolID = "", "", ""
-				}
+				t.pending = slices.DeleteFunc(t.pending, func(p toolCall) bool { return p.id == c.ToolUseID })
 			}
 		}
 		return
@@ -383,10 +412,12 @@ func (t *transcript) apply(line []byte, failed map[string]bool) {
 	if m.Model != "" {
 		t.model = m.Model
 	}
-	if m.ID != "" && !t.msgs[m.ID] {
-		t.msgs[m.ID] = true
+	if m.ID != "" {
+		// The newest line of a message has its newest usage: it replaces what earlier lines counted.
 		u := m.Usage
-		t.tokens += u.Input + u.CacheWrite + u.Output
+		n := u.Input + u.CacheWrite + u.Output
+		t.tokens += n - t.msgs[m.ID]
+		t.msgs[m.ID] = n
 		t.ctxTokens = u.Input + u.CacheRead + u.CacheWrite
 	}
 	for _, c := range blocks {
@@ -398,7 +429,7 @@ func (t *transcript) apply(line []byte, failed map[string]bool) {
 		case "tool_use":
 			t.calls++
 			t.toolCalls[c.Name]++
-			t.tool, t.toolArg, t.toolID = c.Name, toolArg(c.Input), c.ID
+			t.pending = append(t.pending, toolCall{c.ID, c.Name, toolArg(c.Input)})
 		}
 	}
 }

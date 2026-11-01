@@ -120,7 +120,11 @@ func TestPacketIsDrawnOnItsConnector(t *testing.T) {
 
 		l := m.layout
 		nodes := layoutTree(m.st.Snap.Agents, l.Tree, l.Box)
-		path := treePaths(nodes, l.Tools)[1] // a2's connector from a1
+		paths := treePaths(nodes, l.Tools)
+		if len(paths) != 2 {
+			t.Fatalf("up=%v: %d connectors, want 2", up, len(paths))
+		}
+		path := paths[1] // a2's connector from a1
 		k := int(0.5 * float64(len(path)-1))
 		head, tail := path[k], path[k-1]
 		if up {
@@ -357,6 +361,15 @@ func TestTickRunsOnlyWhileOpenAndLive(t *testing.T) {
 				t.Errorf("phase = %d, want %d", m.st.Phase, tt.wantPhase)
 			}
 		})
+	}
+}
+
+func TestTickKeepsTheClockAfterAStall(t *testing.T) {
+	m := liveModel()
+	m.last = t0
+	m, _ = m.Update(tickMsg{id: m.id, gen: m.gen, t: t0.Add(time.Hour)})
+	if want := t0.Add(time.Hour); !m.st.Now.Equal(want) {
+		t.Errorf("clock after a stalled tick = %v, want %v", m.st.Now, want)
 	}
 }
 

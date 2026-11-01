@@ -77,6 +77,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.last = msg.t
 		m.Step(dt)
+		m.st.Now = msg.t // the wall clock, even when the step was capped
 		return m, m.tick()
 	case Event:
 		m.Apply(msg)

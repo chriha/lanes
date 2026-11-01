@@ -37,6 +37,14 @@ type Lead struct {
 	ToolCalls map[string]int // tool calls per tool name
 	Tokens    int            // input + cache write + output tokens of all assistant messages
 	LastText  string         // the newest assistant text
+
+	Effort       string // effort level of the newest assistant message that has one ("low" … "max"), "" when unknown
+	Ctx          int    // percent of the context window used by the newest assistant message, -1 when unknown
+	TokensIn     int    // input tokens of all assistant messages
+	TokensOut    int    // output tokens of all assistant messages
+	TokensCache  int    // cache read + cache write tokens of all assistant messages
+	AdvisorModel string // the advisor model of the newest assistant message that names one, "" when none
+	AdvisorCalls int    // advisor calls in total
 }
 
 // Agent is a subagent of a Claude session, from its meta.json and transcript.
@@ -60,7 +68,19 @@ type Agent struct {
 type Snapshot struct {
 	Lead   Lead
 	Agents []Agent // ordered by start, then id
+
+	// ToolTimes are the start times of the tool calls of the lead and all agents within ToolWindow of the newest
+	// transcript line, oldest first. The view windows them again against its own clock.
+	ToolTimes []time.Time
+	// Files are the base names of the last MaxFiles files Edit, Write or NotebookEdit touched (lead and agents),
+	// newest first, each once.
+	Files []string
 }
+
+const (
+	ToolWindow = 15 * time.Minute // how far back Snapshot.ToolTimes reaches
+	MaxFiles   = 4                // how many files Snapshot.Files holds at most
+)
 
 // defaultContextWindow is the context window of models not known to have a larger one.
 const defaultContextWindow = 200_000

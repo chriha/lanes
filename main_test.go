@@ -251,6 +251,62 @@ func TestRunAlwaysTrustedRootIgnoresChanges(t *testing.T) {
 	}
 }
 
+// An unreadable dir makes HashRoot fail, so it shows whether the gate walked the tree.
+func TestRunGateWalksOnlyHashTrustedRoots(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads unreadable dirs")
+	}
+	tests := []struct {
+		name       string
+		always     bool // trust.json holds Always for the root, else the hash from before the dir became unreadable
+		args       []string
+		wantCode   int
+		wantCalls  string
+		wantStderr string // substring; "" = stderr must be empty
+	}{
+		{"always: tui", true, nil, 0, "initApp tui", ""},
+		{"always: status", true, []string{"status"}, 0, "initApp status", ""},
+		{"always: hook", true, []string{"hook", "Stop"}, 0, "hook", ""},
+		{"always: version", true, []string{"version"}, 0, "initApp", ""},
+		{"hash: tui walks and asks", false, nil, 0, "ask initApp tui", "permission denied"},
+		{"hash: status walks and stays quiet", false, []string{"status"}, 0, "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			root, dir := gateRoot(t)
+			hash, err := trust.HashRoot(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.always {
+				err = trust.TrustAlways(root)
+			} else {
+				err = trust.Trust(root, hash)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			locked := filepath.Join(root, "locked")
+			if err := os.Mkdir(locked, 0o000); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { os.Chmod(locked, 0o755) }) // let TempDir remove it
+			var calls []string
+			e, _, stderr := fakeEnv(dir, true, true, &calls)
+			if code := run(tt.args, e); code != tt.wantCode {
+				t.Errorf("exit code = %d, want %d", code, tt.wantCode)
+			}
+			if got := strings.Join(calls, " "); got != tt.wantCalls {
+				t.Errorf("calls = %q, want %q", got, tt.wantCalls)
+			}
+			if tt.wantStderr == "" && stderr.Len() > 0 || !strings.Contains(stderr.String(), tt.wantStderr) {
+				t.Errorf("stderr = %q, want %q", stderr.String(), tt.wantStderr)
+			}
+		})
+	}
+}
+
 func TestRunUntrust(t *testing.T) {
 	tests := []struct {
 		name       string

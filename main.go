@@ -120,11 +120,7 @@ func run(args []string, e env) int {
 	}
 	// Nothing below may run git, load the config or start a provider before the project is trusted.
 	root := trust.Root(e.wd)
-	hash, err := trust.HashRoot(root)
-	trusted := false
-	if err == nil {
-		trusted, err = trust.IsTrusted(root, hash)
-	}
+	trusted, hash, err := trust.Check(root)
 	switch cmd {
 	case "version", "--version": // never prompts; the update hint reads the project's cache, so only when trusted
 		fmt.Fprintln(e.stdout, app.Name, e.version)

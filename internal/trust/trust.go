@@ -126,6 +126,23 @@ func IsTrusted(root, hash string) (bool, error) {
 	return ok && (h == Always || h == hash), nil
 }
 
+// Check reports whether root is trusted and returns the HashRoot it checked. An Always root is trusted without
+// walking the tree, which on a large root costs seconds, so its hash is "". On error it is false.
+func Check(root string) (trusted bool, hash string, err error) {
+	m, err := load()
+	if err != nil {
+		return false, "", err
+	}
+	h, ok := m[root]
+	if ok && h == Always {
+		return true, "", nil
+	}
+	if hash, err = HashRoot(root); err != nil {
+		return false, "", err
+	}
+	return ok && h == hash, hash, nil
+}
+
 // Trust records root with hash, but keeps an Always entry as it is: re-recording a hash (after the dialog, by
 // lanes init or :edit project) never takes always-trust away. A corrupt trust.json is an error and is left as it is,
 // never overwritten.

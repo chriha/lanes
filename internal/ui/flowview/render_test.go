@@ -170,7 +170,7 @@ func TestContextGaugesAreAtLeast12Wide(t *testing.T) {
 	agent := NewCanvas(boxMinW, 5, nil)
 	State{}.drawAgent(agent, Rect{0, 0, boxMinW, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: 50})
 	col := NewCanvas(sessionW, 37, nil)
-	fixtureState().drawSession(col, Rect{0, 0, sessionW, 37}, 0, false)
+	fixtureState().drawSession(col, Rect{0, 0, sessionW, 37})
 	for name, n := range map[string]int{"agent box": gaugeCells(agent, 2), "session column": gaugeCells(col, 3)} {
 		if n < 12 {
 			t.Errorf("%s gauge is %d cells, want at least 12", name, n)
@@ -305,7 +305,7 @@ func TestLogActorColumn(t *testing.T) {
 				s.Snap.Agents = append(s.Snap.Agents, session.Agent{Name: n})
 			}
 			c := NewCanvas(60, 3, nil)
-			s.drawLog(c, Rect{0, 0, 60, 3}, 0, false)
+			s.drawLog(c, Rect{0, 0, 60, 3})
 			if got := strings.TrimSpace(strings.Trim(rows(c)[1], "│")); got != tt.want {
 				t.Errorf("log line = %q, want %q", got, tt.want)
 			}
@@ -429,7 +429,7 @@ func TestSessionColumn(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := NewCanvas(22, tt.h, nil)
-			tt.st.drawSession(c, Rect{0, 0, 22, tt.h}, 0, false)
+			tt.st.drawSession(c, Rect{0, 0, 22, tt.h})
 			got := rows(c)
 			for i, w := range tt.want {
 				g := strings.Join(strings.Fields(got[i]), " ")
@@ -448,7 +448,7 @@ func TestSessionColumn(t *testing.T) {
 
 func TestSessionColumnHighlightsTheHookState(t *testing.T) {
 	c := NewCanvas(22, 38, nil)
-	fixtureState().drawSession(c, Rect{0, 0, 22, 38}, 0, false)
+	fixtureState().drawSession(c, Rect{0, 0, 22, 38})
 	for x := 1; x < 21; x++ {
 		if got := c.At(x, 9).Role; got != RoleSelected {
 			t.Fatalf("cell %d of the working row has role %d, want the selection", x, got)
@@ -483,7 +483,7 @@ func TestTracksAreDrawnInTheTrackRole(t *testing.T) {
 	agent := NewCanvas(boxMinW, 5, nil)
 	State{}.drawAgent(agent, Rect{0, 0, boxMinW, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: 50})
 	col := NewCanvas(sessionW, 37, nil)
-	fixtureState().drawSession(col, Rect{0, 0, sessionW, 37}, 0, false)
+	fixtureState().drawSession(col, Rect{0, 0, sessionW, 37})
 	tools := NewCanvas(leadW, 6, nil)
 	fixtureState().drawTools(tools, Rect{0, 0, leadW, 6})
 	tests := []struct {
@@ -515,7 +515,7 @@ func TestBorders(t *testing.T) {
 	tools := NewCanvas(leadW, 6, nil)
 	fixtureState().drawTools(tools, Rect{0, 0, leadW, 6})
 	col := NewCanvas(sessionW, 37, nil)
-	fixtureState().drawSession(col, Rect{0, 0, sessionW, 37}, 0, false)
+	fixtureState().drawSession(col, Rect{0, 0, sessionW, 37})
 	tests := []struct {
 		name    string
 		c       *Canvas

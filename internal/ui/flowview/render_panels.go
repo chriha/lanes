@@ -159,9 +159,12 @@ func panelRoles(focused bool) (Role, Role) {
 	return RoleDim, RoleBold
 }
 
-// drawSession draws the session column as the lead's dashboard, its rows from row off on: those past the column's
-// bottom are left out. A focused column has its border and title in the accent.
-func (s State) drawSession(c *Canvas, r Rect, off int, focused bool) {
+// drawSession draws the session column unscrolled and without the focus.
+func (s State) drawSession(c *Canvas, r Rect) { s.drawSessionFrom(c, r, 0, false) }
+
+// drawSessionFrom draws the session column as the lead's dashboard, its rows from row off on: those past the
+// column's bottom are left out. A focused column has its border and title in the accent.
+func (s State) drawSessionFrom(c *Canvas, r Rect, off int, focused bool) {
 	role, title := panelRoles(focused)
 	c.titled(r, "session", role, title)
 	rows := s.sessionRows(c, r)
@@ -304,11 +307,14 @@ func (s State) drawTools(c *Canvas, r Rect) {
 	}
 }
 
-// drawLog draws the session log as a closed box of the log lines from index start on, as many as fit: time, actor
-// in its family color and text, failed ones in the bad color. When the log has more lines than fit, the top
+// drawLog draws the session log at its newest lines, without the focus.
+func (s State) drawLog(c *Canvas, r Rect) { s.drawLogFrom(c, r, len(s.Log)-max(r.H-2, 0), false) }
+
+// drawLogFrom draws the session log as a closed box of the log lines from index start on, as many as fit: time,
+// actor in its family color and text, failed ones in the bad color. When the log has more lines than fit, the top
 // border shows the newest shown line's number and the total (12/87). A focused log has its border and title in
 // the accent.
-func (s State) drawLog(c *Canvas, r Rect, start int, focused bool) {
+func (s State) drawLogFrom(c *Canvas, r Rect, start int, focused bool) {
 	role, title := panelRoles(focused)
 	c.titledIn(r, logBorder, "session log", role, title)
 	n := max(r.H-2, 0)

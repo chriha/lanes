@@ -270,9 +270,9 @@ func (m Model) View() string {
 	x, y := m.clamp(d, m.offX, m.offY)
 	c.Blit(dc, x, y, l.View)
 	s.drawHeader(c, l)
-	s.drawSession(c, l.Session, m.sessionStart(), m.focus == areaSession)
+	s.drawSessionFrom(c, l.Session, m.sessionStart(), m.focus == areaSession)
 	drawPosition(c, l, d, x, y, m.focus == areaDiagram)
-	s.drawLog(c, l.Log, m.logStart(), m.focus == areaLog)
+	s.drawLogFrom(c, l.Log, m.logStart(), m.focus == areaLog)
 	s.drawStatus(c, l)
 	return c.String()
 }

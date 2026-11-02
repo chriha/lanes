@@ -455,7 +455,7 @@ func TestLogLineRoles(t *testing.T) {
 		{At: t0, Actor: "lead", Model: "claude-opus-4-1", Text: "Read x.go"},
 	}}
 	c := NewCanvas(60, 4, nil)
-	s.drawLog(c, Rect{0, 0, 60, 4}, 0, false)
+	s.drawLog(c, Rect{0, 0, 60, 4})
 	// time at 2, actor at 11 (8 wide: "reviewer"), text at 20
 	tests := []struct {
 		name string
@@ -550,22 +550,26 @@ func TestOnlyTheFocusedAreaScrolls(t *testing.T) {
 	st := withAgentsOf(deep())
 	st.Log = numberedLog(10)
 	tests := []struct {
-		name               string
-		keys               []string
-		wantDiagY, wantLog int // the diagram's line offset, the log's first shown line
-		wantSess           int
+		name      string
+		keys      []string
+		wantDiagY int    // the diagram's line offset
+		wantLog   string // the log's first shown line
+		wantSess  string // the start of the session column's first shown row
 	}{
-		{"diagram", []string{"j", "j"}, 2, 6, 0},
-		{"log", []string{"tab", "k", "k"}, 0, 4, 0},
-		{"session", []string{"tab", "tab", "j"}, 0, 6, 1},
-		{"back on the diagram", []string{"tab", "k", "tab", "tab", "j"}, 1, 5, 0},
+		{"diagram", []string{"j", "j"}, 2, "line 7", "issue-196"},
+		{"log", []string{"tab", "k", "k"}, 0, "line 5", "issue-196"},
+		{"session", []string{"tab", "tab", "j"}, 0, "line 7", "ctx"},
+		{"back on the diagram", []string{"tab", "k", "tab", "tab", "j"}, 1, "line 6", "issue-196"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := scrolled(st, 90, 24, tt.keys...)
-			if _, y := m.Offset(); y != tt.wantDiagY || m.logStart() != tt.wantLog || m.sessionStart() != tt.wantSess {
-				t.Errorf("diagram line %d, log from %d, session from %d; want %d, %d, %d",
-					y, m.logStart(), m.sessionStart(), tt.wantDiagY, tt.wantLog, tt.wantSess)
+			r := m.layout.Session
+			sess := strings.TrimLeft(string(frameRows(m)[r.Y+1][:r.W]), "┃ ")
+			if _, y := m.Offset(); y != tt.wantDiagY || !strings.HasSuffix(logFrame(m)[1], " "+tt.wantLog) ||
+				!strings.HasPrefix(sess, tt.wantSess) {
+				t.Errorf("diagram line %d, log %q, session row %q; want %d, %q, %q",
+					y, logFrame(m)[1], sess, tt.wantDiagY, tt.wantLog, tt.wantSess)
 			}
 		})
 	}
@@ -631,20 +635,17 @@ func TestSessionColumnScrolls(t *testing.T) {
 		name  string
 		h     int
 		keys  []string
-		want  int
 		first string // the column's first row once scrolled
 	}{
-		{"taller than the column: j scrolls a row", 24, []string{"j"}, 1, "ctx"},
-		{"G to the last rows", 24, []string{"G"}, 24, "state.go"},
-		{"k stops at the top", 24, []string{"k"}, 0, "issue-196"},
-		{"fits the column: keys do nothing", 50, []string{"j", "G"}, 0, "issue-196"},
+		{"taller than the column: j scrolls a row", 24, []string{"j"}, "ctx"},
+		{"G to the last rows", 24, []string{"G"}, "state.go"},
+		{"k stops at the top", 24, []string{"k"}, "issue-196"},
+		{"k after G moves up from the bottom", 24, []string{"G", "G", "k"}, "render_panels.go"},
+		{"fits the column: keys do nothing", 50, []string{"j", "G"}, "issue-196"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := scrolled(fixtureState(), 90, tt.h, append([]string{"tab", "tab"}, tt.keys...)...)
-			if got := m.sessionStart(); got != tt.want {
-				t.Errorf("session column from row %d, want %d", got, tt.want)
-			}
 			r := m.layout.Session
 			if row := string(frameRows(m)[r.Y+1][:r.W]); !strings.HasPrefix(strings.TrimLeft(row, "┃ "), strings.TrimSpace(tt.first)) {
 				t.Errorf("first row %q, want it to start with %q", row, tt.first)

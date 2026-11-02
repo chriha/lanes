@@ -137,7 +137,8 @@ func run(args []string, e env) int {
 		}
 		return 0
 	case "hook": // called by Claude inside sessions: never prompts, does nothing untrusted
-		if trusted {
+		// A session lanes started has its project's trust already, though its cwd (a git worktree) is a root of its own.
+		if trusted || session.InSession() {
 			e.hook(args[1])
 		}
 		return 0

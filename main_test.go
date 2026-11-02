@@ -12,6 +12,7 @@ import (
 
 	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/config"
+	"github.com/chriha/lanes/internal/session"
 	"github.com/chriha/lanes/internal/trust"
 	"github.com/chriha/lanes/internal/update"
 )
@@ -105,6 +106,7 @@ func TestRunGate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			t.Setenv("LANES_SESSION", "") // the test may itself run inside a lanes session
 			root := t.TempDir()
 			dir := filepath.Join(root, "sub")
 			if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
@@ -597,6 +599,68 @@ func TestRunChecksUpdatesOnlyInTUI(t *testing.T) {
 			}
 			if _, err := got.Fetch(context.Background()); err == nil || !strings.Contains(strings.Join(calls, " "), "fetch") {
 				t.Errorf("the checker does not fetch through env.fetch (calls %q)", calls)
+			}
+		})
+	}
+}
+
+// A Claude session lanes starts in a git worktree of a trusted project runs in a root of its own, which is not
+// trusted. Its hooks still have to record the transcript, or the agent view cannot open for the session.
+func TestRunHookInWorktreeSession(t *testing.T) {
+	const payload = `{"session_id":"abc","transcript_path":"/t/abc.jsonl"}`
+	tests := []struct {
+		name       string
+		inSession  bool // LANES_SESSION and LANES_STATE_DIR set, as lanes sets them in the sessions it starts
+		trustedWT  bool
+		wantRecord bool
+	}{
+		{"lanes session, worktree not trusted", true, false, true},
+		{"lanes session, worktree trusted", true, true, true},
+		{"no lanes session, worktree not trusted", false, false, false},
+		{"no lanes session, worktree trusted", false, true, false}, // the hook has no session to record for
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			if err := os.MkdirAll(filepath.Join(app.StateDir(), "sessions"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("LANES_SESSION", "")
+			t.Setenv("LANES_STATE_DIR", "")
+			if tt.inSession {
+				t.Setenv("LANES_SESSION", "fix~1")
+				t.Setenv("LANES_STATE_DIR", app.StateDir())
+			}
+			wt := t.TempDir()
+			if err := os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: /elsewhere/.git/worktrees/x\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if tt.trustedWT {
+				if err := trust.TrustAlways(wt); err != nil {
+					t.Fatal(err)
+				}
+			}
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := w.WriteString(payload); err != nil {
+				t.Fatal(err)
+			}
+			w.Close()
+			stdin := os.Stdin
+			os.Stdin = r
+			t.Cleanup(func() { os.Stdin = stdin })
+
+			var calls []string
+			e, _, _ := fakeEnv(wt, false, false, &calls)
+			e.hook = session.RunHook
+			if code := run([]string{"hook", "UserPromptSubmit"}, e); code != 0 {
+				t.Fatalf("exit code = %d, want 0", code)
+			}
+			got := session.ClaudeTranscript("fix~1")
+			if want := "/t/abc.jsonl"; tt.wantRecord && got != want || !tt.wantRecord && got != "" {
+				t.Errorf("transcript = %q, want recorded %v", got, tt.wantRecord)
 			}
 		})
 	}

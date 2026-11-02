@@ -29,6 +29,9 @@ func hookClaudePath(name string) string {
 	return filepath.Join(os.Getenv("LANES_STATE_DIR"), "sessions", name+".claude.json")
 }
 
+// InSession tells whether the process runs in a session lanes started: Start exports both variables.
+func InSession() bool { return os.Getenv("LANES_SESSION") != "" && os.Getenv("LANES_STATE_DIR") != "" }
+
 // claudeIDs are the ids a Claude hook payload carries and the sidecar keeps.
 type claudeIDs struct {
 	SessionID      string `json:"session_id"`

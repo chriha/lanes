@@ -87,7 +87,7 @@ func ctxFill(ctx int) float64 { return float64(max(ctx, 0)) / 100 }
 // ctxRow draws a context bar from x: the label, the 10 segments and the percent one space after them.
 func (c *Canvas) ctxRow(x, y, ctx int, fill, text Role) {
 	c.Text(x, y, "ctx", RoleDim)
-	c.Segments(x+4, y, '▬', ctxFill(ctx), fill, RoleTrack)
+	c.Segments(x+4, y, segmentCount, '▬', ctxFill(ctx), fill, RoleTrack)
 	c.Text(x+4+segmentCount+1, y, ctxPct(ctx), text)
 }
 
@@ -190,7 +190,7 @@ func (s State) sessionRows(c *Canvas, r Rect) []func(y int) {
 	rows := []func(y int){
 		label(s.Title, since(s.Start, s.Now), RoleText),
 		label("ctx", ctxPct(lead.Ctx), RoleBold),
-		func(y int) { c.Segments(x, y, '▬', ctxFill(lead.Ctx), role, RoleTrack) },
+		func(y int) { c.Segments(x, y, segmentCount, '▬', ctxFill(lead.Ctx), role, RoleTrack) },
 	}
 	if m := effortMeter(lead.Effort); m != "" {
 		rows = append(rows, func(y int) {
@@ -302,7 +302,7 @@ func (s State) drawTools(c *Canvas, r Rect) {
 	for i, t := range s.topTools(3) {
 		y := r.Y + 2 + i
 		c.textIn(x, y, 8, t.Name, RoleText)
-		c.Segments(x+9, y, '■', t.Share, role, RoleTrack)
+		c.Segments(x+9, y, segmentCount, '■', t.Share, role, RoleTrack)
 		c.Text(x+9+segmentCount+1, y, fmt.Sprintf("%.0f%%", t.Share*100), RoleText)
 	}
 }

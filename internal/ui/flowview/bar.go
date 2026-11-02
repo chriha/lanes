@@ -14,7 +14,7 @@ const halfGlyph = '▌'
 // Segments draws a bar of segmentCount one-cell glyphs at x, y, filled to v (clamped to 0..1) in 5% steps: the
 // full cells as glyph in fill, then at most one half cell as ▌ in fill, the rest as glyph in track. v is rounded to
 // the nearest 5% (half a cell), but to at least one half cell for any v above 0.
-func (c *Canvas) Segments(x, y int, glyph rune, v float64, fill, track Role) {
+func (c *Canvas) Segments(x, y, width int, glyph rune, v float64, fill, track Role) {
 	v = min(max(v, 0), 1)
 	halves := int(math.Round(v * segmentCount * 2))
 	if v > 0 {

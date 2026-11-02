@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/item"
 )
@@ -32,10 +34,11 @@ func TestApplyConfigClearsStaleProviderError(t *testing.T) {
 	}
 	m.applyConfig(cfg("command"))
 	setFetching(m, "p", true) // the refetch the reload triggers
+	m.fetches["p"].started = time.Now()
 	if m.provErr["p"] != nil {
 		t.Errorf("provErr = %v, want cleared once the provider builds", m.provErr["p"])
 	}
-	if out := m.list(); strings.Contains(out, "bogus") || !strings.Contains(out, "loading…") {
-		t.Errorf("list should show loading…, got %q", out)
+	if out := m.list(); strings.Contains(out, "bogus") || !strings.Contains(ansi.Strip(out), "p ⠋ fetching") {
+		t.Errorf("list should show the fetch status, got %q", out)
 	}
 }

@@ -1054,10 +1054,13 @@ func (m *Model) header() string {
 		tabs = append(tabs, st.Render(label))
 	}
 	left := sTitle.Render(" "+app.Name) + "  " + strings.Join(tabs, "")
-	right := m.sessionSummary() + sDim.Render(m.freshness())
+	now := time.Now()
+	right := m.sessionSummary() + strings.Join(m.providerStatuses(now), sDim.Render("  "))
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 1
 	if gap < 1 {
-		gap = 1
+		// too narrow for every provider: only the one of the current view
+		right = m.sessionSummary() + m.styledStatus(m.views[m.cur].cfg.Provider, now)
+		gap = max(m.width-lipgloss.Width(left)-lipgloss.Width(right)-1, 1)
 	}
 	return left + strings.Repeat(" ", gap) + right
 }
@@ -1080,17 +1083,6 @@ func (m *Model) usageText(now time.Time) string {
 		text += " (" + age(d) + " ago)"
 	}
 	return text
-}
-
-func (m *Model) freshness() string {
-	name := m.views[m.cur].cfg.Provider
-	switch {
-	case m.fetching(name):
-		return "⟳ refreshing"
-	case m.fetchedAt[name].IsZero():
-		return "cached"
-	}
-	return "updated " + time.Since(m.fetchedAt[name]).Round(time.Second).String() + " ago"
 }
 
 const (
@@ -1134,7 +1126,10 @@ func (m *Model) list() string {
 			}
 			rows = append(rows, "", "  "+sErr.Render(e))
 		case m.fetching(v.cfg.Provider):
-			rows = append(rows, "", "  "+sDim.Render("loading…"))
+			rows = append(rows, "")
+			for _, st := range m.providerStatuses(time.Now()) {
+				rows = append(rows, "  "+st)
+			}
 		default:
 			rows = append(rows, "", "  "+sDim.Render(msg))
 		}

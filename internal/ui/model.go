@@ -135,6 +135,9 @@ type Model struct {
 	updates *update.Checker
 	upgrade string // the upgrade command the update notice shows
 
+	// reloadGen counts the started config reloads; a reloadedMsg of an older one is dropped
+	reloadGen int
+
 	width, height int
 }
 
@@ -176,17 +179,36 @@ func New(cfg *config.Config, opts ...Option) *Model {
 	return m
 }
 
-func (m *Model) applyConfig(cfg *config.Config) {
-	m.cfg = cfg
-	applyTheme(cfg.Theme)
-	m.cfgMod = config.Mtime()
-	m.providers = map[string]provider.Provider{}
+// buildProviders builds the providers of cfg; it returns the build error of each one that failed.
+func buildProviders(cfg *config.Config) (map[string]provider.Provider, map[string]error) {
+	provs, errs := map[string]provider.Provider{}, map[string]error{}
 	for name, pc := range cfg.Provider {
 		p, err := provider.New(pc)
 		if err != nil {
-			m.provErr[name] = err
+			errs[name] = err
 			continue
 		}
+		provs[name] = p
+	}
+	return provs, errs
+}
+
+func (m *Model) applyConfig(cfg *config.Config) {
+	provs, errs := buildProviders(cfg)
+	m.applyBuilt(cfg, provs, errs)
+	m.cfgMod = config.Mtime()
+}
+
+// applyBuilt applies cfg with its providers already built (errs: the providers whose build failed). It leaves
+// cfgMod alone: a reload set it when it started, so a change made while it ran is reloaded again.
+func (m *Model) applyBuilt(cfg *config.Config, provs map[string]provider.Provider, errs map[string]error) {
+	m.cfg = cfg
+	applyTheme(cfg.Theme)
+	m.providers = map[string]provider.Provider{}
+	for name, err := range errs {
+		m.provErr[name] = err
+	}
+	for name, p := range provs {
 		m.providers[name] = p
 		delete(m.fullFetched, name) // a rebuilt provider has no snapshot: show the partial result first again
 		delete(m.provErr, name)     // built again: drop the stale build error until the next fetch
@@ -516,13 +538,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.pollSessions()
 	case editorDone:
-		if msg.project { // the user wrote it through lanes: trust its new content
-			if err := trustProject(); err != nil {
-				m.notice = "trust: " + err.Error()
-				return m, nil
-			}
-		}
-		return m, m.reload()
+		// :edit project: the user wrote it through lanes, so the reload trusts its new content first
+		return m, m.startReload(msg.project)
+	case reloadedMsg:
+		return m, m.onReloaded(msg)
 	case noteEdited:
 		if msg.err != nil {
 			m.say(lvErr, "note: "+msg.err.Error())
@@ -663,27 +682,64 @@ func (l level) style() lipgloss.Style {
 // say sets the footer notice. Set it only through say, so every notice has an explicit level.
 func (m *Model) say(l level, text string) { m.notice, m.level = text, l }
 
+// reloadedMsg is the result of a config reload run off the UI goroutine. Without cfg the reload was not applied
+// and notice says why.
+type reloadedMsg struct {
+	gen       int
+	cfg       *config.Config
+	providers map[string]provider.Provider
+	buildErr  map[string]error
+	notice    string
+	level     level
+}
+
 // reload re-reads the config (also triggered by saving the file) and refetches, so edits apply live.
-func (m *Model) reload() tea.Cmd {
+func (m *Model) reload() tea.Cmd { return m.startReload(false) }
+
+// startReload runs the trust check, config.Load and the provider build in a command; the old config stays active
+// until its reloadedMsg lands. trustFirst records the project's current .lanes.toml as trusted before the check.
+func (m *Model) startReload(trustFirst bool) tea.Cmd {
+	m.reloadGen++
+	gen := m.reloadGen
+	m.cfgMod = config.Mtime() // the tick starts no second reload of the same change while this one runs
+	return func() tea.Msg { return loadReload(gen, trustFirst) }
+}
+
+// loadReload does the blocking part of a reload. It runs in a Bubble Tea command and touches no model state.
+func loadReload(gen int, trustFirst bool) reloadedMsg {
+	fail := func(l level, notice string) reloadedMsg { return reloadedMsg{gen: gen, level: l, notice: notice} }
+	if trustFirst {
+		if err := trustProject(); err != nil {
+			return fail(lvErr, "trust: "+err.Error())
+		}
+	}
 	if ok, err := projectTrusted(); !ok {
 		if err != nil {
-			m.say(lvErr, "trust: "+err.Error())
-		} else {
-			m.say(lvWarn, ".lanes.toml changed — restart lanes to trust it")
+			return fail(lvErr, "trust: "+err.Error())
 		}
-		m.cfgMod = config.Mtime() // do not retry the same untrusted file every tick
-		return nil
+		return fail(lvWarn, ".lanes.toml changed — restart lanes to trust it")
 	}
 	cfg, err := config.Load()
 	if err != nil {
-		m.say(lvErr, "config: "+err.Error())
-		m.cfgMod = config.Mtime() // do not retry the same broken file every tick
+		return fail(lvErr, "config: "+err.Error())
+	}
+	provs, errs := buildProviders(cfg)
+	return reloadedMsg{gen: gen, cfg: cfg, providers: provs, buildErr: errs}
+}
+
+// onReloaded applies a landed reload unless a newer one started since.
+func (m *Model) onReloaded(msg reloadedMsg) tea.Cmd {
+	if msg.gen != m.reloadGen {
+		return nil // a newer reload replaces it
+	}
+	if msg.cfg == nil {
+		m.say(msg.level, msg.notice)
 		return nil
 	}
 	m.cancelFetches() // their results belong to the old config; refreshAll below fetches at once
-	m.applyConfig(cfg)
-	m.say(lvInfo, fmt.Sprintf("config reloaded: %d views, %d actions", len(m.views), len(cfg.Action)))
-	for k := range cfg.Keymap {
+	m.applyBuilt(msg.cfg, msg.providers, msg.buildErr)
+	m.say(lvInfo, fmt.Sprintf("config reloaded: %d views, %d actions", len(m.views), len(msg.cfg.Action)))
+	for k := range msg.cfg.Keymap {
 		if len(k) == 1 && strings.Contains(builtinKeys, k) {
 			m.say(lvWarn, m.notice+fmt.Sprintf(" · key %q is built in and ignored", k))
 		}

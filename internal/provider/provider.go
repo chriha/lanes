@@ -3,8 +3,10 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/item"
@@ -27,16 +29,7 @@ func New(c config.Provider) (Provider, error) {
 func newProvider(c config.Provider, origin func() (string, error)) (Provider, error) {
 	switch c.Type {
 	case "auto":
-		u, err := origin()
-		if err != nil {
-			return nil, fmt.Errorf("auto: cannot detect the forge without a git remote origin; set type = \"github\" or \"gitlab\"")
-		}
-		typ, repo := Forge(u)
-		c.Type = typ
-		if c.Project == "" {
-			c.Project = repo
-		}
-		return newProvider(c, origin)
+		return &auto{c: c, origin: origin}, nil
 	case "gitlab":
 		return &GitLab{Project: c.Project}, nil
 	case "github":
@@ -49,6 +42,59 @@ func newProvider(c config.Provider, origin func() (string, error)) (Provider, er
 		return &Command{Cmd: c.Command}, nil
 	}
 	return nil, fmt.Errorf("unknown provider type %q", c.Type)
+}
+
+// ErrNoQuick is returned by Quick of a provider whose underlying provider has no quick pass; the full fetch follows.
+var ErrNoQuick = errors.New("no quick pass")
+
+// auto is a provider of type "auto": it reads the origin remote and builds the provider for its forge on first use,
+// in the fetch, so building it spawns no subprocess. The result, an error included, is kept for its lifetime.
+type auto struct {
+	c      config.Provider
+	origin func() (string, error)
+	once   sync.Once
+	p      Provider
+	err    error
+}
+
+// resolve returns the provider for the origin's forge, reading the origin once.
+func (a *auto) resolve() (Provider, error) {
+	a.once.Do(func() {
+		u, err := a.origin()
+		if err != nil {
+			a.err = fmt.Errorf("auto: cannot detect the forge without a git remote origin; set type = \"github\" or \"gitlab\"")
+			return
+		}
+		c := a.c
+		typ, repo := Forge(u)
+		c.Type = typ
+		if c.Project == "" {
+			c.Project = repo
+		}
+		a.p, a.err = newProvider(c, a.origin)
+	})
+	return a.p, a.err
+}
+
+func (a *auto) Fetch(ctx context.Context) ([]item.Item, error) {
+	p, err := a.resolve()
+	if err != nil {
+		return nil, err
+	}
+	return p.Fetch(ctx)
+}
+
+// Quick runs the forge provider's quick pass, or returns ErrNoQuick when it has none.
+func (a *auto) Quick(ctx context.Context) ([]item.Item, error) {
+	p, err := a.resolve()
+	if err != nil {
+		return nil, err
+	}
+	q, ok := p.(Quicker)
+	if !ok {
+		return nil, ErrNoQuick
+	}
+	return q.Quick(ctx)
 }
 
 // Forge returns the provider type and the repo path (owner/repo, group/project) for a git remote URL

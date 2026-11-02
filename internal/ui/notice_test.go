@@ -54,14 +54,14 @@ func TestNoticeLevels(t *testing.T) {
 		{"config error", func(t *testing.T, m *Model) {
 			project(t)
 			cfgFile(t, "not [valid")
-			m.reload()
+			landReload(t, m, m.reload())
 		}, lvErr},
 		{"untrusted project change", func(t *testing.T, m *Model) {
 			dir := project(t)
 			if err := os.WriteFile(filepath.Join(dir, config.ProjectFile), []byte("# b\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			m.reload()
+			landReload(t, m, m.reload())
 			if !strings.Contains(m.notice, "restart lanes to trust it") {
 				t.Fatalf("notice = %q", m.notice)
 			}
@@ -71,7 +71,7 @@ func TestNoticeLevels(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(app.StateRoot(), "trust.json"), []byte("not json"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			m.reload()
+			landReload(t, m, m.reload())
 			if !strings.HasPrefix(m.notice, "trust: ") {
 				t.Fatalf("notice = %q", m.notice)
 			}
@@ -81,7 +81,7 @@ func TestNoticeLevels(t *testing.T) {
 		{"built-in key ignored on reload", func(t *testing.T, m *Model) {
 			project(t)
 			cfgFile(t, "[provider.p]\ntype = \"command\"\ncommand = \"true\"\n[[view]]\nname = \"v\"\nprovider = \"p\"\n[action.quick]\ntype = \"run\"\nrun = \"true\"\n[keymap]\nj = \"quick\"\n")
-			m.reload()
+			landReload(t, m, m.reload())
 			if !strings.Contains(m.notice, "built in and ignored") {
 				t.Fatalf("notice = %q", m.notice)
 			}

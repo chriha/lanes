@@ -81,7 +81,7 @@ func ctxPct(ctx int) string {
 	return fmt.Sprintf("%d%%", ctx)
 }
 
-// ctxFill is a context use as the fraction a gauge is filled to, empty when unknown.
+// ctxFill is a context use as the fraction a bar is filled to, empty when unknown.
 func ctxFill(ctx int) float64 { return float64(max(ctx, 0)) / 100 }
 
 // ctxRow draws a context bar in w cells from x: the label, the 10 segments and the percent.

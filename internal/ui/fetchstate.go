@@ -62,3 +62,7 @@ func (m *Model) cancelFetches() {
 
 // Close cancels the running fetches. Call it once the program has quit.
 func (m *Model) Close() { m.cancelFetches() }
+
+// fetchStatus is the status line of provider name at now: its phase (cached, fetching with elapsed time, failed,
+// updated) and the duration of its last finished fetch.
+func (m *Model) fetchStatus(name string, now time.Time) string { return "" }

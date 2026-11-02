@@ -12,7 +12,8 @@ import (
 // State is everything one frame of the agent view shows. It is plain data: the caller fills it from the session's
 // hook state and transcript snapshot, and the animation steps it.
 type State struct {
-	Title string // the session's name, shown in the header
+	Title string // the session's name, shown in the session column and, without an Item, in the header
+	Item  string // the title of the item the session works on, shown in the header; "" when unknown
 	Hook  string // Claude's hook state: working, asking or waiting
 	Ended bool   // Claude exited: the frame is the final state
 	Start time.Time

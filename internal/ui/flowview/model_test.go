@@ -141,7 +141,7 @@ func TestViewFillsTheTerminal(t *testing.T) {
 func TestSetSessionKeepsTheFirstSnapshotStill(t *testing.T) {
 	m := New(nil)
 	m.SetSize(90, 46)
-	m.SetSession("fix~7", t0.Add(-time.Minute), t0)
+	m.SetSession("fix~7", "", t0.Add(-time.Minute), t0)
 	m.Apply(SnapshotEvent{session.Snapshot{
 		Lead:   session.Lead{Model: "claude-opus-4-1"},
 		Agents: []session.Agent{{ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Start: t0, Ctx: -1}},

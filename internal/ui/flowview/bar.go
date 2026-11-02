@@ -29,6 +29,9 @@ func (c *Canvas) Bar(x, y, w int, v float64, phase int, fill, track Role) {
 	}
 }
 
+// Gauge draws a w-cell gauge filled to v (clamped to 0..1) at x, y in eighths of a cell. Not implemented yet.
+func (c *Canvas) Gauge(x, y, w int, v float64, fill, track Role) {}
+
 // effortMeter is the 4-cell meter of an effort level: low ▮▯▯▯, medium ▮▮▯▯, high ▮▮▮▯, xhigh and max ▮▮▮▮; ""
 // for an unknown level.
 func effortMeter(level string) string {

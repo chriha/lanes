@@ -184,8 +184,11 @@ func TestDiagramDrawsEveryAgent(t *testing.T) {
 				if d.W < l.View.W || d.H < l.View.H {
 					t.Errorf("diagram %dx%d is smaller than the viewport %+v", d.W, d.H, l.View)
 				}
-				if d.Lead.X < 0 || d.Lead.X+d.Lead.W > d.W || d.Tools.Y < d.Lead.Y+d.Lead.H {
-					t.Errorf("lead %+v and tools %+v do not fit the diagram's width %d one below the other", d.Lead, d.Tools, d.W)
+				if d.Lead.X < 0 || d.Tools.X != d.Lead.X+d.Lead.W+wideGap || d.Tools.X+d.Tools.W > d.W || d.Tools.Y != d.Lead.Y {
+					t.Errorf("lead %+v and tools %+v are not side by side %d apart on the top row of the %d wide diagram", d.Lead, d.Tools, wideGap, d.W)
+				}
+				if d.W < 2*leadW+wideGap {
+					t.Errorf("diagram is %d wide, want at least lead + gap + tools box = %d", d.W, 2*leadW+wideGap)
 				}
 				seen := map[int]bool{}
 				var counts []int
@@ -195,8 +198,8 @@ func TestDiagramDrawsEveryAgent(t *testing.T) {
 					if n.Rect.W < 28 {
 						t.Errorf("box %+v is narrower than 28", n.Rect)
 					}
-					if n.Rect.X < 0 || n.Rect.X+n.Rect.W > d.W || n.Rect.Y < d.Tools.Y+d.Tools.H || n.Rect.Y+n.Rect.H > d.H {
-						t.Errorf("box %+v leaves the %dx%d diagram or overlaps the tools %+v", n.Rect, d.W, d.H, d.Tools)
+					if n.Rect.X < 0 || n.Rect.X+n.Rect.W > d.W || n.Rect.Y < d.Lead.Y+d.Lead.H+rowGap || n.Rect.Y+n.Rect.H > d.H {
+						t.Errorf("box %+v leaves the %dx%d diagram or is not rowGap below the lead %+v", n.Rect, d.W, d.H, d.Lead)
 					}
 					if n.Rect.Y != lastY {
 						counts = append(counts, 0)
@@ -210,9 +213,9 @@ func TestDiagramDrawsEveryAgent(t *testing.T) {
 				if got, want := fmt.Sprint(counts), lines[size][name]; got != want {
 					t.Errorf("boxes per line %s, want %s", got, want)
 				}
-				for i, p := range treePaths(d.Nodes, d.Tools, d.Tree) {
+				for i, p := range treePaths(d.Nodes, d.Lead, d.Tree) {
 					n := d.Nodes[i]
-					from := Point{d.Tools.X + d.Tools.W/2, d.Tools.Y + d.Tools.H}
+					from := Point{d.Lead.X + d.Lead.W/2, d.Lead.Y + d.Lead.H}
 					if n.Parent >= 0 {
 						pr := d.Nodes[n.Parent].Rect
 						from = Point{pr.X + pr.W/2, pr.Y + pr.H}
@@ -221,6 +224,9 @@ func TestDiagramDrawsEveryAgent(t *testing.T) {
 						t.Fatalf("connector of node %d runs %v to %v, want %v to %v", i, p[0], p[len(p)-1], from, to)
 					}
 					for k, pt := range p {
+						if r := d.Tools; pt.X >= r.X-1 && pt.X <= r.X+r.W && pt.Y >= r.Y && pt.Y < r.Y+r.H {
+							t.Fatalf("connector of node %d touches the tools box %+v at %v", i, r, pt)
+						}
 						if k > 0 {
 							if dx, dy := pt.X-p[k-1].X, pt.Y-p[k-1].Y; dx*dx+dy*dy != 1 {
 								t.Fatalf("connector of node %d jumps from %v to %v", i, p[k-1], pt)
@@ -273,7 +279,7 @@ func TestDiagramHoldsEveryBoxWhole(t *testing.T) {
 				ids[i] = fmt.Sprintf("a%d", i)
 			}
 			d := l.Diagram(agentsOf(ids...))
-			bottom := d.Tools.Y + d.Tools.H
+			bottom := max(d.Lead.Y+d.Lead.H, d.Tools.Y+d.Tools.H)
 			for _, node := range d.Nodes {
 				if node.Rect.H != 6 {
 					t.Fatalf("%v, %d agents: box %+v is not 6 rows high", size, n, node.Rect)

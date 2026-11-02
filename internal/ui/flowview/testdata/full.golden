@@ -1,44 +1,44 @@
  AGENT VIEW · issue-196                                                                   
 ══════════════════════════════════════════════════════════════════════════════════════════
                                ■ opus   ■ sonnet   ■ haiku                                
-┏━ session ━━━━━━━━━━┓                 ╔══════════════════════════════════╗               
-┃ issue-196   12m03s ┃                 ║    opus 4.1 · lead ▮▮▮▯ high     ║               
-┃ ctx            61% ┃                 ║        Agent implementer         ║               
-┃ ███████████░░░░░░░ ┃                 ║         ◓ working 12m03s         ║               
-┃ effort ▮▮▮▯ high   ┃                 ╚══════════════════════════════════╝               
-┃                    ┃                                   │                                
-┃ activity     3/min ┃                                   ▼                                
-┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄    ┃                 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓               
-┃                    ┃                 ┃ tools                   calls 48 ┃               
-┃ ◆ working          ┃                 ┃ Read     ███████▓░░░░░░░░░░  42% ┃               
-┃ ┆                  ┃                 ┃ Bash     █████▒░░░░░░░░░░░░  29% ┃               
-┃ ◇ asking           ┃                 ┃ Agent    ███▓░░░░░░░░░░░░░░  19% ┃               
-┃ ┆                  ┃                 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛               
-┃ ◇ waiting          ┃                                   │                                
-┃                    ┃                  ┌────────────────┴───────────────┐                
-┃ turns           12 ┃                  ▼                                ▼                
-┃ tools           48 ┃   ┏━ implementer ━━━━━━━━━━━━━━┓   ┏━ triager ━━━━━━━━━━━━━━━━━━┓  
-┃ tokens   1,234,567 ┃   ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃  
-┃   in        12,345 ┃   ┃ ctx ███████▏░░░░░░░░░  42% ┃   ┃ ctx █▎░░░░░░░░░░░░░░░   7% ┃  
-┃   out       98,765 ┃   ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  
-┃   cache  1,123,457 ┃   ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  
-┃ agents    ◓2 ✓1 ✗1 ┃   ┗━ ◓ 9m00s ▸ Bash go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛  
+┏━ session ━━━━━━━━━━┓                 ╔══════════════════════════════════╗   ┏━━━━━━━━━━━
+┃ issue-196   12m03s ┃                 ║    opus 4.1 · lead ▮▮▮▯ high     ║   ┃ tools     
+┃ ctx            61% ┃                 ║        Agent implementer         ║   ┃ Read     █
+┃ ███████████░░░░░░░ ┃                 ║         ◓ working 12m03s         ║   ┃ Bash     █
+┃ effort ▮▮▮▯ high   ┃                 ╚══════════════════════════════════╝   ┃ Agent    █
+┃                    ┃                                   │                    ┗━━━━━━━━━━━
+┃ activity     3/min ┃                  ┌────────────────┴───────────────┐                
+┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄    ┃                  ▼                                ▼                
+┃                    ┃   ┏━ implementer ━━━━━━━━━━━━━━┓   ┏━ triager ━━━━━━━━━━━━━━━━━━┓  
+┃ ◆ working          ┃   ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃  
+┃ ┆                  ┃   ┃ ctx ███████▏░░░░░░░░░  42% ┃   ┃ ctx █▎░░░░░░░░░░░░░░░   7% ┃  
+┃ ◇ asking           ┃   ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  
+┃ ┆                  ┃   ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  
+┃ ◇ waiting          ┃   ┗━ ◓ 9m00s ▸ Bash go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛  
 ┃                    ┃                  │                                                 
-┃ files              ┃                  └───────────────┐                                 
-┃ render_panels.go   ┃                                  ▼                                 
-┃ state.go           ┃                   ┏━ code-reviewer ━━━━━━━━━━━━┓                   
-┃ layout.go          ┃                   ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                   
-┃ README.md          ┃                   ┃ ctx ░░░░░░░░░░░░░░░░░   -- ┃                   
-┃                    ┃                   ┃      review the diff       ┃                   
-┃ last:              ┃                   ┃                            ┃                   
-┃ Slice 2 is next:   ┃                   ┗━ ◓ 2m00s ▸ Grep drawAgent ━┛                   
-┃ the layered layout ┃                                  │                                 
-┃ and the static…    ┃                                  │                                 
-┃                    ┃                                  ▼                                 
-┃ advisor   opus 4.1 ┃                   ┏━ validator ━━━━━━━━━━━━━━━━┓                   
-┃   calls          3 ┃                   ┃         sonnet 4.5         ┃                   
-┗━━━━━━━━━━━━━━━━━━━━┛                   ┃ ctx ██░░░░░░░░░░░░░░░  12% ┃                   
-                                                                            lines 1-37/40 
+┃ turns           12 ┃                  └───────────────┐                                 
+┃ tools           48 ┃                                  ▼                                 
+┃ tokens   1,234,567 ┃                   ┏━ code-reviewer ━━━━━━━━━━━━┓                   
+┃   in        12,345 ┃                   ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                   
+┃   out       98,765 ┃                   ┃ ctx ░░░░░░░░░░░░░░░░░   -- ┃                   
+┃   cache  1,123,457 ┃                   ┃      review the diff       ┃                   
+┃ agents    ◓2 ✓1 ✗1 ┃                   ┃                            ┃                   
+┃                    ┃                   ┗━ ◓ 2m00s ▸ Grep drawAgent ━┛                   
+┃ files              ┃                                  │                                 
+┃ render_panels.go   ┃                                  │                                 
+┃ state.go           ┃                                  ▼                                 
+┃ layout.go          ┃                   ┏━ validator ━━━━━━━━━━━━━━━━┓                   
+┃ README.md          ┃                   ┃         sonnet 4.5         ┃                   
+┃                    ┃                   ┃ ctx ██░░░░░░░░░░░░░░░  12% ┃                   
+┃ last:              ┃                   ┃     validate a finding     ┃                   
+┃ Slice 2 is next:   ┃                   ┃                            ┃                   
+┃ the layered layout ┃                   ┗━ ✗ failed 1m00s ━━━━━━━━━━━┛                   
+┃ and the static…    ┃                                                                    
+┃                    ┃                                                                    
+┃ advisor   opus 4.1 ┃                                                                    
+┃   calls          3 ┃                                                                    
+┗━━━━━━━━━━━━━━━━━━━━┛                                                                    
+                                                                             cols 1-67/91 
 ──┤ session log ├─────────────────────────────────────────────────────────────────────────
  14:28:00 implementer   spawned code-reviewer                                             
  14:28:30 code-reviewer spawned validator                                                 

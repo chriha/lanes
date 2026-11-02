@@ -165,7 +165,7 @@ func (m Model) Offset() (x, y int) {
 }
 
 // View draws the frame. The header, legend, session column, log and status line are pinned; the diagram (lead,
-// tool layer and every agent) is drawn whole on a canvas of its own and the scrolled-to part of it copied into the
+// tools box and every agent) is drawn whole on a canvas of its own and the scrolled-to part of it copied into the
 // viewport, with the position shown above the log when it does not fit.
 func (m Model) View() string {
 	c, l, s := m.canvas, m.layout, m.frame()
@@ -176,7 +176,7 @@ func (m Model) View() string {
 	s.drawLead(dc, d.Lead)
 	s.drawTools(dc, d.Tools)
 	paths := s.drawTree(dc, d)
-	s.drawPackets(dc, m.packets, d.Nodes, paths, toolPath(d))
+	s.drawPackets(dc, m.packets, d.Nodes, paths)
 	x, y := m.clamp(d, m.offX, m.offY)
 	c.Blit(dc, x, y, l.View)
 	s.drawHeader(c, l)

@@ -712,7 +712,9 @@ anything because the terminal is small. It shows, top to bottom:
   - `advisor` — the advisor model and its `calls`, when the session uses one.
 - **lead** — the main Claude, in a double border: its model and `effort` meter with its level (left out when
   unknown), current tool and argument, state and elapsed time.
-- **tools** — the lead's three most used tools, with their share of all its calls.
+- **tools** — the lead's three most used tools, with their share of all its calls. The box sits right of the lead
+  on its top row, `3` columns apart and joined to nothing; the agent tree starts directly below the lead. It
+  scrolls with the diagram, which is wide enough for both: on a narrow terminal reach it with `h`/`l`.
 - **agents** — the subagents as a layered tree, one row per spawn depth, each connected to the agent that
   spawned it (or to the lead). Each box has the agent's full name in its top border, then its model and `effort`
   meter, a `ctx` bar with its %, its task and a live text row; the bottom border shows the status: a spinner with elapsed time and
@@ -728,7 +730,7 @@ anything because the terminal is small. It shows, top to bottom:
 - **status line** — one entry per model family in its color, e.g. `opus [2 running]`, `sonnet [1 failed]`,
   `haiku [done]`; then `agents [running/total]`, `tools [n]`, `tokens [n]` and `● live` or `■ ended`.
 
-**Scrolling.** The diagram (lead, tools and agent tree) scrolls as one block when it is higher or wider than the
+**Scrolling.** The diagram (lead, tools box and agent tree) scrolls as one block when it is higher or wider than the
 space between the session column and the log: `j`/`k` (or the arrows) a line, `ctrl-d`/`ctrl-u` half a page,
 `g`/`G` to the top/bottom, `h`/`l` (or the arrows) a column sideways when it is wider than the terminal. Scrolling
 stops at the edges and keeps its place as the session updates. The header, legend, session column, log and status
@@ -745,8 +747,7 @@ values bright; numbers have thousands separators.
 
 **Packets.** Connectors show where work happens. While an agent runs, packets in its parent's color stream down
 its connector, about one every 1.2 seconds (each connector at its own pace). When it finishes or fails, a burst
-of 3 packets runs back up, then the connector goes quiet and dim. While the lead is `working`, packets stream from
-it to the tool layer.
+of 3 packets runs back up, then the connector goes quiet and dim.
 
 **Where the data comes from.** The hooks note where Claude writes the session's
 transcript (`<session>.jsonl` under Claude's config dir). While the view is open, `lanes` reads what was added to it every

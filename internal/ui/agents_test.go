@@ -132,13 +132,13 @@ func TestAgentViewBackKeys(t *testing.T) {
 func TestAgentViewScrollKeys(t *testing.T) {
 	m := agentModel(t, working("fix~1"))
 	withTranscript(t, "fix~1")
-	m.width, m.height = 90, 12 // a 3-line viewport: the 13 lines of lead and tools scroll 10
+	m.width, m.height = 90, 12 // a 3-line viewport: the 6 lines of lead and tools scroll 3, and the tools box ends 24 columns past the viewport
 	press(m, "A")
 	tests := []struct {
 		key    string
 		wx, wy int
 	}{
-		{"j", 0, 1}, {"G", 0, 10}, {"k", 0, 9}, {"g", 0, 0}, {"l", 0, 0},
+		{"j", 0, 1}, {"G", 0, 3}, {"k", 0, 2}, {"g", 0, 0}, {"l", 1, 0},
 	}
 	for _, tt := range tests {
 		press(m, tt.key)

@@ -42,29 +42,31 @@ func NewLayout(w, h int) Layout {
 	return l
 }
 
-// Diagram is the scrolling part of the view laid out on a canvas of its own, in its own coordinates: the lead, the
-// tool layer below it and the agent tree below that. It is at least the viewport's size.
+// Diagram is the scrolling part of the view laid out on a canvas of its own, in its own coordinates: the lead with
+// the tools box right of it, and the agent tree below the lead. It is at least the viewport's size.
 type Diagram struct {
 	W, H  int
 	Lead  Rect
-	Tools Rect
+	Tools Rect // right of the lead on its top row, joined to nothing
 	Tree  Rect // where the agent rows go
 	Box   Rect // the size (W, H) of one agent box
 	Nodes []Node
 }
 
-// Diagram lays out the scrolling part for the agents: the lead and the tool layer centered at the top, every agent
-// below them. It is as wide as the viewport, the lead or an agent box, whichever is widest, and as high as the
-// viewport or its agents, whichever is higher.
+// Diagram lays out the scrolling part for the agents: the lead centered at the top with the tools box wideGap
+// columns right of it, every agent below the lead. It is as wide as the viewport, the lead or an agent box,
+// whichever is widest, and wider when the tools box ends past that; as high as the viewport or its agents,
+// whichever is higher. The agents are laid out in the width without the tools box, so it adds no columns to a line.
 func (l Layout) Diagram(agents []session.Agent) Diagram {
 	box := l.Box
 	box.W = l.boxWidth(agents)
-	w := max(l.View.W, leadW, box.W)
-	d := Diagram{W: w, Box: box, Lead: Rect{(w - leadW + 1) / 2, 0, leadW, 5}}
-	d.Tools = Rect{d.Lead.X, d.Lead.Y + d.Lead.H + 2, leadW, 6}
-	d.Tree = Rect{0, d.Tools.Y + d.Tools.H + rowGap, w, 0}
+	w := max(l.View.W, leadW, box.W) // the tree's width: the lead is centered over it
+	d := Diagram{Box: box, Lead: Rect{(w - leadW + 1) / 2, 0, leadW, 5}}
+	d.Tools = Rect{d.Lead.X + leadW + wideGap, d.Lead.Y, leadW, 6}
+	d.W = max(w, d.Tools.X+d.Tools.W)
+	d.Tree = Rect{0, d.Lead.Y + d.Lead.H + rowGap, w, 0}
 	d.Nodes = layoutTree(agents, d.Tree, box, l.Gap)
-	bottom := d.Tools.Y + d.Tools.H
+	bottom := max(d.Lead.Y+d.Lead.H, d.Tools.Y+d.Tools.H)
 	for _, n := range d.Nodes {
 		bottom = max(bottom, n.Rect.Y+n.Rect.H)
 	}

@@ -166,6 +166,7 @@ opus = "#FF4FE3"
     history/    per-item log
     notes/      per-item notes (<state>/notes.json)
     snooze/     snoozed items, until a time or a changed fingerprint (<state>/snoozes.json)
+    quietterm/  mutes bubbletea's init-time colour query (TERM=dumb until main); termbg/ asks once, bounded
     ui/         bubbletea models: root, list, preview, cmdline, confirm, help; theme
       flowview/ agent view: canvas, state, animation, layered tree layout, panels
 ```

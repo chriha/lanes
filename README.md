@@ -895,7 +895,7 @@ type = "auto"
 ```
 
 Picks `github` when the `origin` remote of the current directory is on `github.com` (https or ssh URL) and
-`gitlab` for any other host, each time `lanes` starts or reloads its config — so one global config works in
+`gitlab` for any other host, on its first fetch each time `lanes` starts or reloads its config — so one global config works in
 GitHub and GitLab repositories alike. Without an `origin` remote it fails with an error asking you to set the
 type explicitly. This is what the default config uses.
 

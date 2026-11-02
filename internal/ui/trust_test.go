@@ -158,9 +158,10 @@ func TestReloadChecksTrust(t *testing.T) {
 			}
 			cfg := m.cfg
 			if tt.msg == nil {
-				m.reload()
+				landReload(t, m, m.reload())
 			} else {
-				m.Update(tt.msg)
+				_, cmd := m.Update(tt.msg)
+				landReload(t, m, cmd)
 			}
 			if applied := m.cfg != cfg; applied != tt.wantApplied {
 				t.Errorf("applied = %v, want %v (notice %q)", applied, tt.wantApplied, m.notice)

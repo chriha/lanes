@@ -176,7 +176,7 @@ func TestReloadCancelsRunningFetchAndRefetches(t *testing.T) {
 	ch := startCmd(m.fetch("p"))
 	m.refetchAfter["p"] = true // a refresh run ended while the old fetch was running
 
-	cmd := m.reload()
+	cmd := landReload(t, m, m.reload())
 	old := awaitCancelled(t, ch)
 	if cmd == nil || !m.fetching("p") {
 		t.Fatalf("reload did not start a new fetch at once: cmd=%v fetching=%v", cmd != nil, m.fetching("p"))

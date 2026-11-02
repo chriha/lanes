@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -56,7 +57,23 @@ func TestNewAuto(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, err := newProvider(tt.cfg, tt.origin)
+			calls := 0
+			origin := func() (string, error) { calls++; return tt.origin() }
+			built, err := newProvider(tt.cfg, origin)
+			if err != nil {
+				t.Fatalf("building an auto provider failed: %v", err)
+			}
+			if calls != 0 {
+				t.Fatal("building an auto provider read the origin; it must wait for the first fetch")
+			}
+			a, ok := built.(*auto)
+			if !ok {
+				t.Fatalf("got %T, want *auto", built)
+			}
+			p, err := a.resolve()
+			if _, err2 := a.resolve(); calls != 1 || (err == nil) != (err2 == nil) {
+				t.Errorf("origin read %d times over two resolves (errs %v, %v), want once", calls, err, err2)
+			}
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("err = %v, want it to contain %q", err, tt.wantErr)
@@ -79,6 +96,36 @@ func TestNewAuto(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAutoFetchReportsMissingOrigin(t *testing.T) {
+	p, err := newProvider(config.Provider{Type: "auto"}, func() (string, error) { return "", errors.New("exit status 2") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `set type = "github" or "gitlab"`
+	if _, err := p.Fetch(context.Background()); err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("Fetch err = %v, want it to contain %q", err, want)
+	}
+	q, ok := p.(Quicker)
+	if !ok {
+		t.Fatal("auto provider has no Quick pass")
+	}
+	if _, err := q.Quick(context.Background()); err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("Quick err = %v, want it to contain %q", err, want)
+	}
+}
+
+func TestAutoQuickWithoutQuickPassFails(t *testing.T) {
+	// github has no Quick pass: auto's Quick must fail rather than return an empty partial result
+	p, err := newProvider(config.Provider{Type: "auto"}, func() (string, error) { return "git@github.com:o/r.git", nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := p.(Quicker).Quick(context.Background())
+	if err == nil || items != nil {
+		t.Errorf("Quick = %v, %v; want no items and an error", items, err)
 	}
 }
 

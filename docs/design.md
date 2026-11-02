@@ -32,7 +32,7 @@ an env var).
   so filters and badges carry over); `github-issues` (a repo's open issues as tickets: `kind = "ticket"`,
   `assignees`, `labels`, `blocked`/`blocked_by` from issue dependencies, `status`, `priority`); `linear` (a team's
   open Linear issues with the same ticket fields, `key` instead of `number`); `auto`, resolved
-  when the provider is built (start, config reload): `github` for a `github.com` origin, `gitlab` for any other host, so the global default config works in both kinds of
+  on its first fetch after start or a config reload (in the background, so building it runs no `git`): `github` for a `github.com` origin, `gitlab` for any other host, so the global default config works in both kinds of
   repo; or `command` provider: any shell command printing a JSON array of items. Items are generic: `{id, title, url, fields{...}}`.
 - **View** — name + provider + filter expression + columns + optional keymap overrides. Switch views with
   `tab`/`shift-tab`, `1-9`, or `:view <name>`.

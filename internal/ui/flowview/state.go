@@ -29,6 +29,7 @@ type LogLine struct {
 	Actor string
 	Model string // colors the actor
 	Text  string
+	Bad   bool // a failed tool call or agent: drawn in the bad color
 }
 
 // hookStates are the session column's checkpoints, in order.

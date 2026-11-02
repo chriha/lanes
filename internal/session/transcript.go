@@ -77,6 +77,30 @@ type Snapshot struct {
 	// Files are the base names of the last MaxFiles files Edit, Write or NotebookEdit touched (lead and agents),
 	// newest first, each once.
 	Files []string
+	// Events is what the lead and the agents did since the previous Poll, oldest first: each event is in the
+	// snapshot of one Poll only.
+	Events []LogEvent
+}
+
+// LogKind is what a LogEvent records.
+type LogKind int
+
+const (
+	LogTool  LogKind = iota // a tool call, once its result is in: Text is the tool and its argument
+	LogText                 // an assistant text: Text is its first line
+	LogSpawn                // an agent started: Actor is its spawner, Text "spawned <name>"
+	LogDone                 // an agent finished: Text "done"
+	LogFail                 // an agent failed: Text "failed"
+)
+
+// LogEvent is one thing the lead or an agent did, for the agent view's session log.
+type LogEvent struct {
+	At     time.Time // when it happened; zero for a spawn or an end the transcripts give no time for
+	Actor  string    // "lead" or the agent's name
+	Model  string    // the actor's model, for its color
+	Kind   LogKind
+	Text   string
+	Failed bool // a tool call whose result is an error, or an agent that failed
 }
 
 const (

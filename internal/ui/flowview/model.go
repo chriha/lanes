@@ -21,6 +21,10 @@ type Model struct {
 	diagram *Canvas // the scrolling part, drawn whole and copied into the viewport
 	offX    int     // the diagram's column at the viewport's left edge, as scrolled: clamped when used
 	offY    int     // the diagram's line at the viewport's top, as scrolled: clamped when used
+	focus   area    // the area the scroll keys move
+	logTop  int     // index of the log's first shown line while held
+	logHeld bool    // the log is scrolled up: it stays put instead of following the newest line
+	sessOff int     // the session column's first shown row, as scrolled: clamped when used
 
 	id     int64     // tells this model's ticks from other models'
 	gen    int       // tells the current tick chain from one a Resume replaced
@@ -36,6 +40,18 @@ type Model struct {
 	typed                   float64                  // runes of the lead's last text shown
 	phaseClock              time.Duration            // time since the last phase step
 }
+
+// area is a part of the view that takes the scroll keys.
+type area int
+
+// The areas in the order tab cycles through them from the diagram, which has the focus when the view opens:
+// session → diagram → log → session.
+const (
+	areaDiagram area = iota
+	areaLog
+	areaSession
+	numAreas
+)
 
 // tickMsg is a model's animation tick.
 type tickMsg struct {

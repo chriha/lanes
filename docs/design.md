@@ -76,6 +76,13 @@ an env var).
   cache (stale-while-revalidate). Terminal focus reporting (`tea.WithReportFocus`) slows the poll to
   `poll_interval_blurred` (default 5m) while blurred; focus-in fetches every provider older than `poll_interval`.
   lanes starts focused, so terminals without focus events poll as before.
+- Fetch status: per provider (`fetchState` in `internal/ui/fetchstate.go`, changed only on the UI goroutine) —
+  cached / fetching with spinner and elapsed / failed / updated, plus the last fetch duration, at the right of the
+  header (only the current view's provider when it does not fit) and in place of an empty view's list while it
+  fetches. The text is computed in `View` from the start times, so the 1 s tick is what advances it.
+- Reload: trust check, `config.Load` and provider construction run in a `tea.Cmd`; the old config stays active
+  until its `reloadedMsg` lands, which cancels the old config's in-flight fetches (their results are dropped by
+  fetch generation) and fetches every provider at once.
 - Jump into a session: `tmux display-popup` / `switch-client` when inside tmux, `attach` otherwise.
 - **Agent view** (`A` on an item or on the sessions screen) — a full-screen animated diagram of a Claude
   session as a dense dashboard: a full-height session column as the lead's dashboard (context bar, effort meter,

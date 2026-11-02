@@ -6,10 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/config"
@@ -200,4 +202,124 @@ func TestCloseCancelsRunningFetches(t *testing.T) {
 	ch := startCmd(m.fetch("p"))
 	m.Close()
 	awaitCancelled(t, ch)
+}
+
+func TestFetchStatus(t *testing.T) {
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name  string
+		setup func(m *Model)
+		want  string
+	}{
+		{"cached: nothing fetched in this run", func(*Model) {}, "p cached"},
+		{"fetching: spinner and elapsed", func(m *Model) {
+			m.fetches = map[string]*fetchState{"p": {running: true, started: now.Add(-4 * time.Second)}}
+		}, "p ⠼ fetching 4s"},
+		{"fetching again: also the last duration", func(m *Model) {
+			m.fetches = map[string]*fetchState{"p": {running: true, started: now.Add(-1 * time.Second), last: 12340 * time.Millisecond}}
+			m.fetchedAt["p"] = now.Add(-time.Minute)
+		}, "p ⠙ fetching 1s · last 12.3s"},
+		{"failed: phase and last duration", func(m *Model) {
+			m.fetches = map[string]*fetchState{"p": {last: 2 * time.Second}}
+			m.provErr["p"] = errors.New("boom")
+		}, "p ✗ failed · 2s"},
+		{"idle: age and last duration", func(m *Model) {
+			m.fetches = map[string]*fetchState{"p": {last: 250 * time.Millisecond}}
+			m.fetchedAt["p"] = now.Add(-12 * time.Second)
+		}, "p updated 12s ago · 250ms"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newBackoffModel(t)
+			tt.setup(m)
+			if got := m.fetchStatus("p", now); got != tt.want {
+				t.Errorf("fetchStatus = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFetchStatusAdvancesEachTick(t *testing.T) {
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	m := newBackoffModel(t)
+	m.fetches = map[string]*fetchState{"p": {running: true, started: now}}
+	a, b := m.fetchStatus("p", now.Add(time.Second)), m.fetchStatus("p", now.Add(2*time.Second))
+	if a == b || !strings.Contains(b, "fetching 2s") {
+		t.Errorf("status one tick apart: %q then %q, want it to advance to 2s", a, b)
+	}
+}
+
+func newTwoProviderModel(t *testing.T) *Model {
+	t.Helper()
+	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "HOME"} {
+		t.Setenv(k, t.TempDir())
+	}
+	m := New(&config.Config{
+		Provider: map[string]config.Provider{
+			"gitlab": {Type: "command", Command: "true"},
+			"linear": {Type: "command", Command: "true"},
+		},
+		View: []config.View{{Name: "v", Provider: "gitlab", Filter: "true"}},
+	})
+	m.width, m.height = 160, 20
+	return m
+}
+
+func TestHeaderShowsEveryProviderStatus(t *testing.T) {
+	m := newTwoProviderModel(t)
+	setFetching(m, "linear", true)
+	m.fetches["linear"].started = time.Now()
+	m.fetchedAt["gitlab"] = time.Now()
+	h := ansi.Strip(m.header())
+	for _, want := range []string{"gitlab updated", "linear ⠋ fetching 0s"} {
+		if !strings.Contains(h, want) {
+			t.Errorf("header %q lacks %q", h, want)
+		}
+	}
+	if strings.Contains(h, "refreshing") {
+		t.Errorf("header %q still shows the bare refresh marker", h)
+	}
+}
+
+func TestNarrowHeaderShowsOnlyTheViewsProvider(t *testing.T) {
+	m := newTwoProviderModel(t)
+	m.width = 40
+	h := ansi.Strip(m.header())
+	if !strings.Contains(h, "gitlab cached") || strings.Contains(h, "linear") {
+		t.Errorf("narrow header %q, want only the view's provider status", h)
+	}
+}
+
+func TestEmptyListShowsFetchStatus(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(m *Model)
+		want  []string
+		not   []string
+	}{
+		{"fetching: status lines instead of loading…", func(m *Model) {
+			setFetching(m, "gitlab", true)
+			m.fetches["gitlab"].started = time.Now()
+		}, []string{"gitlab ⠋ fetching 0s", "linear cached"}, []string{"loading…"}},
+		{"idle and empty: nothing here", func(m *Model) {
+			m.fetchedAt["gitlab"] = time.Now()
+		}, []string{"nothing here"}, []string{"fetching"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTwoProviderModel(t)
+			tt.setup(m)
+			l := ansi.Strip(m.list())
+			for _, w := range tt.want {
+				if !strings.Contains(l, w) {
+					t.Errorf("list %q lacks %q", l, w)
+				}
+			}
+			for _, n := range tt.not {
+				if strings.Contains(l, n) {
+					t.Errorf("list %q shows %q", l, n)
+				}
+			}
+		})
+	}
 }

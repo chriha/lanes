@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"sort"
 	"time"
 )
 
@@ -62,3 +63,73 @@ func (m *Model) cancelFetches() {
 
 // Close cancels the running fetches. Call it once the program has quit.
 func (m *Model) Close() { m.cancelFetches() }
+
+// fetchStatus is the status line of provider name at now: its phase (cached, fetching with elapsed time, failed,
+// updated) and the duration of its last finished fetch.
+func (m *Model) fetchStatus(name string, now time.Time) string {
+	st := m.fetches[name]
+	var s string
+	switch {
+	case st != nil && st.running:
+		el := now.Sub(st.started)
+		s = name + " " + spinFrames[int(el/time.Second)%len(spinFrames)] + " fetching " + el.Round(time.Second).String()
+		if st.last > 0 {
+			return s + " · last " + fetchDur(st.last)
+		}
+		return s
+	case m.provErr[name] != nil:
+		s = name + " ✗ failed"
+	case m.fetchedAt[name].IsZero():
+		return name + " cached"
+	default:
+		s = name + " updated " + now.Sub(m.fetchedAt[name]).Round(time.Second).String() + " ago"
+	}
+	if st != nil && st.last > 0 {
+		s += " · " + fetchDur(st.last)
+	}
+	return s
+}
+
+// spinFrames animate a running fetch; the status shows one frame per second of the fetch, advanced by the tick.
+var spinFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+// fetchDur is a fetch duration for the status: tenths of a second from 1s, milliseconds below.
+func fetchDur(d time.Duration) string {
+	if d >= time.Second {
+		return d.Round(100 * time.Millisecond).String()
+	}
+	return d.Round(time.Millisecond).String()
+}
+
+// providerStatuses renders the status of every provider, sorted by name; failed ones in the error style. A view's
+// provider that failed to build counts too.
+func (m *Model) providerStatuses(now time.Time) []string {
+	seen := map[string]bool{}
+	var names []string
+	add := func(name string) {
+		if !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	for name := range m.providers {
+		add(name)
+	}
+	for _, v := range m.views {
+		add(v.cfg.Provider)
+	}
+	sort.Strings(names)
+	out := make([]string, len(names))
+	for i, name := range names {
+		out[i] = m.styledStatus(name, now)
+	}
+	return out
+}
+
+// styledStatus is fetchStatus in the dim style, or the error style while the provider's last fetch failed.
+func (m *Model) styledStatus(name string, now time.Time) string {
+	if !m.fetching(name) && m.provErr[name] != nil {
+		return sErr.Render(m.fetchStatus(name, now))
+	}
+	return sDim.Render(m.fetchStatus(name, now))
+}

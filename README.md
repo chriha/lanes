@@ -9,7 +9,7 @@ on a whole selection. Actions run in **tmux sessions you can jump into at any ti
 you what each session is doing (running, working, asking a question, waiting for you, finished, failed).
 
 ```
- lanes   review 4  mine 3  drafts 1                                      ◐ 1  ? 1   updated 12s ago
+ lanes   review 4  mine 3  drafts 1                        ◐ 1  ? 1   gitlab updated 12s ago · 1.4s
  ─────────────────────────────────────────────────────────────────────────────────────────────────
    !1948   feat: prune entries missing from the provider   alex   ✓ ci  ⚑ 7  ✔ approved
  ▌ !1957   fix: clear the change detector by id   sam    ✗ ci  ⚑ 2  ◐ review: working
@@ -980,7 +980,9 @@ r = "review"
 Both files are watched. Saving either one — or pressing `ctrl-r` / `:reload` — applies the change **to the
 running app**: views, keymap, actions, theme and poll interval update, lists refetch, and the footer reports
 `config reloaded: 4 views, 3 actions`. If a file does not parse, the old configuration stays active and the
-footer shows the error.
+footer shows the error. The reload (trust check, reading the files, building the providers) runs in the background:
+the keys keep working and the old configuration stays active until the new one is ready. Applying it cancels the
+fetches still running for the old configuration and fetches every provider again at once.
 
 ### Trusting a project
 
@@ -1151,6 +1153,12 @@ two projects never share history, views or sessions. The `$XDG_*` variables are 
   `poll_interval` is fetched at once. This needs a terminal that reports focus; inside tmux add `set -g focus-events on`
   to `~/.tmux.conf`. Without focus reports lanes polls at `poll_interval` throughout. A failing provider is retried after `poll_interval`, doubling per consecutive failure up to 5 minutes (`R` / `:refresh` retry at once). New data is diffed into the list by item `id`, so the cursor and your marks
   stay put. Every view re-applies its filter on each refresh.
+- **Fetch status.** The right of the header shows each provider's status, updated every second:
+  `gitlab cached` (only the cached list so far), `gitlab ⠼ fetching 4s · last 12.3s` (a fetch running for 4s; the
+  previous one took 12.3s), `gitlab updated 12s ago · 1.4s` (the last fetch took 1.4s) or `gitlab ✗ failed · 2s` in
+  the error colour. A slow provider shows up there without a profiler. When the terminal is too narrow for every
+  provider, only the current view's one is shown. An empty view whose provider is still fetching lists the same
+  status lines in place of the items.
 - **Filters** are compiled once per view and evaluated against each item's fields; a view with a broken filter
   shows its error instead of items.
 - **Sessions** are tmux sessions on a dedicated tmux server named `lanes-<project>` (`tmux -L …`). The session

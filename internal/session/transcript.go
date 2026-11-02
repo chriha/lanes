@@ -56,6 +56,7 @@ type Agent struct {
 	Type    string
 	Model   string
 	Task    string
+	Text    string // first line of the newest assistant text (≤ 60 characters), "" when none
 	Status  AgentStatus
 	Start   time.Time
 	End     time.Time // zero while running

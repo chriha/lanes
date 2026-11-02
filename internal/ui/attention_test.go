@@ -52,7 +52,6 @@ func TestHeaderAttentionCount(t *testing.T) {
 				sessByItem: sess,
 				views:      []*view{{cfg: config.View{Name: "v"}, items: tt.items}, {cfg: config.View{Name: "w"}}},
 				fetchedAt:  map[string]time.Time{},
-				loading:    map[string]bool{},
 			}
 			got := strings.Join(strings.Fields(ansi.Strip(m.header())), " ")
 			if !strings.Contains(got, " v "+tt.want+" w 0 ") {

@@ -93,7 +93,7 @@ filter = 'true'
 			}
 			ov := tt.ov
 			m := &Model{
-				ov: &ov, data: map[string][]item.Item{}, fetchedAt: map[string]time.Time{}, loading: map[string]bool{},
+				ov: &ov, data: map[string][]item.Item{}, fetchedAt: map[string]time.Time{},
 				provErr: map[string]error{}, fails: map[string]int{}, retryAt: map[string]time.Time{}, marks: map[string]bool{},
 			}
 			m.applyConfig(cfg)

@@ -51,7 +51,6 @@ func busyModel(t *testing.T) (*Model, *fakeProv) {
 		providers:    map[string]provider.Provider{"p": fp},
 		data:         map[string][]item.Item{"p": mkItems("1", "2", "3")},
 		fetchedAt:    map[string]time.Time{},
-		loading:      map[string]bool{},
 		provErr:      map[string]error{},
 		fails:        map[string]int{},
 		retryAt:      map[string]time.Time{},
@@ -245,7 +244,7 @@ func TestRefreshRunHoldsLockUntilRefetch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m, fp := busyModel(t)
-			m.loading["p"] = tt.inFlight
+			setFetching(m, "p", tt.inFlight)
 			cmd := m.runAction("ready", busyActions["ready"])
 			d, ok := cmd().(doneMsg)
 			if !ok || !d.ok || !d.refresh {
@@ -284,7 +283,7 @@ func TestRefreshRunHoldsLockUntilRefetch(t *testing.T) {
 
 func TestFailedRunUnlocksAtOnce(t *testing.T) {
 	m, _ := busyModel(t)
-	m.loading["p"] = true
+	setFetching(m, "p", true)
 	cmd := m.runAction("broken", busyActions["broken"])
 	if len(m.busy) == 0 {
 		t.Fatal("item not locked while the run is going")

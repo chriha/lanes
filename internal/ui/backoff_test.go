@@ -37,7 +37,7 @@ func TestFailedFetchBacksOff(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newBackoffModel(t)
 			for i := 0; i < tt.failures; i++ {
-				m.loading["p"] = true
+				setFetching(m, "p", true)
 				m.Update(boom)
 			}
 			if cmd := m.onTick(); cmd != nil {
@@ -58,7 +58,7 @@ func TestBackoffResets(t *testing.T) {
 			m.Update(boom)
 		}
 		m.refreshAll()
-		m.loading["p"] = false
+		setFetching(m, "p", false)
 		m.Update(boom)
 		if got := m.list(); !strings.Contains(got, "retry in 30s") {
 			t.Errorf("wait not reset by refresh: %q", got)

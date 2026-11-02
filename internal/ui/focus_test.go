@@ -32,13 +32,13 @@ func TestTickPollsByFocus(t *testing.T) {
 				m.Update(msg)
 			}
 			// what the focus messages fetched is not under test here
-			m.loading["p"] = false
+			setFetching(m, "p", false)
 			m.fetchedAt["p"] = time.Now().Add(-tt.age)
 			if tt.backoff {
 				m.retryAt["p"] = time.Now().Add(time.Minute)
 			}
 			m.onTick()
-			if got := m.loading["p"]; got != tt.want {
+			if got := m.fetching("p"); got != tt.want {
 				t.Errorf("tick fetched = %v, want %v", got, tt.want)
 			}
 		})
@@ -65,7 +65,7 @@ func TestFocusFetchesStaleProviders(t *testing.T) {
 				m.retryAt["p"] = time.Now().Add(time.Minute)
 			}
 			_, cmd := m.Update(tea.FocusMsg{})
-			if got := m.loading["p"]; got != tt.want {
+			if got := m.fetching("p"); got != tt.want {
 				t.Errorf("focus fetched = %v, want %v", got, tt.want)
 			}
 			if tt.want && cmd == nil {
@@ -79,7 +79,7 @@ func TestFocusSkipsLoadingProvider(t *testing.T) {
 	m := newBackoffModel(t)
 	m.Update(tea.BlurMsg{})
 	m.fetchedAt["p"] = time.Now().Add(-time.Minute)
-	m.loading["p"] = true
+	setFetching(m, "p", true)
 	if _, cmd := m.Update(tea.FocusMsg{}); cmd != nil {
 		t.Error("focus started a second fetch for a provider already loading")
 	}

@@ -77,24 +77,24 @@ func TestFetchedMsg(t *testing.T) {
 	boom := errors.New("boom")
 	t.Run("full result stores items, stamps time, clears loading", func(t *testing.T) {
 		m := newBackoffModel(t)
-		m.loading["p"] = true
+		setFetching(m, "p", true)
 		m.Update(fetchedMsg{name: "p", items: mkItems("a", "b")})
 		if got := itemIDs(m.items()); !reflect.DeepEqual(got, []string{"a", "b"}) {
 			t.Errorf("items = %v", got)
 		}
-		if m.loading["p"] || m.fetchedAt["p"].IsZero() {
-			t.Errorf("loading=%v fetchedAt=%v", m.loading["p"], m.fetchedAt["p"])
+		if m.fetching("p") || m.fetchedAt["p"].IsZero() {
+			t.Errorf("loading=%v fetchedAt=%v", m.fetching("p"), m.fetchedAt["p"])
 		}
 	})
 	t.Run("partial result shows items but keeps loading and no timestamp", func(t *testing.T) {
 		m := newBackoffModel(t)
-		m.loading["p"] = true
+		setFetching(m, "p", true)
 		m.Update(fetchedMsg{name: "p", items: mkItems("a"), partial: true})
 		if len(m.items()) != 1 {
 			t.Errorf("items = %v", itemIDs(m.items()))
 		}
-		if !m.loading["p"] || !m.fetchedAt["p"].IsZero() {
-			t.Errorf("loading=%v fetchedAt=%v", m.loading["p"], m.fetchedAt["p"])
+		if !m.fetching("p") || !m.fetchedAt["p"].IsZero() {
+			t.Errorf("loading=%v fetchedAt=%v", m.fetching("p"), m.fetchedAt["p"])
 		}
 	})
 	t.Run("partial result inherits pending fields from the previous full one", func(t *testing.T) {
@@ -108,10 +108,10 @@ func TestFetchedMsg(t *testing.T) {
 	t.Run("error sets provErr and keeps items", func(t *testing.T) {
 		m := newBackoffModel(t)
 		m.Update(fetchedMsg{name: "p", items: mkItems("a")})
-		m.loading["p"] = true
+		setFetching(m, "p", true)
 		m.Update(fetchedMsg{name: "p", err: boom})
-		if m.provErr["p"] != boom || m.fails["p"] != 1 || m.loading["p"] {
-			t.Errorf("provErr=%v fails=%d loading=%v", m.provErr["p"], m.fails["p"], m.loading["p"])
+		if m.provErr["p"] != boom || m.fails["p"] != 1 || m.fetching("p") {
+			t.Errorf("provErr=%v fails=%d loading=%v", m.provErr["p"], m.fails["p"], m.fetching("p"))
 		}
 		if len(m.items()) != 1 {
 			t.Errorf("items lost on error: %v", itemIDs(m.items()))
@@ -119,10 +119,10 @@ func TestFetchedMsg(t *testing.T) {
 	})
 	t.Run("partial error is ignored while loading continues", func(t *testing.T) {
 		m := newBackoffModel(t)
-		m.loading["p"] = true
+		setFetching(m, "p", true)
 		m.Update(fetchedMsg{name: "p", err: boom, partial: true})
-		if m.provErr["p"] != nil || m.fails["p"] != 0 || !m.loading["p"] {
-			t.Errorf("provErr=%v fails=%d loading=%v", m.provErr["p"], m.fails["p"], m.loading["p"])
+		if m.provErr["p"] != nil || m.fails["p"] != 0 || !m.fetching("p") {
+			t.Errorf("provErr=%v fails=%d loading=%v", m.provErr["p"], m.fails["p"], m.fetching("p"))
 		}
 	})
 	t.Run("success clears provErr", func(t *testing.T) {

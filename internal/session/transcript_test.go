@@ -641,3 +641,121 @@ func TestTailerFiles(t *testing.T) {
 		})
 	}
 }
+
+// fmtEvents is one line per event: time (-- when unknown), actor, model, kind, text and a ✗ for a failure.
+func fmtEvents(evs []LogEvent) string {
+	var b strings.Builder
+	for _, e := range evs {
+		ts := "--"
+		if !e.At.IsZero() {
+			ts = e.At.Format("04:05.0")
+		}
+		mark := ""
+		if e.Failed {
+			mark = " ✗"
+		}
+		fmt.Fprintf(&b, "%s %s %s %d %s%s\n", ts, e.Actor, e.Model, e.Kind, e.Text, mark)
+	}
+	return b.String()
+}
+
+// fixtureLeadEvents are the events of the fixture's lead transcript; the Bash call has no result yet.
+const fixtureLeadEvents = `00:02.0 lead claude-opus-5-5 1 Looking at the ticket.
+00:03.0 lead claude-opus-5-5 0 Read implementer.md
+00:05.0 lead claude-opus-5-5 0 Agent Implement ticket 7
+00:05.0 lead claude-opus-5-5 0 Agent Find callers ✗
+00:08.0 lead claude-opus-5-5 1 Waiting for the agents.
+`
+
+func TestTailerEvents(t *testing.T) {
+	tl := NewTailer(copyFixture(t))
+	got, err := tl.Poll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Ordered by time; at equal times the lead first, then spawns, then the agents' own events, then ends. The
+	// Explore agent has no transcript: its spawn and failure have no time. Calls without a result are left out.
+	want := `-- lead claude-opus-5-5 2 spawned Explore
+-- Explore haiku 4 failed ✗
+00:02.0 lead claude-opus-5-5 1 Looking at the ticket.
+00:03.0 lead claude-opus-5-5 0 Read implementer.md
+00:05.0 lead claude-opus-5-5 0 Agent Implement ticket 7
+00:05.0 lead claude-opus-5-5 0 Agent Find callers ✗
+00:05.0 lead claude-opus-5-5 2 spawned implementer
+00:06.0 implementer claude-opus-5-5 0 Write old.go
+00:06.0 implementer claude-opus-5-5 0 Edit x.go
+00:06.5 implementer claude-opus-5-5 0 NotebookEdit
+00:08.0 lead claude-opus-5-5 1 Waiting for the agents.
+00:08.0 implementer claude-opus-5-5 2 spawned reviewer
+00:09.0 reviewer claude-sonnet-5-5[1m] 0 Read a.go
+00:10.0 reviewer claude-sonnet-5-5[1m] 0 Write a.go
+00:11.0 reviewer claude-sonnet-5-5[1m] 0 Edit x.go
+00:14.0 reviewer claude-sonnet-5-5[1m] 1 none
+00:14.0 reviewer claude-sonnet-5-5[1m] 3 done
+00:20.0 lead claude-opus-5-5 2 spawned verifier
+00:20.0 verifier claude-haiku-5-5 0 Write design.md
+00:21.0 verifier claude-haiku-5-5 1 ok
+`
+	if s := fmtEvents(got.Events); s != want {
+		t.Errorf("events =\n%s\nwant\n%s", s, want)
+	}
+	again, err := tl.Poll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(again.Events) != 0 {
+		t.Errorf("a poll without new lines repeated events:\n%s", fmtEvents(again.Events))
+	}
+}
+
+func TestTailerEventsOnceAcrossPolls(t *testing.T) {
+	full, err := os.ReadFile("testdata/tail/sess.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := bytes.Index(full, []byte(`"tool_use_id": "tA1"`)) // the call's line read, its result not yet
+	for _, cut := range []int{0, result, len(full) - 1, len(full)} {
+		t.Run(fmt.Sprint(cut), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "s.jsonl")
+			if err := os.WriteFile(path, full[:cut], 0o600); err != nil {
+				t.Fatal(err)
+			}
+			tl := NewTailer(path)
+			first, err := tl.Poll()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, full, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			second, err := tl.Poll()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := fmtEvents(first.Events) + fmtEvents(second.Events); got != fixtureLeadEvents {
+				t.Errorf("events over both polls =\n%s\nwant\n%s", got, fixtureLeadEvents)
+			}
+		})
+	}
+}
+
+func TestTailerEventsSkipIncompleteLines(t *testing.T) {
+	const (
+		noName   = `{"type":"assistant","timestamp":"2026-11-01T10:00:01Z","message":{"content":[{"type":"tool_use","id":"t1","input":{}}]}}`
+		noNameOK = `{"type":"user","timestamp":"2026-11-01T10:00:02Z","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}`
+		noTime   = `{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Read","input":{}}]}}`
+		noTimeOK = `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t2"}]}}`
+		blank    = `{"type":"assistant","timestamp":"2026-11-01T10:00:03Z","message":{"content":[{"type":"text","text":"  \n "}]}}`
+		textNoTS = `{"type":"assistant","message":{"content":[{"type":"text","text":"hi"}]}}`
+		orphan   = `{"type":"user","timestamp":"2026-11-01T10:00:04Z","message":{"content":[{"type":"tool_result","tool_use_id":"nope"}]}}`
+		multi    = `{"type":"assistant","timestamp":"2026-11-01T10:00:05Z","message":{"content":[{"type":"text","text":"\n first line \nsecond"}]}}`
+		bash     = `{"type":"assistant","timestamp":"2026-11-01T10:00:06Z","message":{"content":[{"type":"tool_use","id":"t3","name":"Bash","input":{"command":"go test ./...\nmore"}}]}}`
+		bashBad  = `{"type":"user","timestamp":"2026-11-01T10:00:09Z","message":{"content":[{"type":"tool_result","tool_use_id":"t3","is_error":true}]}}`
+	)
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	got := pollLines(t, NewTailer(path), path, noName, noNameOK, noTime, noTimeOK, blank, textNoTS, orphan, multi, bash, bashBad)
+	want := "00:05.0 lead  1 first line\n00:06.0 lead  0 Bash go test ./... ✗\n"
+	if s := fmtEvents(got.Events); s != want {
+		t.Errorf("events =\n%s\nwant\n%s", s, want)
+	}
+}

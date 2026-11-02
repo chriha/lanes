@@ -9,12 +9,12 @@
 ┃                    ┃                    │                 
 ┃ activity     3/min ┃                   ┌┴──────────────┐  
 ┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄    ┃                   ▼               │  
-┃                    ┃    ┏━ implementer ━━━━━━━━━━━━━━┓ │  
-┃ ◆ working          ┃    ┃     opus 4.1 ▮▮▮▯ high     ┃ │  
-┗━━━━━━━━━━━━━━━━━━━━┛    ┃ ctx ███████▏░░░░░░░░░  42% ┃ │  
-                                lines 1-11/41  cols 1-37/76 
-──┤ session log ├───────────────────────────────────────────
- 14:28:00 implementer   spawned code-reviewer               
- 14:28:30 code-reviewer spawned validator                   
- 14:29:30 validator     failed                              
+┗━━━━━━━━━━━━━━━━━━━━┛    ┏━ implementer ━━━━━━━━━━━━━━┓ │  
+                        diagram  lines 1-9/41  cols 1-37/76 
+╭─ session log ────────────────────────────────────── 6/6 ─╮
+│ 14:28:30 code-reviewer spawned validator                 │
+│ 14:29:30 validator     failed                            │
+│ 14:29:40 code-reviewer Bash go test ./internal/...       │
+│ 14:29:50 lead          Slice 2 is next: the layered lay… │
+╰──────────────────────────────────────────────────────────╯
  opus [1 running]  sonnet [1 running]  haiku [done]  ● live 

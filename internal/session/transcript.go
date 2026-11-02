@@ -128,11 +128,12 @@ func ContextWindow(model string) int {
 // Tailer reads a Claude session's transcript and its subagent files incrementally. It is not safe for concurrent
 // use: one Poll at a time (one tea.Cmd in flight).
 type Tailer struct {
-	path   string            // the lead's transcript
-	dir    string            // <session>/subagents
-	lead   *transcript       // the lead's transcript state
-	agents map[string]*agent // by agent id
-	failed map[string]bool   // tool_use ids whose result is an error
+	path   string                 // the lead's transcript
+	dir    string                 // <session>/subagents
+	lead   *transcript            // the lead's transcript state
+	agents map[string]*agent      // by agent id
+	failed map[string]bool        // tool_use ids whose result is an error
+	seen   map[string]AgentStatus // each agent's status in the last snapshot, to log spawns and ends once
 }
 
 type agent struct {
@@ -162,6 +163,7 @@ func NewTailer(path string) *Tailer {
 		lead:   newTranscript(path),
 		agents: map[string]*agent{},
 		failed: map[string]bool{},
+		seen:   map[string]AgentStatus{},
 	}
 }
 
@@ -272,7 +274,48 @@ func (t *Tailer) snapshot() Snapshot {
 		}
 		return a.ID < b.ID
 	})
+	s.Events = t.events(s, ids)
 	return s
+}
+
+// events collects what happened since the last snapshot of s: the lead's events, the spawns, the agents' events
+// (by agent id) and the ends, ordered by time, the earlier group first at equal times. Each transcript's events
+// are drained, and each agent's spawn and end is logged once.
+func (t *Tailer) events(s Snapshot, ids []string) []LogEvent {
+	byID := make(map[string]Agent, len(s.Agents))
+	for _, a := range s.Agents {
+		byID[a.ID] = a
+	}
+	out := t.lead.drain("lead", s.Lead.Model)
+	var ends []LogEvent
+	for _, a := range s.Agents {
+		prev, seen := t.seen[a.ID]
+		if !seen {
+			actor, model := "lead", s.Lead.Model
+			if p, ok := byID[a.Parent]; ok {
+				actor, model = p.Name, p.Model
+			}
+			out = append(out, LogEvent{At: a.Start, Actor: actor, Model: model, Kind: LogSpawn, Text: "spawned " + a.Name})
+		}
+		if a.Status == AgentRunning || seen && prev != AgentRunning {
+			continue // not ended, or ended before
+		}
+		e := LogEvent{At: a.End, Actor: a.Name, Model: a.Model, Kind: LogDone, Text: "done"}
+		if a.Status == AgentError {
+			e.Kind, e.Text, e.Failed = LogFail, "failed", true
+		}
+		ends = append(ends, e)
+	}
+	for _, id := range ids {
+		a := byID[id]
+		out = append(out, t.agents[id].t.drain(a.Name, a.Model)...)
+	}
+	out = append(out, ends...)
+	for _, a := range s.Agents {
+		t.seen[a.ID] = a.Status
+	}
+	slices.SortStableFunc(out, func(a, b LogEvent) int { return a.At.Compare(b.At) })
+	return out
 }
 
 // toolTimes merges the tool call times of the transcripts within ToolWindow of their newest line, oldest first.
@@ -425,6 +468,9 @@ func clip(s string, n int) string {
 	return strings.TrimSpace(string(r[:n-1])) + "…"
 }
 
+// logTextLen is the longest text of a LogEvent, in characters: the view cuts it to its width anyway.
+const logTextLen = 200
+
 // transcript is the state derived from one JSONL transcript, read from offset on.
 type transcript struct {
 	path      string
@@ -451,6 +497,7 @@ type transcript struct {
 	toolTimes    []time.Time // start times of the tool calls within ToolWindow of the newest line, oldest first
 	files        []touch     // the last MaxFiles distinct files touched, oldest first
 	seq          int         // counts the files touched, to order those with the same time
+	events       []LogEvent  // read since the last drain, without actor and model
 }
 
 type usage struct {
@@ -471,7 +518,28 @@ func newTranscript(path string) *transcript {
 	return &transcript{path: path, msgs: map[string]usage{}, toolCalls: map[string]int{}}
 }
 
-type toolCall struct{ id, name, arg string }
+type toolCall struct {
+	id, name, arg string
+	at            time.Time // when the call started
+}
+
+// drain returns the events read since the last drain as the actor's with its model and forgets them.
+func (t *transcript) drain(actor, model string) []LogEvent {
+	out := t.events
+	for i := range out {
+		out[i].Actor, out[i].Model = actor, model
+	}
+	t.events = nil
+	return out
+}
+
+// note keeps an event for the next drain; one without a time or a text is left out.
+func (t *transcript) note(at time.Time, kind LogKind, text string, failed bool) {
+	if at.IsZero() || text == "" {
+		return
+	}
+	t.events = append(t.events, LogEvent{At: at, Kind: kind, Text: clip(text, logTextLen), Failed: failed})
+}
 
 // current is the newest tool call still running.
 func (t *transcript) current() toolCall {
@@ -583,7 +651,13 @@ func (t *transcript) apply(line []byte, failed map[string]bool) {
 				if c.IsError {
 					failed[c.ToolUseID] = true
 				}
-				t.pending = slices.DeleteFunc(t.pending, func(p toolCall) bool { return p.id == c.ToolUseID })
+				if i := slices.IndexFunc(t.pending, func(p toolCall) bool { return p.id == c.ToolUseID }); i >= 0 {
+					p := t.pending[i]
+					if p.name != "" {
+						t.note(p.at, LogTool, strings.TrimSpace(p.name+" "+p.arg), c.IsError)
+					}
+					t.pending = slices.Delete(t.pending, i, i+1)
+				}
 			}
 		}
 		return
@@ -616,11 +690,12 @@ func (t *transcript) apply(line []byte, failed map[string]bool) {
 		case "text":
 			if s := strings.TrimSpace(c.Text); s != "" {
 				t.lastText = s
+				t.note(l.Timestamp, LogText, firstLine(s), false)
 			}
 		case "tool_use":
 			t.calls++
 			t.toolCalls[c.Name]++
-			t.pending = append(t.pending, toolCall{c.ID, c.Name, toolArg(c.Input)})
+			t.pending = append(t.pending, toolCall{c.ID, c.Name, toolArg(c.Input), l.Timestamp})
 			t.noteToolTime(l.Timestamp)
 			t.noteFile(c.Name, c.Input, l.Timestamp)
 		case "server_tool_use":

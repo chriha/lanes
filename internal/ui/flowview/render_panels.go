@@ -10,8 +10,8 @@ import (
 	"github.com/chriha/lanes/internal/session"
 )
 
-// border frames the panels and agent boxes; leadBorder sets the lead apart.
-var border, leadBorder = lipgloss.ThickBorder(), lipgloss.DoubleBorder()
+// border frames the panels and agent boxes; leadBorder sets the lead apart; logBorder closes the session log.
+var border, leadBorder, logBorder = lipgloss.ThickBorder(), lipgloss.DoubleBorder(), lipgloss.RoundedBorder()
 
 // fit strips escape sequences from s (transcript text is untrusted) and cuts it to w runes, ending in … when cut.
 // Runes, not display width: the canvas draws every rune in one cell.
@@ -100,7 +100,12 @@ func (c *Canvas) spread(x, y, w int, left, right string, lr, rr Role) {
 
 // titled draws a box with title in its top border.
 func (c *Canvas) titled(r Rect, title string, role, titleRole Role) {
-	c.Box(r, border, role)
+	c.titledIn(r, border, title, role, titleRole)
+}
+
+// titledIn draws a box in border b with title in its top border.
+func (c *Canvas) titledIn(r Rect, b lipgloss.Border, title string, role, titleRole Role) {
+	c.Box(r, b, role)
 	if title != "" {
 		c.Text(r.X+2, r.Y, " "+string(fit(title, r.W-6))+" ", titleRole)
 	}
@@ -124,11 +129,15 @@ func (s State) drawHeader(c *Canvas, l Layout) {
 }
 
 // drawPosition shows on the row above the log, right-aligned, which lines and columns of the diagram d the viewport
-// shows from x, y: the lines when the diagram is higher than the viewport, the columns when it is wider. Nothing
-// when it fits.
-func drawPosition(c *Canvas, l Layout, d Diagram, x, y int) {
+// shows from x, y: the lines when the diagram is higher than the viewport, the columns when it is wider. A focused
+// diagram is named there in the accent, with its position; an unfocused one that fits shows nothing.
+func drawPosition(c *Canvas, l Layout, d Diagram, x, y int, focused bool) {
 	v := l.View
 	var parts []string
+	role := RoleDim
+	if focused {
+		parts, role = append(parts, "diagram"), RoleAccent
+	}
 	if d.H > v.H {
 		parts = append(parts, fmt.Sprintf("lines %d-%d/%d", y+1, y+v.H, d.H))
 	}
@@ -139,14 +148,36 @@ func drawPosition(c *Canvas, l Layout, d Diagram, x, y int) {
 		return
 	}
 	s := strings.Join(parts, "  ")
-	c.Text(l.Frame.X+l.Frame.W-1-len(s), l.Log.Y-1, s, RoleDim)
+	c.Text(l.Frame.X+l.Frame.W-1-len(s), l.Log.Y-1, s, role)
 }
 
-// drawSession draws the session column as the lead's dashboard: the session's name and age, the lead's context and
-// effort; the tool calls per minute as a sparkline; the hook states on a timeline; the counters; the files touched
-// last; the lead's last text; and the advisor when there is one. Rows past the column's bottom are left out.
-func (s State) drawSession(c *Canvas, r Rect) {
-	c.titled(r, "session", RoleDim, RoleBold)
+// panelRoles are the border and title roles of a pinned panel: the accent when it has the focus.
+func panelRoles(focused bool) (Role, Role) {
+	if focused {
+		return RoleAccent, RoleAccent
+	}
+	return RoleDim, RoleBold
+}
+
+// drawSession draws the session column as the lead's dashboard, its rows from row off on: those past the column's
+// bottom are left out. A focused column has its border and title in the accent.
+func (s State) drawSession(c *Canvas, r Rect, off int, focused bool) {
+	role, title := panelRoles(focused)
+	c.titled(r, "session", role, title)
+	rows := s.sessionRows(c, r)
+	rows = rows[min(max(off, 0), len(rows)):]
+	for i, draw := range rows[:max(min(len(rows), r.H-2), 0)] {
+		if draw != nil {
+			draw(r.Y + 1 + i)
+		}
+	}
+}
+
+// sessionRows are the session column's rows, each drawing itself on the row it is given (nil for a blank one):
+// the session's name and age, the lead's context and effort; the tool calls per minute as a sparkline; the hook
+// states on a timeline; the counters; the files touched last; the lead's last text; and the advisor when there
+// is one.
+func (s State) sessionRows(c *Canvas, r Rect) []func(y int) {
 	x, w := r.X+2, r.W-4
 	lead := s.Snap.Lead
 	role := ModelRole(lead.Model)
@@ -231,11 +262,7 @@ func (s State) drawSession(c *Canvas, r Rect) {
 			label("advisor", shortModel(lead.AdvisorModel), ModelRole(lead.AdvisorModel)),
 			label("  calls", fmtThousands(lead.AdvisorCalls), RoleBold))
 	}
-	for i, draw := range rows[:max(min(len(rows), r.H-2), 0)] {
-		if draw != nil {
-			draw(r.Y + 1 + i)
-		}
-	}
+	return rows
 }
 
 // drawLead draws the lead box: the model and the effort meter with its level (left out when unknown), the current
@@ -277,17 +304,30 @@ func (s State) drawTools(c *Canvas, r Rect) {
 	}
 }
 
-func (s State) drawLog(c *Canvas, r Rect) {
-	c.HLine(r.X, r.X+r.W-1, r.Y, '─', RoleDim)
-	c.Text(r.X+2, r.Y, "┤ session log ├", RoleDim)
+// drawLog draws the session log as a closed box of the log lines from index start on, as many as fit: time, actor
+// in its family color and text, failed ones in the bad color. When the log has more lines than fit, the top
+// border shows the newest shown line's number and the total (12/87). A focused log has its border and title in
+// the accent.
+func (s State) drawLog(c *Canvas, r Rect, start int, focused bool) {
+	role, title := panelRoles(focused)
+	c.titledIn(r, logBorder, "session log", role, title)
+	n := max(r.H-2, 0)
+	start = min(max(start, 0), len(s.Log))
+	lines := s.Log[start:min(start+n, len(s.Log))]
+	if len(s.Log) > n {
+		pos := fmt.Sprintf(" %d/%d ", start+len(lines), len(s.Log))
+		c.Text(r.X+r.W-2-len(pos), r.Y, pos, title)
+	}
 	aw := s.actorWidth()
-	n := r.H - 1
-	lines := s.Log[max(len(s.Log)-n, 0):]
 	for i, ln := range lines {
 		y := r.Y + 1 + i
-		x := c.Text(r.X+1, y, ln.At.Format("15:04:05"), RoleDim) + 1
+		x := c.Text(r.X+2, y, ln.At.Format("15:04:05"), RoleDim) + 1
 		c.textIn(x, y, aw, ln.Actor, ModelRole(ln.Model))
-		c.textIn(x+aw+1, y, r.X+r.W-x-aw-2, ln.Text, RoleText)
+		text := RoleText
+		if ln.Bad {
+			text = RoleBad
+		}
+		c.textIn(x+aw+1, y, r.X+r.W-x-aw-3, ln.Text, text)
 	}
 }
 

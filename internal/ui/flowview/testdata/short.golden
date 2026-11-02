@@ -13,12 +13,12 @@
 ┃ ◆ working          ┃   ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃  
 ┃ ┆                  ┃   ┃ ctx ███████▏░░░░░░░░░  42% ┃   ┃ ctx █▎░░░░░░░░░░░░░░░   7% ┃  
 ┃ ◇ asking           ┃   ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  
-┃ ┆                  ┃   ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  
-┃ ◇ waiting          ┃   ┗━ ◓ 9m00s ▸ Bash go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛  
-┗━━━━━━━━━━━━━━━━━━━━┛                  │                                                 
-                                                              lines 1-15/32  cols 1-67/91 
-──┤ session log ├─────────────────────────────────────────────────────────────────────────
- 14:28:00 implementer   spawned code-reviewer                                             
- 14:28:30 code-reviewer spawned validator                                                 
- 14:29:30 validator     failed                                                            
+┗━━━━━━━━━━━━━━━━━━━━┛   ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  
+                                                     diagram  lines 1-13/32  cols 1-67/91 
+╭─ session log ──────────────────────────────────────────────────────────────────── 6/6 ─╮
+│ 14:28:30 code-reviewer spawned validator                                               │
+│ 14:29:30 validator     failed                                                          │
+│ 14:29:40 code-reviewer Bash go test ./internal/...                                     │
+│ 14:29:50 lead          Slice 2 is next: the layered layout                             │
+╰────────────────────────────────────────────────────────────────────────────────────────╯
  opus [1 running]  sonnet [1 running]  haiku [done]  agents [2/4]  tools [48]      ● live 

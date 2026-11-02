@@ -103,17 +103,39 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case Event:
 		m.Apply(msg)
 	case tea.KeyMsg:
-		m.scroll(msg.String())
+		m.key(msg.String())
 	}
 	return m, nil
 }
 
-// scroll moves the viewport over the diagram for a key: j/k a line, ctrl+d/ctrl+u half the viewport, g/G to the
-// top/bottom, h/l a column; the arrows like hjkl. It stops at the diagram's edges; other keys do nothing.
-func (m *Model) scroll(key string) {
-	const far = 1 << 30
-	half := max(m.layout.View.H/2, 1)
-	dx, dy := 0, 0
+// key moves the focus on tab and shift+tab (session → diagram → log, and around) and hands the other keys to the
+// focused area's scrolling.
+func (m *Model) key(key string) {
+	switch key {
+	case "tab":
+		m.focus = (m.focus + 1) % numAreas
+		return
+	case "shift+tab":
+		m.focus = (m.focus + numAreas - 1) % numAreas
+		return
+	}
+	switch m.focus {
+	case areaDiagram:
+		m.scroll(key)
+	case areaLog:
+		m.scrollLog(key)
+	case areaSession:
+		m.scrollSession(key)
+	}
+}
+
+// far is a scroll step past any edge: g and G.
+const far = 1 << 30
+
+// delta is the step a scroll key moves by in an area half rows high: j/k a line, ctrl+d/ctrl+u half the area, g/G
+// to the top/bottom, h/l a column; the arrows like hjkl. ok is false for other keys.
+func delta(key string, half int) (dx, dy int, ok bool) {
+	half = max(half, 1)
 	switch key {
 	case "j", "down":
 		dy = 1
@@ -132,6 +154,16 @@ func (m *Model) scroll(key string) {
 	case "l", "right":
 		dx = 1
 	default:
+		return 0, 0, false
+	}
+	return dx, dy, true
+}
+
+// scroll moves the viewport over the diagram for a scroll key. It stops at the diagram's edges; other keys do
+// nothing.
+func (m *Model) scroll(key string) {
+	dx, dy, ok := delta(key, m.layout.View.H/2)
+	if !ok {
 		return
 	}
 	d := m.layout.Diagram(m.st.Snap.Agents)
@@ -143,6 +175,48 @@ func (m *Model) scroll(key string) {
 func (m Model) clamp(d Diagram, x, y int) (int, int) {
 	v := m.layout.View
 	return min(max(x, 0), max(d.W-v.W, 0)), min(max(y, 0), max(d.H-v.H, 0))
+}
+
+// logRows is how many log lines the log box shows.
+func (m Model) logRows() int { return max(m.layout.Log.H-2, 0) }
+
+// logStart is the index of the log's first shown line: the newest lines while it follows them, else where it was
+// scrolled to.
+func (m Model) logStart() int {
+	bottom := max(len(m.st.Log)-m.logRows(), 0)
+	if !m.logHeld {
+		return bottom
+	}
+	return min(m.logTop, bottom)
+}
+
+// scrollLog scrolls the log for a vertical scroll key. Scrolled up it holds still while lines append; back at
+// the bottom (j to the end, or G) it follows the newest line again.
+func (m *Model) scrollLog(key string) {
+	_, dy, ok := delta(key, m.logRows()/2)
+	if !ok || dy == 0 {
+		return
+	}
+	bottom := max(len(m.st.Log)-m.logRows(), 0)
+	top := min(max(m.logStart()+dy, 0), bottom)
+	m.logTop, m.logHeld = top, top < bottom
+}
+
+// sessionStart is the session column's first shown row, clamped to its rows as they are now.
+func (m Model) sessionStart() int {
+	r := m.layout.Session
+	n := len(m.frame().sessionRows(m.canvas, r))
+	return min(max(m.sessOff, 0), max(n-(r.H-2), 0))
+}
+
+// scrollSession scrolls the session column for a vertical scroll key when its rows are more than it shows.
+func (m *Model) scrollSession(key string) {
+	_, dy, ok := delta(key, (m.layout.Session.H-2)/2)
+	if !ok {
+		return
+	}
+	m.sessOff = m.sessionStart() + dy
+	m.sessOff = m.sessionStart() // clamped: the next key moves from the edge
 }
 
 // Pause stops the animation tick, for a hidden view.
@@ -182,7 +256,7 @@ func (m Model) Offset() (x, y int) {
 
 // View draws the frame. The header, legend, session column, log and status line are pinned; the diagram (lead,
 // tools box and every agent) is drawn whole on a canvas of its own and the scrolled-to part of it copied into the
-// viewport, with the position shown above the log when it does not fit.
+// viewport, with the position shown above the log when it does not fit. The focused area is highlighted.
 func (m Model) View() string {
 	c, l, s := m.canvas, m.layout, m.frame()
 	c.Clear()
@@ -196,9 +270,9 @@ func (m Model) View() string {
 	x, y := m.clamp(d, m.offX, m.offY)
 	c.Blit(dc, x, y, l.View)
 	s.drawHeader(c, l)
-	s.drawSession(c, l.Session)
-	drawPosition(c, l, d, x, y)
-	s.drawLog(c, l.Log)
+	s.drawSession(c, l.Session, m.sessionStart(), m.focus == areaSession)
+	drawPosition(c, l, d, x, y, m.focus == areaDiagram)
+	s.drawLog(c, l.Log, m.logStart(), m.focus == areaLog)
 	s.drawStatus(c, l)
 	return c.String()
 }

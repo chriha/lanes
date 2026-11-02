@@ -439,25 +439,36 @@ func TestEndFreezesTheFrame(t *testing.T) {
 	}
 }
 
-func TestSnapshotLogsSpawnsAndFinishes(t *testing.T) {
+func TestSnapshotLogsItsEvents(t *testing.T) {
 	at := func(s int) time.Time { return t0.Add(time.Duration(s) * time.Second) }
 	agents := []session.Agent{
 		{ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Start: at(1), Status: session.AgentDone, End: at(5)},
 		{ID: "a2", Parent: "a1", Name: "reviewer", Model: "claude-sonnet-4-5", Start: at(2), Status: session.AgentError, End: at(3)},
-		{ID: "a3", Name: "triager", Model: "claude-haiku-4-5", Start: at(4)},
+	}
+	events := []session.LogEvent{
+		{At: at(1), Actor: "lead", Kind: session.LogSpawn, Text: "spawned implementer"},
+		{At: at(2), Actor: "implementer", Kind: session.LogTool, Text: "Bash go test ./...", Failed: true},
+		{At: at(3), Actor: "reviewer", Kind: session.LogFail, Text: "failed", Failed: true},
+		{Actor: "lead", Kind: session.LogSpawn, Text: "spawned triager"}, // no time: the view's clock
+		{At: at(4), Actor: "implementer", Kind: session.LogText, Text: "All green"},
 	}
 	want := []string{
 		"14:00:01 lead spawned implementer",
-		"14:00:02 implementer spawned reviewer",
-		"14:00:03 reviewer failed",
-		"14:00:04 lead spawned triager",
-		"14:00:05 implementer done",
+		"14:00:02 implementer Bash go test ./... bad",
+		"14:00:03 reviewer failed bad",
+		"14:00:04 implementer All green",
+		"14:00:10 lead spawned triager",
 	}
 	m := New(nil) // nothing set yet: the first snapshot is history, without packets
-	m.Apply(SnapshotEvent{session.Snapshot{Lead: session.Lead{Model: "claude-opus-4-1"}, Agents: agents}})
+	m.SetSession("s", "", t0, at(10))
+	m.Apply(SnapshotEvent{session.Snapshot{Lead: session.Lead{Model: "claude-opus-4-1"}, Agents: agents, Events: events}})
 	var got []string
 	for _, l := range m.st.Log {
-		got = append(got, l.At.Format("15:04:05")+" "+l.Actor+" "+l.Text)
+		s := l.At.Format("15:04:05") + " " + l.Actor + " " + l.Text
+		if l.Bad {
+			s += " bad"
+		}
+		got = append(got, s)
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("log:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -603,5 +614,47 @@ func TestTokenSplitEases(t *testing.T) {
 	m.Apply(EndEvent{})
 	if l := m.frame().Snap.Lead; l.TokensIn != 1000 || l.TokensOut != 2000 || l.TokensCache != 4000 {
 		t.Errorf("after the end: in/out/cache %d/%d/%d, want the targets", l.TokensIn, l.TokensOut, l.TokensCache)
+	}
+}
+
+func TestHookEventLogsChanges(t *testing.T) {
+	m := liveModel() // hook working
+	m.st.Now = t0.Add(time.Minute)
+	for _, h := range []string{"working", "asking", "asking", "", "waiting"} {
+		m.Apply(HookEvent{h})
+	}
+	var got []string
+	for _, l := range m.st.Log {
+		got = append(got, l.At.Format("15:04:05")+" "+l.Actor+" "+l.Model+" "+l.Text)
+	}
+	want := "14:01:00 lead claude-opus-4-1 asking\n14:01:00 lead claude-opus-4-1 waiting"
+	if s := strings.Join(got, "\n"); s != want {
+		t.Errorf("log:\n%s\nwant:\n%s", s, want)
+	}
+}
+
+func TestLogKeepsTheNewestLines(t *testing.T) {
+	tests := []struct {
+		name      string
+		n         int
+		wantLen   int
+		wantFirst string
+	}{
+		{"under the limit", 150, 150, "0"},
+		{"at the limit", maxLog, maxLog, "0"},
+		{"past the limit: the oldest dropped", maxLog + 50, maxLog, "50"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := liveModel()
+			snap := m.st.Snap
+			for i := 0; i < tt.n; i++ {
+				snap.Events = []session.LogEvent{{At: t0.Add(time.Duration(i) * time.Second), Actor: "lead", Text: fmt.Sprint(i)}}
+				m.Apply(SnapshotEvent{snap})
+			}
+			if len(m.st.Log) != tt.wantLen || m.st.Log[0].Text != tt.wantFirst {
+				t.Errorf("log of %d lines from %q, want %d from %q", len(m.st.Log), m.st.Log[0].Text, tt.wantLen, tt.wantFirst)
+			}
+		})
 	}
 }

@@ -35,12 +35,12 @@
 ┃ the layered layout ┃                   ┗━ ✗ failed 1m00s ━━━━━━━━━━━┛                   
 ┃ and the static…    ┃                                                                    
 ┃                    ┃                                                                    
-┃ advisor   opus 4.1 ┃                                                                    
-┃   calls          3 ┃                                                                    
 ┗━━━━━━━━━━━━━━━━━━━━┛                                                                    
-                                                                             cols 1-67/91 
-──┤ session log ├─────────────────────────────────────────────────────────────────────────
- 14:28:00 implementer   spawned code-reviewer                                             
- 14:28:30 code-reviewer spawned validator                                                 
- 14:29:30 validator     failed                                                            
+                                                                    diagram  cols 1-67/91 
+╭─ session log ──────────────────────────────────────────────────────────────────── 6/6 ─╮
+│ 14:28:30 code-reviewer spawned validator                                               │
+│ 14:29:30 validator     failed                                                          │
+│ 14:29:40 code-reviewer Bash go test ./internal/...                                     │
+│ 14:29:50 lead          Slice 2 is next: the layered layout                             │
+╰────────────────────────────────────────────────────────────────────────────────────────╯
  opus [stopped]  sonnet [1 failed]  haiku [done]  agents [0/4]  tools [48]        ■ ended 

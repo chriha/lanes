@@ -60,7 +60,9 @@ func fixtureState() State {
 			{At: ago(5 * time.Minute), Actor: "lead", Model: "claude-opus-4-1", Text: "spawned implementer"},
 			{At: ago(2 * time.Minute), Actor: "implementer", Model: "claude-opus-4-1", Text: "spawned code-reviewer"},
 			{At: ago(90 * time.Second), Actor: "code-reviewer", Model: "claude-sonnet-4-5", Text: "spawned validator"},
-			{At: ago(30 * time.Second), Actor: "validator", Model: "claude-sonnet-4-5", Text: "failed"},
+			{At: ago(30 * time.Second), Actor: "validator", Model: "claude-sonnet-4-5", Text: "failed", Bad: true},
+			{At: ago(20 * time.Second), Actor: "code-reviewer", Model: "claude-sonnet-4-5", Text: "Bash go test ./internal/...", Bad: true},
+			{At: ago(10 * time.Second), Actor: "lead", Model: "claude-opus-4-1", Text: "Slice 2 is next: the layered layout"},
 		},
 	}
 }
@@ -145,6 +147,7 @@ func TestSetSessionKeepsTheFirstSnapshotStill(t *testing.T) {
 	m.Apply(SnapshotEvent{session.Snapshot{
 		Lead:   session.Lead{Model: "claude-opus-4-1"},
 		Agents: []session.Agent{{ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Start: t0, Ctx: -1}},
+		Events: []session.LogEvent{{At: t0, Actor: "lead", Kind: session.LogSpawn, Text: "spawned implementer"}},
 	}})
 	if len(m.Packets()) != 0 {
 		t.Errorf("first snapshot sent packets %v, want none: the agents were there before the view opened", m.Packets())
@@ -221,8 +224,8 @@ func scrolled(st State, w, h int, keys ...string) Model {
 }
 
 func TestScrollKeys(t *testing.T) {
-	// At 90×24 the viewport is 67×15 and the deep diagram 91×68 (the lead is centered over the 67 wide agent
-	// tree, the tools box ends at column 91): it scrolls 53 lines and 24 columns. At 200×50 the diagram fits the width. At 52×15 the viewport is 29×6
+	// At 90×24 the viewport is 67×13 and the deep diagram 91×68 (the lead is centered over the 67 wide agent
+	// tree, the tools box ends at column 91): it scrolls 55 lines and 24 columns. At 200×50 the diagram fits the width. At 52×15 the viewport is 29×4
 	// and the diagram 75 wide (the lead and the tools box side by side): it scrolls 46 columns.
 	tests := []struct {
 		name   string
@@ -233,11 +236,11 @@ func TestScrollKeys(t *testing.T) {
 		{"j moves a line down", 90, 24, []string{"j"}, 0, 1},
 		{"k moves a line up", 90, 24, []string{"j", "j", "k"}, 0, 1},
 		{"k stops at the top", 90, 24, []string{"k"}, 0, 0},
-		{"ctrl+d moves half the viewport down", 90, 24, []string{"ctrl+d"}, 0, 7},
-		{"ctrl+u moves half the viewport up", 90, 24, []string{"ctrl+d", "ctrl+d", "ctrl+u"}, 0, 7},
-		{"G goes to the bottom", 90, 24, []string{"G"}, 0, 53},
-		{"j stops at the bottom", 90, 24, []string{"G", "j"}, 0, 53},
-		{"ctrl+d stops at the bottom", 90, 24, []string{"G", "k", "ctrl+d"}, 0, 53},
+		{"ctrl+d moves half the viewport down", 90, 24, []string{"ctrl+d"}, 0, 6},
+		{"ctrl+u moves half the viewport up", 90, 24, []string{"ctrl+d", "ctrl+d", "ctrl+u"}, 0, 6},
+		{"G goes to the bottom", 90, 24, []string{"G"}, 0, 55},
+		{"j stops at the bottom", 90, 24, []string{"G", "j"}, 0, 55},
+		{"ctrl+d stops at the bottom", 90, 24, []string{"G", "k", "ctrl+d"}, 0, 55},
 		{"g goes to the top", 90, 24, []string{"G", "g"}, 0, 0},
 		{"l does nothing when the diagram fits the width", 200, 50, []string{"l"}, 0, 0},
 		{"h does nothing when the diagram fits the width", 200, 50, []string{"h"}, 0, 0},
@@ -279,7 +282,7 @@ func TestScrollKeys(t *testing.T) {
 }
 
 func TestScrollOffsetSurvivesSnapshots(t *testing.T) {
-	m := scrolled(withAgentsOf(deep()), 90, 17, "j", "j", "j")
+	m := scrolled(withAgentsOf(deep()), 90, 19, "j", "j", "j")
 	snap := m.st.Snap
 	snap.Agents = append([]session.Agent(nil), snap.Agents...)
 	snap.Agents[0].Tool = "Read"
@@ -377,9 +380,11 @@ func TestScrollIndicator(t *testing.T) {
 		want    string
 		without []string
 	}{
-		{"nothing to scroll, no indicator", 200, 50, fixtureState().Snap.Agents, nil, "", []string{"lines ", "cols "}},
-		{"lines shown of the diagram's", 90, 24, deep(), []string{"j"}, "lines 2-16/68  cols 1-67/91", nil},
-		{"columns too on a narrow terminal", 52, 15, deep(), []string{"l"}, "lines 1-6/113  cols 2-30/75", nil},
+		{"nothing to scroll, only the focus", 200, 50, fixtureState().Snap.Agents, nil, "diagram ", []string{"lines ", "cols "}},
+		{"nothing to scroll, not focused: nothing", 200, 50, fixtureState().Snap.Agents, []string{"tab"}, "", []string{"diagram", "lines ", "cols "}},
+		{"lines shown of the diagram's", 90, 24, deep(), []string{"j"}, "diagram  lines 2-14/68  cols 1-67/91", nil},
+		{"columns too on a narrow terminal", 52, 15, deep(), []string{"l"}, "diagram  lines 1-4/113  cols 2-30/75", nil},
+		{"not focused: the position without the name", 90, 24, deep(), []string{"tab"}, "lines 1-13/68  cols 1-67/91", []string{"diagram"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -392,6 +397,257 @@ func TestScrollIndicator(t *testing.T) {
 				if strings.Contains(row, w) {
 					t.Errorf("row above the log = %q has %q", row, w)
 				}
+			}
+		})
+	}
+}
+
+// numberedLog is n log lines numbered from 1, a second apart.
+func numberedLog(n int) []LogLine {
+	var out []LogLine
+	for i := 1; i <= n; i++ {
+		out = append(out, LogLine{At: t0.Add(time.Duration(i) * time.Second), Actor: "lead", Text: fmt.Sprintf("line %d", i)})
+	}
+	return out
+}
+
+// logFrame is the session log box of m's frame: the top border and the shown lines without their borders.
+func logFrame(m Model) []string {
+	rows := frameRows(m)
+	l := m.layout.Log
+	out := []string{string(rows[l.Y])}
+	for y := l.Y + 1; y < l.Y+l.H-1; y++ {
+		out = append(out, strings.TrimSpace(strings.Trim(string(rows[y]), "│")))
+	}
+	return out
+}
+
+// appendLog applies a snapshot that logs one more line, numbered after the log's last.
+func appendLog(m *Model) {
+	n := len(m.st.Log) + 1
+	snap := m.st.Snap
+	snap.Events = []session.LogEvent{{At: t0.Add(time.Duration(n) * time.Second), Actor: "lead", Text: fmt.Sprintf("line %d", n)}}
+	m.Apply(SnapshotEvent{snap})
+}
+
+func TestLogBox(t *testing.T) {
+	st := fixtureState()
+	st.Log = numberedLog(2)
+	m := scrolled(st, 90, 24)
+	l := m.layout.Log
+	rows := frameRows(m)
+	if l.H != 6 {
+		t.Fatalf("log box is %d rows high, want 6: 4 lines in a border", l.H)
+	}
+	corners := string([]rune{rows[l.Y][0], rows[l.Y][l.W-1], rows[l.Y+l.H-1][0], rows[l.Y+l.H-1][l.W-1]})
+	if corners != "╭╮╰╯" || !strings.HasPrefix(string(rows[l.Y]), "╭─ session log ─") {
+		t.Errorf("log box top %q, corners %q; want a rounded box titled session log", string(rows[l.Y]), corners)
+	}
+	if got := logFrame(m); strings.Contains(got[0], "/") || !strings.HasSuffix(got[1], "line 1") ||
+		!strings.HasSuffix(got[2], "line 2") || got[3] != "" || got[4] != "" {
+		t.Errorf("a short log = %q, want its two lines at the top and no position", got)
+	}
+}
+
+func TestLogLineRoles(t *testing.T) {
+	s := State{Log: []LogLine{
+		{At: t0, Actor: "reviewer", Model: "claude-sonnet-4-5", Text: "Bash go test", Bad: true},
+		{At: t0, Actor: "lead", Model: "claude-opus-4-1", Text: "Read x.go"},
+	}}
+	c := NewCanvas(60, 4, nil)
+	s.drawLog(c, Rect{0, 0, 60, 4}, 0, false)
+	// time at 2, actor at 11 (8 wide: "reviewer"), text at 20
+	tests := []struct {
+		name string
+		x, y int
+		want Role
+	}{
+		{"time dim", 2, 1, RoleDim},
+		{"actor in its family color", 11, 1, RoleSonnet},
+		{"failed call in the bad color", 20, 1, RoleBad},
+		{"lead in its family color", 11, 2, RoleOpus},
+		{"call in the text color", 20, 2, RoleText},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := c.At(tt.x, tt.y).Role; got != tt.want {
+				t.Errorf("cell %d,%d (%q) role %d, want %d", tt.x, tt.y, c.At(tt.x, tt.y).R, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFocusCycles(t *testing.T) {
+	tests := []struct {
+		keys []string
+		want area
+	}{
+		{nil, areaDiagram},
+		{[]string{"tab"}, areaLog},
+		{[]string{"tab", "tab"}, areaSession},
+		{[]string{"tab", "tab", "tab"}, areaDiagram},
+		{[]string{"shift+tab"}, areaSession},
+		{[]string{"shift+tab", "shift+tab"}, areaLog},
+		{[]string{"shift+tab", "shift+tab", "shift+tab"}, areaDiagram},
+		{[]string{"tab", "shift+tab"}, areaDiagram},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.keys, ","), func(t *testing.T) {
+			m := New(nil)
+			m.SetSize(90, 24)
+			m.SetState(fixtureState())
+			for _, k := range tt.keys {
+				msg := tea.KeyMsg{Type: tea.KeyTab}
+				if k == "shift+tab" {
+					msg = tea.KeyMsg{Type: tea.KeyShiftTab}
+				}
+				m, _ = m.Update(msg)
+			}
+			if m.focus != tt.want {
+				t.Errorf("focus %d, want %d", m.focus, tt.want)
+			}
+		})
+	}
+}
+
+func TestFocusedAreaIsHighlighted(t *testing.T) {
+	theme := NewTheme(NeonPalette())
+	tests := []struct {
+		name string
+		keys []string
+		want map[string]bool // area → accent
+	}{
+		{"diagram on open", nil, map[string]bool{"session": false, "diagram": true, "log": false}},
+		{"log", []string{"tab"}, map[string]bool{"session": false, "diagram": false, "log": true}},
+		{"session", []string{"tab", "tab"}, map[string]bool{"session": true, "diagram": false, "log": false}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New(theme)
+			m.SetSize(90, 24)
+			m.SetState(withAgentsOf(deep()))
+			for range tt.keys {
+				m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+			}
+			m.View()
+			l := m.layout
+			pos := m.canvas.At(l.Frame.W-2, l.Log.Y-1) // the end of the diagram's position
+			got := map[string]bool{
+				"session": m.canvas.At(l.Session.X, l.Session.Y).Role == RoleAccent,
+				"diagram": pos.Role == RoleAccent,
+				"log":     m.canvas.At(l.Log.X, l.Log.Y).Role == RoleAccent,
+			}
+			for a, want := range tt.want {
+				if got[a] != want {
+					t.Errorf("%s highlighted %v, want %v", a, got[a], want)
+				}
+			}
+		})
+	}
+}
+
+func TestOnlyTheFocusedAreaScrolls(t *testing.T) {
+	st := withAgentsOf(deep())
+	st.Log = numberedLog(10)
+	tests := []struct {
+		name               string
+		keys               []string
+		wantDiagY, wantLog int // the diagram's line offset, the log's first shown line
+		wantSess           int
+	}{
+		{"diagram", []string{"j", "j"}, 2, 6, 0},
+		{"log", []string{"tab", "k", "k"}, 0, 4, 0},
+		{"session", []string{"tab", "tab", "j"}, 0, 6, 1},
+		{"back on the diagram", []string{"tab", "k", "tab", "tab", "j"}, 1, 5, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := scrolled(st, 90, 24, tt.keys...)
+			if _, y := m.Offset(); y != tt.wantDiagY || m.logStart() != tt.wantLog || m.sessionStart() != tt.wantSess {
+				t.Errorf("diagram line %d, log from %d, session from %d; want %d, %d, %d",
+					y, m.logStart(), m.sessionStart(), tt.wantDiagY, tt.wantLog, tt.wantSess)
+			}
+		})
+	}
+}
+
+func TestLogScrolling(t *testing.T) {
+	tests := []struct {
+		name      string
+		keys      []string
+		appends   int
+		wantFirst string // first shown line
+		wantPos   string
+	}{
+		{"follows the newest", nil, 0, "line 7", " 10/10 "},
+		{"follows while lines append", nil, 3, "line 10", " 13/13 "},
+		{"k scrolls up a line", []string{"k"}, 0, "line 6", " 9/10 "},
+		{"held while lines append", []string{"k"}, 3, "line 6", " 9/13 "},
+		{"ctrl+u half the box", []string{"ctrl+u"}, 0, "line 5", " 8/10 "},
+		{"g to the oldest", []string{"g"}, 2, "line 1", " 4/12 "},
+		{"k stops at the oldest", []string{"g", "k"}, 0, "line 1", " 4/10 "},
+		{"G follows again", []string{"g", "G"}, 2, "line 9", " 12/12 "},
+		{"j back to the bottom follows again", []string{"k", "j"}, 2, "line 9", " 12/12 "},
+		{"ctrl+d down from the top", []string{"g", "ctrl+d"}, 0, "line 3", " 6/10 "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := fixtureState()
+			st.Log = numberedLog(10)
+			m := scrolled(st, 90, 24, append([]string{"tab"}, tt.keys...)...)
+			for i := 0; i < tt.appends; i++ {
+				appendLog(&m)
+			}
+			got := logFrame(m)
+			if !strings.HasSuffix(got[1], " "+tt.wantFirst) || !strings.Contains(got[0], tt.wantPos) {
+				t.Errorf("log box = %q, want it to start at %q and show %q", got, tt.wantFirst, tt.wantPos)
+			}
+		})
+	}
+}
+
+func TestHeldLogStaysPutWhenTheOldestDrop(t *testing.T) {
+	st := fixtureState()
+	st.Log = numberedLog(maxLog)
+	m := scrolled(st, 90, 24, "tab", "g", "j", "j") // lines 3-6
+	appendLog(&m)                                   // line 1 dropped
+	if got := logFrame(m); !strings.HasSuffix(got[1], " line 3") {
+		t.Errorf("log box = %q, want it still at line 3", got)
+	}
+}
+
+func TestEndedLogScrolls(t *testing.T) {
+	st := fixtureState()
+	st.Ended = true
+	st.Log = numberedLog(10)
+	m := scrolled(st, 90, 24, "tab", "g")
+	if got := logFrame(m); !strings.HasSuffix(got[1], " line 1") {
+		t.Errorf("ended log box = %q, want it scrolled to line 1", got)
+	}
+}
+
+func TestSessionColumnScrolls(t *testing.T) {
+	tests := []struct {
+		name  string
+		h     int
+		keys  []string
+		want  int
+		first string // the column's first row once scrolled
+	}{
+		{"taller than the column: j scrolls a row", 24, []string{"j"}, 1, "ctx"},
+		{"G to the last rows", 24, []string{"G"}, 24, "state.go"},
+		{"k stops at the top", 24, []string{"k"}, 0, "issue-196"},
+		{"fits the column: keys do nothing", 50, []string{"j", "G"}, 0, "issue-196"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := scrolled(fixtureState(), 90, tt.h, append([]string{"tab", "tab"}, tt.keys...)...)
+			if got := m.sessionStart(); got != tt.want {
+				t.Errorf("session column from row %d, want %d", got, tt.want)
+			}
+			r := m.layout.Session
+			if row := string(frameRows(m)[r.Y+1][:r.W]); !strings.HasPrefix(strings.TrimLeft(row, "┃ "), strings.TrimSpace(tt.first)) {
+				t.Errorf("first row %q, want it to start with %q", row, tt.first)
 			}
 		})
 	}

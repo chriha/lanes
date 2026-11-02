@@ -3,6 +3,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -50,6 +51,20 @@ func newProvider(c config.Provider, origin func() (string, error)) (Provider, er
 	}
 	return nil, fmt.Errorf("unknown provider type %q", c.Type)
 }
+
+// auto is a provider of type "auto": it reads the origin remote and builds the provider for its forge on first use,
+// in the fetch, so building it spawns no subprocess.
+type auto struct {
+	c      config.Provider
+	origin func() (string, error)
+}
+
+// resolve returns the provider for the origin's forge.
+func (a *auto) resolve() (Provider, error) { return nil, errors.New("auto: not implemented") }
+
+func (a *auto) Fetch(ctx context.Context) ([]item.Item, error) { return nil, errors.New("auto: not implemented") }
+
+func (a *auto) Quick(ctx context.Context) ([]item.Item, error) { return nil, errors.New("auto: not implemented") }
 
 // Forge returns the provider type and the repo path (owner/repo, group/project) for a git remote URL
 // (https, ssh:// or scp-like git@host:path). Only github.com is github; any other host is gitlab.

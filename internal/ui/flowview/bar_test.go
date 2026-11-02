@@ -1,137 +1,63 @@
 package flowview
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
-func TestCanvasBar(t *testing.T) {
-	tests := []struct {
-		name  string
-		w     int
-		v     float64
-		phase int
-		want  string
-	}{
-		{"empty", 4, 0, 0, "░░░░"},
-		{"full", 4, 1, 0, "████"},
-		{"half on a cell boundary", 4, 0.5, 0, "██░░"},
-		{"edge a quarter filled", 4, 0.3125, 0, "█░░░"},
-		{"edge half filled", 4, 0.375, 0, "█▒░░"},
-		{"edge three quarters filled", 4, 0.4375, 0, "█▓░░"},
-		{"shimmer shifts the edge", 4, 0.375, 1, "█▓░░"},
-		{"shimmer wraps around", 4, 0.375, 2, "█░░░"},
-		{"negative phase", 4, 0.375, -1, "█░░░"},
-		{"below 0 clamps", 4, -0.5, 0, "░░░░"},
-		{"above 1 clamps", 4, 1.7, 2, "████"},
-		{"zero width draws nothing", 0, 0.5, 0, ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := NewCanvas(6, 1, nil)
-			c.Bar(1, 0, tt.w, tt.v, tt.phase, RoleHaiku, RoleDim)
-			want := " " + tt.want
-			for len([]rune(want)) < 6 {
-				want += " "
-			}
-			if got := c.String(); got != want {
-				t.Errorf("bar = %q, want %q", got, want)
-			}
-		})
-	}
-}
-
-func TestCanvasBarRoles(t *testing.T) {
-	c := NewCanvas(4, 1, nil)
-	c.Bar(0, 0, 4, 0.375, 0, RoleHaiku, RoleDim)
-	want := []Role{RoleHaiku, RoleHaiku, RoleDim, RoleDim}
-	for x, r := range want {
-		if got := c.At(x, 0).Role; got != r {
-			t.Errorf("cell %d role = %d, want %d", x, got, r)
-		}
-	}
-}
-
-func TestCanvasBarClips(t *testing.T) {
-	c := NewCanvas(3, 1, nil)
-	c.Bar(1, 0, 5, 1, 0, RoleHaiku, RoleDim)
-	if got := c.String(); got != " ██" {
-		t.Errorf("bar = %q, want %q", got, " ██")
-	}
-}
-
-func TestCanvasGauge(t *testing.T) {
+func TestCanvasSegments(t *testing.T) {
 	tests := []struct {
 		name string
-		w    int
 		v    float64
-		want string
+		want string // ■ full, ▌ half, □ track
 	}{
-		{"empty", 4, 0, "░░░░"},
-		{"full", 4, 1, "████"},
-		{"half on a cell boundary", 4, 0.5, "██░░"},
-		{"an eighth into the edge cell", 4, 0.53125, "██▏░"},
-		{"seven eighths into the edge cell", 4, 0.46875, "█▉░░"},
-		{"rounds to the nearest eighth", 4, 0.03, "▏░░░"},
-		{"below half an eighth is empty", 4, 0.015, "░░░░"},
-		{"below 0 clamps", 4, -0.5, "░░░░"},
-		{"above 1 clamps", 4, 1.7, "████"},
-		{"zero width draws nothing", 0, 0.5, ""},
+		{"zero shows none", 0, "□□□□□□□□□□"},
+		{"2% rounds up to a half", 0.02, "▌□□□□□□□□□"},
+		{"3% rounds to a half", 0.03, "▌□□□□□□□□□"},
+		{"4% rounds to a half", 0.04, "▌□□□□□□□□□"},
+		{"5% is a half", 0.05, "▌□□□□□□□□□"},
+		{"1% shows a half", 0.01, "▌□□□□□□□□□"},
+		{"10% is one full", 0.1, "■□□□□□□□□□"},
+		{"14% rounds to 15%", 0.14, "■▌□□□□□□□□"},
+		{"50%", 0.5, "■■■■■□□□□□"},
+		{"97% rounds to 95%", 0.97, "■■■■■■■■■▌"},
+		{"100%", 1, "■■■■■■■■■■"},
+		{"below 0 clamps", -0.5, "□□□□□□□□□□"},
+		{"above 1 clamps", 1.7, "■■■■■■■■■■"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := NewCanvas(6, 1, nil)
-			c.Gauge(1, 0, tt.w, tt.v, RoleHaiku, RoleDim)
-			want := " " + tt.want
-			for len([]rune(want)) < 6 {
-				want += " "
+			c := NewCanvas(12, 1, nil)
+			c.Segments(1, 0, '■', tt.v, RoleHaiku, RoleDim)
+			var got strings.Builder
+			for x := 1; x <= segmentCount; x++ {
+				cell := c.At(x, 0)
+				switch {
+				case cell.R == '■' && cell.Role == RoleHaiku:
+					got.WriteRune('■')
+				case cell.R == '▌' && cell.Role == RoleHaiku:
+					got.WriteRune('▌')
+				case cell.R == '■' && cell.Role == RoleDim:
+					got.WriteRune('□')
+				default:
+					t.Fatalf("cell %d = %q role %d", x, cell.R, cell.Role)
+				}
 			}
-			if got := c.String(); got != want {
-				t.Errorf("gauge = %q, want %q", got, want)
+			if got.String() != tt.want {
+				t.Errorf("segments = %q, want %q", got.String(), tt.want)
+			}
+			if c.At(0, 0).R != ' ' && c.At(0, 0).R != 0 || c.At(11, 0).R == '■' {
+				t.Errorf("drew outside the 10 cells: %q", c.String())
 			}
 		})
 	}
 }
 
-func TestCanvasGaugeRoles(t *testing.T) {
-	c := NewCanvas(4, 1, nil)
-	c.Gauge(0, 0, 4, 0.3, RoleHaiku, RoleDim)
-	for x, want := range []Role{RoleHaiku, RoleHaiku, RoleDim, RoleDim} {
-		if got := c.At(x, 0).Role; got != want {
-			t.Errorf("cell %d role = %d, want %d", x, got, want)
-		}
-	}
-}
-
-// TestCanvasGaugeSteps proves the context gauge's resolution: at every width from 12 to 30 cells, contexts 5%
-// apart are drawn differently, and a higher context never draws less.
-func TestCanvasGaugeSteps(t *testing.T) {
-	fill := func(s string) int {
-		n := 0
-		for _, r := range s {
-			switch {
-			case r == '█':
-				n += 8
-			case r >= '▉' && r <= '▏':
-				n += int('▏'-r) + 1
-			}
-		}
-		return n
-	}
-	for w := 12; w <= 30; w++ {
-		seen := map[string]int{}
-		last := -1
-		for ctx := 0; ctx <= 100; ctx += 5 {
-			c := NewCanvas(w, 1, nil)
-			c.Gauge(0, 0, w, float64(ctx)/100, RoleHaiku, RoleDim)
-			g := c.String()
-			if prev, ok := seen[g]; ok {
-				t.Errorf("width %d: ctx %d%% and %d%% both draw %q", w, prev, ctx, g)
-			}
-			seen[g] = ctx
-			if f := fill(g); f < last {
-				t.Errorf("width %d: ctx %d%% draws less (%q) than 5%% below", w, ctx, g)
-			} else {
-				last = f
-			}
-		}
+func TestCanvasSegmentsGlyph(t *testing.T) {
+	c := NewCanvas(10, 1, nil)
+	c.Segments(0, 0, '▬', 0.35, RoleHaiku, RoleDim)
+	if got := c.String(); got != "▬▬▬▌▬▬▬▬▬▬" {
+		t.Errorf("segments = %q", got)
 	}
 }
 

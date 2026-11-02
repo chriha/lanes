@@ -10,7 +10,7 @@ import (
 const (
 	tickEvery  = 70 * time.Millisecond  // the animation tick
 	maxStep    = 250 * time.Millisecond // the longest step one tick takes, after a stall or a pause
-	phaseEvery = 140 * time.Millisecond // one spinner frame and shimmer step
+	phaseEvery = 140 * time.Millisecond // one spinner frame
 	packetTime = 800 * time.Millisecond // a packet's trip along its connector
 	easeTime   = 400 * time.Millisecond // a counter covers a step's share dt/easeTime of the gap to its target
 	typeRate   = 40.0                   // runes per second the typewriter types
@@ -31,7 +31,7 @@ type Packet struct {
 	Pos   float64 // progress along the connector, 0..1; a burst's later packets start below 0 and show from 0
 }
 
-// Step advances the animation by dt: the clock, packets, counters, the typewriter, the spinner and the shimmer.
+// Step advances the animation by dt: the clock, packets, counters, the typewriter and the spinner.
 // It does no I/O. An ended session doesn't move.
 func (m *Model) Step(dt time.Duration) {
 	if dt <= 0 || m.st.Ended {

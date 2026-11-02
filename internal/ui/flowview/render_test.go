@@ -139,9 +139,9 @@ func TestAgentBoxContextGauge(t *testing.T) {
 		ctx  int
 		want string
 	}{
-		{"known", 50, "ctx ███████▌░░░░░░░  50%"},
-		{"one percent shows", 1, "ctx ▏░░░░░░░░░░░░░░   1%"},
-		{"unknown", -1, "ctx ░░░░░░░░░░░░░░░   --"},
+		{"known", 50, "ctx ▬▬▬▬▬▬▬▬▬▬ 50%"},
+		{"one percent shows", 1, "ctx ▌▬▬▬▬▬▬▬▬▬ 1%"},
+		{"unknown", -1, "ctx ▬▬▬▬▬▬▬▬▬▬ --"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -150,31 +150,92 @@ func TestAgentBoxContextGauge(t *testing.T) {
 			if got := strings.TrimSpace(strings.Trim(rows(c)[2], "┃")); got != tt.want {
 				t.Errorf("ctx row = %q, want %q", got, tt.want)
 			}
+			if tt.ctx < 0 {
+				for i, r := range segmentRoles(c, 2, '▬') {
+					if r != RoleTrack {
+						t.Errorf("unknown ctx: cell %d role %d, want RoleTrack", i, r)
+					}
+				}
+			}
 		})
 	}
 }
 
-// gaugeCells counts the cells of row y drawn as a gauge: full, eighth or track.
-func gaugeCells(c *Canvas, y int) int {
-	n := 0
-	for _, r := range rows(c)[y] {
-		if r == '█' || r == '░' || r >= '▉' && r <= '▏' {
-			n++
+// segmentRoles returns the roles of the n glyph cells of row y, in order.
+func segmentRoles(c *Canvas, y int, glyph rune) []Role {
+	var out []Role
+	for x := 0; x < c.W; x++ {
+		if cell := c.At(x, y); cell.R == glyph {
+			out = append(out, cell.Role)
 		}
 	}
-	return n
+	return out
 }
 
-func TestContextGaugesAreAtLeast12Wide(t *testing.T) {
+func TestContextBarsAreTenSegments(t *testing.T) {
 	// the narrowest each gets: the session column is always sessionW wide, an agent box at least boxMinW
 	agent := NewCanvas(boxMinW, 5, nil)
 	State{}.drawAgent(agent, Rect{0, 0, boxMinW, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: 50})
 	col := NewCanvas(sessionW, 37, nil)
 	fixtureState().drawSession(col, Rect{0, 0, sessionW, 37})
-	for name, n := range map[string]int{"agent box": gaugeCells(agent, 2), "session column": gaugeCells(col, 3)} {
-		if n < 12 {
-			t.Errorf("%s gauge is %d cells, want at least 12", name, n)
+	for name, got := range map[string][]Role{"agent box": segmentRoles(agent, 2, '▬'), "session column": segmentRoles(col, 3, '▬')} {
+		if len(got) != 10 {
+			t.Errorf("%s ctx bar is %d segments, want 10", name, len(got))
 		}
+	}
+	// the lead is at 61%: six segments filled
+	filled := 0
+	for _, r := range segmentRoles(col, 3, '▬') {
+		if r != RoleTrack {
+			filled++
+		}
+	}
+	if filled != 6 {
+		t.Errorf("session ctx bar has %d filled segments, want 6", filled)
+	}
+}
+
+func TestToolBarIgnoresPhase(t *testing.T) {
+	var base string
+	for i, tt := range []struct {
+		ended bool
+		phase int
+	}{{false, 0}, {false, 1}, {true, 0}, {true, 1}} {
+		st := fixtureState()
+		st.Ended, st.Phase = tt.ended, tt.phase
+		c := NewCanvas(leadW, 6, nil)
+		st.drawTools(c, Rect{0, 0, leadW, 6})
+		bar := rows(c)[2]
+		if i == 0 {
+			base = bar
+		}
+		if bar != base {
+			t.Errorf("ended %v phase %d: bar row %q, want %q", tt.ended, tt.phase, bar, base)
+		}
+		// top tool Read: 20 of 48 calls, 42% rounds to 40%: four full cells, role intact in every phase
+		full := 0
+		for _, r := range segmentRoles(c, 2, '■') {
+			if r != RoleTrack {
+				full++
+			}
+		}
+		if full != 4 {
+			t.Errorf("ended %v phase %d: %d full cells, want 4", tt.ended, tt.phase, full)
+		}
+	}
+}
+
+func TestPercentFollowsTheBar(t *testing.T) {
+	tools := NewCanvas(leadW, 6, nil)
+	fixtureState().drawTools(tools, Rect{0, 0, leadW, 6})
+	// Read: 20 of 48 calls, 42% rounds to 40%; the % is one space after the bar, inside the border
+	if got := strings.TrimSpace(strings.Trim(rows(tools)[2], "┃")); got != "Read     ■■■■■■■■■■ 42%" {
+		t.Errorf("tools row = %q", got)
+	}
+	agent := NewCanvas(boxMinW, 5, nil)
+	State{}.drawAgent(agent, Rect{0, 0, boxMinW, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: 100})
+	if got := strings.TrimSpace(strings.Trim(rows(agent)[2], "┃")); got != "ctx ▬▬▬▬▬▬▬▬▬▬ 100%" {
+		t.Errorf("agent ctx row = %q", got)
 	}
 }
 
@@ -393,7 +454,7 @@ func TestSessionColumn(t *testing.T) {
 			0:  "┏━ session ━",
 			1:  "┃ issue-196 12m03s ┃",
 			2:  "┃ ctx 61% ┃",
-			3:  "┃ ███████████░░░░░░░ ┃",
+			3:  "┃ ▬▬▬▬▬▬▬▬▬▬ ┃",
 			4:  "┃ effort ▮▮▮▯ high ┃",
 			6:  "┃ activity 3/min ┃",
 			7:  "┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄ ┃",
@@ -419,7 +480,7 @@ func TestSessionColumn(t *testing.T) {
 			37: "┗━━",
 		}, nil},
 		{"unknown effort omits its row", noEffort, 38, map[int]string{4: "", 5: "┃ activity 3/min ┃"}, []string{"effort", "▮"}},
-		{"unknown context", noCtx, 38, map[int]string{2: "┃ ctx -- ┃", 3: "┃ ░░░░░░░░░░░░░░░░░░ ┃"}, nil},
+		{"unknown context", noCtx, 38, map[int]string{2: "┃ ctx -- ┃", 3: "┃ ▬▬▬▬▬▬▬▬▬▬ ┃"}, nil},
 		{"no advisor, no advisor rows", noAdvisor, 38, map[int]string{34: "", 35: ""}, []string{"advisor"}},
 		{"no files, no files rows", noFiles, 38, map[int]string{23: "┃ last: ┃"}, []string{"files"}},
 		{"ended: no checkpoint is active and no agent runs", ended, 38, map[int]string{9: "┃ ◇ working ┃", 21: "┃ agents ■0 ✓1 ✗1 ┃"}, []string{"◆", "◓"}},
@@ -470,7 +531,7 @@ func TestHeaderGlowsInTheAccent(t *testing.T) {
 }
 
 func TestTracksAreDrawnInTheTrackRole(t *testing.T) {
-	// trackRoles collects the roles of the ░ track cells and ▁ zero sparks of row y.
+	// trackRoles collects the roles of the unfilled track cells and ▁ zero sparks of row y.
 	trackRoles := func(c *Canvas, y int, empty rune) map[Role]int {
 		got := map[Role]int{}
 		for x := 0; x < c.W; x++ {
@@ -492,10 +553,7 @@ func TestTracksAreDrawnInTheTrackRole(t *testing.T) {
 		y     int
 		empty rune
 	}{
-		{"agent box ctx gauge", agent, 2, '░'},
-		{"session ctx gauge", col, 3, '░'},
 		{"session activity sparkline", col, 7, '▁'},
-		{"tool bar", tools, 2, '░'},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

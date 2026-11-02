@@ -106,8 +106,10 @@ an env var).
   log is a closed rounded box of 4 lines (`time actor message`, the actor in its family color, failed calls in the
   bad color) holding the newest 200 lines: it follows the newest line until scrolled up, then holds its place
   while lines append and shows `n/total` in its top border; `G` follows again. Boxes are 28–30 cols (widened for long names, never narrower), as many per row as fit, every agent drawn
-  (a depth wraps into as many lines as it needs); a viewport narrower than a box scrolls sideways. The ctx gauge
-  has eighth-block resolution and is ≥ 12 cells everywhere (≤ 5% per step). The view has its own neon palette
+  (a depth wraps into as many lines as it needs); a viewport narrower than a box scrolls sideways. Every ctx bar
+  (agent boxes and the lead in the session column) is 10 `▬` segments and the tools box's bars are 10 `■` segments,
+  each in 5% steps (nearest 5%, drawn with a half-filled `▌` cell, at least a half cell above 0); the tools and agent ctx
+  rows show the % one space after the bar, the lead's in the session column on the row above. The view has its own neon palette
   (`flowview.NeonPalette`: magenta/cyan/yellow families, violet accent header, a deep track behind bars, heavy
   panel borders and a double lead border; a toned-down light variant), overridden per field by
   `[theme.agent_view]` (also `[theme.light.agent_view]` / `[theme.dark.agent_view]`, resolved like `[theme]` in

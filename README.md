@@ -701,7 +701,7 @@ anything because the terminal is small. It shows, top to bottom:
   (`■ opus  ■ sonnet  ■ haiku`), always drawn.
 
 - **session** (left column, full height) — the lead's dashboard:
-  - the item's name and how long the session has run, the lead's `ctx` bar with its % and its `effort` meter;
+  - the item's name and how long the session has run, the lead's `ctx` bar (10 `▬` segments in 5% steps) with its % and its `effort` meter;
   - `activity` — tool calls of the lead and its agents per minute over the last 15 minutes, as a sparkline
     (`▁▂▃▄▅▆▇█`, one cell per minute);
   - the hook state on a dashed `┆` timeline (`◆ working`, `◇ asking`, `◇ waiting`; the active one highlighted);
@@ -712,12 +712,12 @@ anything because the terminal is small. It shows, top to bottom:
   - `advisor` — the advisor model and its `calls`, when the session uses one.
 - **lead** — the main Claude, in a double border: its model and `effort` meter with its level (left out when
   unknown), current tool and argument, state and elapsed time.
-- **tools** — the lead's three most used tools, with their share of all its calls. The box sits right of the lead
+- **tools** — the lead's three most used tools, with their share of all its calls, each as a bar of 10 `■` segments in 5% steps (a half-filled `▌` cell is 5%) with the % right after it. The box sits right of the lead
   on its top row, `3` columns apart and joined to nothing; the agent tree starts directly below the lead. It
   scrolls with the diagram, which is wide enough for both: on a narrow terminal reach it with `h`/`l`.
 - **agents** — the subagents as a layered tree, one row per spawn depth, each connected to the agent that
   spawned it (or to the lead). Each box has the agent's full name in its top border, then its model and `effort`
-  meter, a `ctx` bar with its %, its task and a live text row; the bottom border shows the status: a spinner with elapsed time and
+  meter, a `ctx` bar (10 `▬` segments in 5% steps) with its %, its task and a live text row; the bottom border shows the status: a spinner with elapsed time and
   `▸ <tool> <argument>` while running, `✓ done` with its duration, `✗` when it failed. The border takes the
   model family's color; finished agents are dimmed.
   The **task** is the subagent's description, else the first sentence of its first prompt (a leading

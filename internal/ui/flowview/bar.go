@@ -5,50 +5,29 @@ import (
 	"strings"
 )
 
-// shades are the bar's edge glyphs from light to dark.
-var shades = [3]rune{'░', '▒', '▓'}
+// segmentCount is the number of segments of a bar.
+const segmentCount = 10
 
-// Bar draws a w-cell bar filled to v (clamped to 0..1) at x, y: full cells as █ in fill, a partly filled edge cell
-// as a shade in fill, the rest as a ░ track in track. The edge shade comes from the fill fraction of that cell,
-// shifted by phase so it shimmers as phase advances; an empty or full bar has no edge cell.
-func (c *Canvas) Bar(x, y, w int, v float64, phase int, fill, track Role) {
-	if w <= 0 {
-		return
-	}
+// halfGlyph is the half-filled cell of a bar.
+const halfGlyph = '▌'
+
+// Segments draws a bar of segmentCount one-cell glyphs at x, y, filled to v (clamped to 0..1) in 5% steps: the
+// full cells as glyph in fill, then at most one half cell as ▌ in fill, the rest as glyph in track. v is rounded to
+// the nearest 5% (half a cell), but to at least one half cell for any v above 0.
+func (c *Canvas) Segments(x, y int, glyph rune, v float64, fill, track Role) {
 	v = min(max(v, 0), 1)
-	filled := v * float64(w)
-	full := int(filled)
-	for i := 0; i < w; i++ {
+	halves := int(math.Round(v * segmentCount * 2))
+	if v > 0 {
+		halves = max(halves, 1)
+	}
+	for i := 0; i < segmentCount; i++ {
 		switch {
-		case i < full:
-			c.Set(x+i, y, '█', fill)
-		case i == full && filled > float64(full):
-			frac := filled - float64(full)
-			idx := (int(frac*float64(len(shades))) + phase%len(shades) + len(shades)) % len(shades)
-			c.Set(x+i, y, shades[idx], fill)
+		case i < halves/2:
+			c.Set(x+i, y, glyph, fill)
+		case i == halves/2 && halves%2 == 1:
+			c.Set(x+i, y, halfGlyph, fill)
 		default:
-			c.Set(x+i, y, '░', track)
-		}
-	}
-}
-
-// eighths are a cell filled from the left by one to seven eighths.
-var eighths = [...]rune{'▏', '▎', '▍', '▌', '▋', '▊', '▉'}
-
-// Gauge draws a w-cell gauge filled to v (clamped to 0..1, rounded to the nearest eighth of a cell) at x, y: full
-// cells as █ and the partly filled edge cell as an eighth block in fill, the rest as a ░ track in track. Unlike Bar
-// it does not shimmer: one step is an eighth of a cell, so the fill reads as the value.
-func (c *Canvas) Gauge(x, y, w int, v float64, fill, track Role) {
-	v = min(max(v, 0), 1)
-	n := int(math.Round(v * float64(w*8)))
-	for i := 0; i < w; i++ {
-		switch e := n - i*8; {
-		case e >= 8:
-			c.Set(x+i, y, '█', fill)
-		case e > 0:
-			c.Set(x+i, y, eighths[e-1], fill)
-		default:
-			c.Set(x+i, y, '░', track)
+			c.Set(x+i, y, glyph, track)
 		}
 	}
 }

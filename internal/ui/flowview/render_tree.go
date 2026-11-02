@@ -50,7 +50,7 @@ func (s State) drawAgent(c *Canvas, r Rect, a session.Agent) {
 		row = append(row, seg{" " + m, role}, seg{" " + strings.ToLower(a.Effort), RoleDim})
 	}
 	c.centerSegs(r, r.Y+1, row...)
-	c.ctxRow(r.X+2, r.Y+2, r.W-4, a.Ctx, role, text)
+	c.ctxRow(r.X+2, r.Y+2, a.Ctx, role, text)
 	c.center(r, r.Y+3, a.Task, text)
 	if a.Text != "" {
 		c.center(r, r.Y+4, "» "+a.Text, text)

@@ -5,51 +5,24 @@ import (
 	"strings"
 )
 
-// shades are the bar's edge glyphs from light to dark.
-var shades = [3]rune{'░', '▒', '▓'}
+// segmentCount is the number of segments of a bar.
+const segmentCount = 10
 
-// Bar draws a w-cell bar filled to v (clamped to 0..1) at x, y: full cells as █ in fill, a partly filled edge cell
-// as a shade in fill, the rest as a ░ track in track. The edge shade comes from the fill fraction of that cell,
-// shifted by phase so it shimmers as phase advances; an empty or full bar has no edge cell.
-func (c *Canvas) Bar(x, y, w int, v float64, phase int, fill, track Role) {
-	if w <= 0 {
-		return
-	}
+// Segments draws a bar of segmentCount one-cell glyphs at x, y, filled to v (clamped to 0..1) in 10% steps: the
+// first n as glyph in fill, the rest as glyph in track. n is v rounded to the nearest tenth, but at least 1 for any
+// v above 0. With blink the last filled segment is drawn in track, so a caller can make the bar's edge flash.
+func (c *Canvas) Segments(x, y int, glyph rune, v float64, blink bool, fill, track Role) {
 	v = min(max(v, 0), 1)
-	filled := v * float64(w)
-	full := int(filled)
-	for i := 0; i < w; i++ {
-		switch {
-		case i < full:
-			c.Set(x+i, y, '█', fill)
-		case i == full && filled > float64(full):
-			frac := filled - float64(full)
-			idx := (int(frac*float64(len(shades))) + phase%len(shades) + len(shades)) % len(shades)
-			c.Set(x+i, y, shades[idx], fill)
-		default:
-			c.Set(x+i, y, '░', track)
-		}
+	n := int(math.Round(v * segmentCount))
+	if v > 0 {
+		n = max(n, 1)
 	}
-}
-
-// eighths are a cell filled from the left by one to seven eighths.
-var eighths = [...]rune{'▏', '▎', '▍', '▌', '▋', '▊', '▉'}
-
-// Gauge draws a w-cell gauge filled to v (clamped to 0..1, rounded to the nearest eighth of a cell) at x, y: full
-// cells as █ and the partly filled edge cell as an eighth block in fill, the rest as a ░ track in track. Unlike Bar
-// it does not shimmer: one step is an eighth of a cell, so the fill reads as the value.
-func (c *Canvas) Gauge(x, y, w int, v float64, fill, track Role) {
-	v = min(max(v, 0), 1)
-	n := int(math.Round(v * float64(w*8)))
-	for i := 0; i < w; i++ {
-		switch e := n - i*8; {
-		case e >= 8:
-			c.Set(x+i, y, '█', fill)
-		case e > 0:
-			c.Set(x+i, y, eighths[e-1], fill)
-		default:
-			c.Set(x+i, y, '░', track)
+	for i := 0; i < segmentCount; i++ {
+		r := track
+		if i < n && !(blink && i == n-1) {
+			r = fill
 		}
+		c.Set(x+i, y, glyph, r)
 	}
 }
 

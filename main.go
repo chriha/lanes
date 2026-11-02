@@ -14,7 +14,9 @@ import (
 	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/provider"
+	"github.com/chriha/lanes/internal/quietterm"
 	"github.com/chriha/lanes/internal/session"
+	"github.com/chriha/lanes/internal/termbg"
 	"github.com/chriha/lanes/internal/trust"
 	"github.com/chriha/lanes/internal/ui"
 	"github.com/chriha/lanes/internal/update"
@@ -24,6 +26,7 @@ import (
 var version = "dev"
 
 func main() {
+	quietterm.Restore() // undo the TERM=dumb that kept bubbletea's init from querying the terminal
 	if msg := usageError(os.Args[1:]); msg != "" {
 		fmt.Fprintln(os.Stderr, msg)
 		os.Exit(2)
@@ -35,11 +38,14 @@ func main() {
 		fetch:     update.GitHub(),
 		upgrade:   upgradeCommand,
 		updateOff: updateOff,
-		ask:       ui.AskTrust,
-		initApp:   app.Init,
-		hook:      session.RunHook,
-		status:    runStatus,
-		doctor:    func() int { return runDoctor(os.Stdout, realDoctorEnv()) },
+		ask: func(root string) (bool, bool, error) {
+			termbg.Settle()
+			return ui.AskTrust(root)
+		},
+		initApp: app.Init,
+		hook:    session.RunHook,
+		status:  runStatus,
+		doctor:  func() int { return runDoctor(os.Stdout, realDoctorEnv()) },
 		init: func() int {
 			return runInit(os.Stdin, stdinIsTerminal(), os.Stdout, os.Stderr, wd, provider.OriginForge)
 		},
@@ -53,6 +59,7 @@ func runTUI(updates update.Checker, upgrade string) int {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)
 		return 1
 	}
+	termbg.Settle()
 	m := ui.New(cfg, ui.WithUpdateCheck(updates, upgrade))
 	defer m.Close() // cancels the fetches still running, which stops their provider subprocesses
 	if _, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus()).Run(); err != nil {

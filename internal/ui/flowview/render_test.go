@@ -150,6 +150,13 @@ func TestAgentBoxContextGauge(t *testing.T) {
 			if got := strings.TrimSpace(strings.Trim(rows(c)[2], "┃")); got != tt.want {
 				t.Errorf("ctx row = %q, want %q", got, tt.want)
 			}
+			if tt.ctx < 0 {
+				for i, r := range segmentRoles(c, 2, '▬') {
+					if r != RoleTrack {
+						t.Errorf("unknown ctx: cell %d role %d, want RoleTrack", i, r)
+					}
+				}
+			}
 		})
 	}
 }
@@ -222,7 +229,7 @@ func TestPercentFollowsTheBar(t *testing.T) {
 	tools := NewCanvas(leadW, 6, nil)
 	fixtureState().drawTools(tools, Rect{0, 0, leadW, 6})
 	// Read: 20 of 48 calls, 42% rounds to 40%; the % is one space after the bar, inside the border
-	if got := strings.Join(strings.Fields(rows(tools)[2]), " "); got != "┃ Read ■■■■■■■■■■ 42% ┃" {
+	if got := strings.TrimSpace(strings.Trim(rows(tools)[2], "┃")); got != "Read     ■■■■■■■■■■ 42%" {
 		t.Errorf("tools row = %q", got)
 	}
 	agent := NewCanvas(boxMinW, 5, nil)

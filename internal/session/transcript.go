@@ -55,8 +55,8 @@ type Agent struct {
 	Name    string // meta name, else the brief named in the first prompt, else the agent type
 	Type    string
 	Model   string
-	Task    string
-	Text    string // first line of the newest assistant text (≤ 60 characters), "" when none
+	Task    string // meta description, else the first sentence of the first prompt (≤ TaskLen), "" when none
+	Text    string // first line of the newest assistant text (≤ TextLen), "" when none
 	Status  AgentStatus
 	Start   time.Time
 	End     time.Time // zero while running
@@ -82,6 +82,8 @@ type Snapshot struct {
 const (
 	ToolWindow = 15 * time.Minute // how far back Snapshot.ToolTimes reaches
 	MaxFiles   = 4                // how many files Snapshot.Files holds at most
+	TaskLen    = 40               // longest Agent.Task derived from the first prompt, in characters
+	TextLen    = 60               // longest Agent.Text, in characters
 )
 
 // defaultContextWindow is the context window of models not known to have a larger one.
@@ -305,11 +307,15 @@ func (a *agent) snapshot(id string, failed map[string]bool) Agent {
 		Type:    m.AgentType,
 		Model:   tr.model,
 		Task:    m.Description,
+		Text:    clip(firstLine(tr.lastText), TextLen),
 		Start:   tr.first,
 		Tool:    tr.current().name,
 		ToolArg: tr.current().arg,
 		Ctx:     -1,
 		Effort:  tr.effort,
+	}
+	if out.Task == "" {
+		out.Task = promptTask(tr.prompt)
 	}
 	out.Name = m.Name
 	if out.Name == "" {
@@ -358,6 +364,43 @@ func briefName(prompt string) string {
 	return ""
 }
 
+var sentenceEnd = regexp.MustCompile(`[.!?](\s|$)`)
+
+// promptTask is the first sentence of a prompt, at most TaskLen characters: a leading "Read and follow …" brief
+// line is skipped.
+func promptTask(prompt string) string {
+	for _, line := range strings.Split(prompt, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || briefRe.MatchString(line) {
+			continue
+		}
+		if loc := sentenceEnd.FindStringIndex(line); loc != nil {
+			line = line[:loc[0]+1]
+		}
+		return clip(line, TaskLen)
+	}
+	return ""
+}
+
+// firstLine is the first non-empty line of s, trimmed.
+func firstLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+// clip cuts s to at most n characters, the last one a "…" when it was cut.
+func clip(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return strings.TrimSpace(string(r[:n-1])) + "…"
+}
+
 // transcript is the state derived from one JSONL transcript, read from offset on.
 type transcript struct {
 	path      string
@@ -373,6 +416,7 @@ type transcript struct {
 	cache     int // cache read + cache write
 	ctxTokens int // input + cache read + cache write of the newest assistant message
 	lastText  string
+	prompt    string // the first user text that is not an injected one (starts with "<")
 	brief     string // the brief named in the first user text that names one
 	first     time.Time
 	last      time.Time
@@ -448,8 +492,11 @@ func (t *transcript) read(failed map[string]bool) error {
 	return nil
 }
 
-// noteBrief keeps the brief the first user text naming one says to follow; injected texts name none.
+// noteBrief keeps the first prompt and the brief the first user text naming one says to follow; injected texts name none.
 func (t *transcript) noteBrief(text string) {
+	if t.prompt == "" && !strings.HasPrefix(strings.TrimSpace(text), "<") {
+		t.prompt = strings.TrimSpace(text)
+	}
 	if t.brief == "" {
 		t.brief = briefName(text)
 	}

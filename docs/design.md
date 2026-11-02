@@ -82,7 +82,10 @@ an env var).
   tool-call sparkline over 15 min, hook states on a `┆` timeline, counters incl. the token split and agent counts,
   last 4 files touched, last text, advisor), lead box, tool layer, layered agent tree, session log and a status line
   with one colored entry per model family plus totals (an ended session reports no running agents). Agent boxes
-  show full name, model, effort meter, ctx bar, task, `▸ tool arg` and status. One layout at every size (no compact
+  show full name, model, effort meter, ctx bar, task, live text and status (`▸ tool arg` while running). The box is
+  6 rows. The task (`session.Agent.Task`) is the subagent's `meta.json` description, else the first sentence of its
+  first prompt (a leading `Read and follow …` line skipped), ≤ 40 chars; the live text (`Agent.Text`, drawn as
+  `» text`) is the first line of its newest assistant text, ≤ 60 chars, dim once the agent is done or failed. One layout at every size (no compact
   or too-small mode): a pinned header (`AGENT VIEW · <item title>`, the session name as fallback; no live/ended
   state, the status line has it) with the family legend under its rule, session column, session log and status
   line, and between them a viewport onto the diagram (lead with its effort, tool layer, agent tree). The diagram is

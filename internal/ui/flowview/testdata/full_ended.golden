@@ -21,24 +21,24 @@
 ┃ tokens   1,234,567 ┃   ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃  
 ┃   in        12,345 ┃   ┃ ctx ███████▏░░░░░░░░░  42% ┃   ┃ ctx █▎░░░░░░░░░░░░░░░   7% ┃  
 ┃   out       98,765 ┃   ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  
-┃   cache  1,123,457 ┃   ┗━ ■ stopped 9m00s ━━━━━━━━━━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛  
-┃ agents    ■0 ✓1 ✗1 ┃                  │                                                 
-┃                    ┃                  └───────────────┐                                 
-┃ files              ┃                                  ▼                                 
-┃ render_panels.go   ┃                   ┏━ code-reviewer ━━━━━━━━━━━━┓                   
-┃ state.go           ┃                   ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                   
-┃ layout.go          ┃                   ┃ ctx ░░░░░░░░░░░░░░░░░   -- ┃                   
-┃ README.md          ┃                   ┃      review the diff       ┃                   
-┃                    ┃                   ┗━ ■ stopped 2m00s ━━━━━━━━━━┛                   
-┃ last:              ┃                                  │                                 
-┃ Slice 2 is next:   ┃                                  │                                 
-┃ the layered layout ┃                                  ▼                                 
-┃ and the static…    ┃                   ┏━ validator ━━━━━━━━━━━━━━━━┓                   
-┃                    ┃                   ┃         sonnet 4.5         ┃                   
-┃ advisor   opus 4.1 ┃                   ┃ ctx ██░░░░░░░░░░░░░░░  12% ┃                   
-┃   calls          3 ┃                   ┃     validate a finding     ┃                   
-┗━━━━━━━━━━━━━━━━━━━━┛                   ┗━ ✗ failed 1m00s ━━━━━━━━━━━┛                   
-                                                                                          
+┃   cache  1,123,457 ┃   ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  
+┃ agents    ■0 ✓1 ✗1 ┃   ┗━ ■ stopped 9m00s ━━━━━━━━━━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛  
+┃                    ┃                  │                                                 
+┃ files              ┃                  └───────────────┐                                 
+┃ render_panels.go   ┃                                  ▼                                 
+┃ state.go           ┃                   ┏━ code-reviewer ━━━━━━━━━━━━┓                   
+┃ layout.go          ┃                   ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                   
+┃ README.md          ┃                   ┃ ctx ░░░░░░░░░░░░░░░░░   -- ┃                   
+┃                    ┃                   ┃      review the diff       ┃                   
+┃ last:              ┃                   ┃                            ┃                   
+┃ Slice 2 is next:   ┃                   ┗━ ■ stopped 2m00s ━━━━━━━━━━┛                   
+┃ the layered layout ┃                                  │                                 
+┃ and the static…    ┃                                  │                                 
+┃                    ┃                                  ▼                                 
+┃ advisor   opus 4.1 ┃                   ┏━ validator ━━━━━━━━━━━━━━━━┓                   
+┃   calls          3 ┃                   ┃         sonnet 4.5         ┃                   
+┗━━━━━━━━━━━━━━━━━━━━┛                   ┃ ctx ██░░░░░░░░░░░░░░░  12% ┃                   
+                                                                            lines 1-37/40 
 ──┤ session log ├─────────────────────────────────────────────────────────────────────────
  14:28:00 implementer   spawned code-reviewer                                             
  14:28:30 code-reviewer spawned validator                                                 

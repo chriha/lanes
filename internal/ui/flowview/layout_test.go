@@ -122,6 +122,9 @@ func TestNewLayout(t *testing.T) {
 			if l.Frame != (Rect{0, 0, w, h}) {
 				t.Errorf("frame %+v, want the whole terminal", l.Frame)
 			}
+			if l.Box.H != 6 {
+				t.Errorf("box height %d, want 6: border, model, ctx, task, live text, border", l.Box.H)
+			}
 			if l.Box.W < 28 || l.Box.W > 30 {
 				t.Errorf("box width %d, want 28 to 30", l.Box.W)
 			}
@@ -257,5 +260,32 @@ func TestDiagramBoxFitsTheLongestName(t *testing.T) {
 				t.Errorf("nodes %+v, want one box %d wide", d.Nodes, tt.want)
 			}
 		})
+	}
+}
+
+func TestDiagramHoldsEveryBoxWhole(t *testing.T) {
+	// Wrapped lines of boxes sit boxH+rowGap rows apart and the diagram is as high as its lowest box, at any size.
+	for _, size := range sizes {
+		l := NewLayout(size[0], size[1])
+		for _, n := range []int{1, 4, 9} {
+			ids := make([]string, n)
+			for i := range ids {
+				ids[i] = fmt.Sprintf("a%d", i)
+			}
+			d := l.Diagram(agentsOf(ids...))
+			bottom := d.Tools.Y + d.Tools.H
+			for _, node := range d.Nodes {
+				if node.Rect.H != 6 {
+					t.Fatalf("%v, %d agents: box %+v is not 6 rows high", size, n, node.Rect)
+				}
+				if (node.Rect.Y-d.Tree.Y)%(6+rowGap) != 0 {
+					t.Errorf("%v, %d agents: box %+v is not on a line %d rows apart", size, n, node.Rect, 6+rowGap)
+				}
+				bottom = max(bottom, node.Rect.Y+node.Rect.H)
+			}
+			if d.H != max(bottom, l.View.H) {
+				t.Errorf("%v, %d agents: diagram height %d, want %d", size, n, d.H, max(bottom, l.View.H))
+			}
+		}
 	}
 }

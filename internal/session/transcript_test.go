@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -76,8 +77,8 @@ func TestTailerFixture(t *testing.T) {
 				Task: "Implement ticket 7", Status: AgentRunning, Start: at("00:05"), Tool: "Grep", ToolArg: "func Poll", Ctx: 5,
 				Effort: "low"},
 			{ID: "b1", Parent: "a1", Depth: 2, Name: "reviewer", Type: "general-purpose", Model: "claude-sonnet-5-5[1m]",
-				Task: "Review the diff", Status: AgentDone, Start: at("00:08"), End: at("00:14"), Ctx: 25, Effort: "xhigh"},
-			{ID: "c1", Depth: 1, Name: "verifier", Model: "claude-haiku-5-5", Status: AgentRunning, Start: at("00:20"), Ctx: 0},
+				Task: "Review the diff", Text: "none", Status: AgentDone, Start: at("00:08"), End: at("00:14"), Ctx: 25, Effort: "xhigh"},
+			{ID: "c1", Depth: 1, Name: "verifier", Model: "claude-haiku-5-5", Text: "ok", Status: AgentRunning, Start: at("00:20"), Ctx: 0},
 		},
 		ToolTimes: []time.Time{at("00:03"), at("00:05"), at("00:05"), at("00:06"), at("00:06"), at("00:06"),
 			at("00:06.5"), at("00:07"), at("00:09"), at("00:10"), at("00:10"), at("00:11"), at("00:20")},
@@ -270,6 +271,74 @@ func TestAgentName(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAgentTask(t *testing.T) {
+	tests := []struct {
+		name, meta, prompt, want string
+	}{
+		{"meta description wins", `{"description":"Find callers"}`, "Do something else.", "Find callers"},
+		{"first sentence", `{}`, "Find the callers of Poll. Then report.", "Find the callers of Poll."},
+		{"brief line skipped", `{}`, "Read and follow /p/briefs/implementer.md\n\nImplement ticket 7. More.", "Implement ticket 7."},
+		{"only a brief line", `{}`, "Read and follow /p/briefs/implementer.md", ""},
+		{"no prompt", `{}`, "", ""},
+		{"first line without a stop", `{}`, "id: 216\nrepo: /x", "id: 216"},
+		{"cut at 40 characters", `{}`, "Investigate why the transcript reader drops the last line of every file", "Investigate why the transcript reader d…"},
+		{"cut counts characters", `{}`, strings.Repeat("ä", 50), strings.Repeat("ä", 39) + "…"},
+		{"exactly 40 characters stays", `{}`, strings.Repeat("a", 40), strings.Repeat("a", 40)},
+		{"injected text is no prompt", `{}`, "<system-reminder>x</system-reminder>", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := pollAgent(t, tt.meta, `{"type":"user","message":{"content":`+quote(tt.prompt)+`}}`)
+			if got.Task != tt.want {
+				t.Errorf("Task = %q, want %q", got.Task, tt.want)
+			}
+		})
+	}
+}
+
+func TestAgentText(t *testing.T) {
+	text := func(s string) string {
+		return `{"type":"assistant","message":{"id":"m` + fmt.Sprint(len(s)) + `","content":[{"type":"text","text":` + quote(s) + `}]}}`
+	}
+	tests := []struct {
+		name  string
+		lines []string
+		want  string
+	}{
+		{"none", []string{`{"type":"user","message":{"content":"hi"}}`}, ""},
+		{"newest text", []string{text("first"), text("second one")}, "second one"},
+		{"first line only", []string{text("Line one\nline two")}, "Line one"},
+		{"leading blank lines skipped", []string{text("\n\n  Hello\nthere")}, "Hello"},
+		{"cut at 60 characters", []string{text(strings.Repeat("word ", 20))}, strings.TrimSpace(strings.Repeat("word ", 12)) + "…"},
+		{"a tool call keeps the text", []string{text("Looking"), toolLine("00:01", "Read", `{"file_path":"/a.go"}`)}, "Looking"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := pollAgent(t, `{}`, tt.lines...); got.Text != tt.want {
+				t.Errorf("Text = %q, want %q", got.Text, tt.want)
+			}
+		})
+	}
+}
+
+// pollAgent polls a session with one agent x9 with the given meta and transcript lines and returns the agent.
+func pollAgent(t *testing.T, meta string, lines ...string) Agent {
+	t.Helper()
+	dir := t.TempDir()
+	path := writeSession(t, dir, nil, map[string][]string{"x9": lines})
+	if err := os.WriteFile(filepath.Join(dir, "s", "subagents", "agent-x9.meta.json"), []byte(meta), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := NewTailer(path).Poll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Agents) != 1 {
+		t.Fatalf("agents = %+v, want one", got.Agents)
+	}
+	return got.Agents[0]
 }
 
 func quote(s string) string {

@@ -3,15 +3,15 @@
                                ■ opus   ■ sonnet   ■ haiku                                
 ┏━ session ━━━━━━━━━━┓                 ╔══════════════════════════════════╗   ┏━━━━━━━━━━━
 ┃ issue-196   12m03s ┃                 ║    opus 4.1 · lead ▮▮▮▯ high     ║   ┃ tools     
-┃ ctx            61% ┃                 ║        Agent implementer         ║   ┃ Read     █
-┃ ███████████░░░░░░░ ┃                 ║         ◓ working 12m03s         ║   ┃ Bash     █
-┃ effort ▮▮▮▯ high   ┃                 ╚══════════════════════════════════╝   ┃ Agent    █
+┃ ctx            61% ┃                 ║        Agent implementer         ║   ┃ Read     ■
+┃ ▬▬▬▬▬▬▬▬▬▬         ┃                 ║         ◓ working 12m03s         ║   ┃ Bash     ■
+┃ effort ▮▮▮▯ high   ┃                 ╚══════════════════════════════════╝   ┃ Agent    ■
 ┃                    ┃                                   │                    ┗━━━━━━━━━━━
 ┃ activity     3/min ┃                  ┌────────────────┴───────────────┐                
 ┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄    ┃                  ▼                                ▼                
 ┃                    ┃   ┏━ implementer ━━━━━━━━━━━━━━┓   ┏━ triager ━━━━━━━━━━━━━━━━━━┓  
 ┃ ◆ working          ┃   ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃  
-┃ ┆                  ┃   ┃ ctx ███████▏░░░░░░░░░  42% ┃   ┃ ctx █▎░░░░░░░░░░░░░░░   7% ┃  
+┃ ┆                  ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬         42% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬          7% ┃  
 ┃ ◇ asking           ┃   ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  
 ┃ ┆                  ┃   ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  
 ┃ ◇ waiting          ┃   ┗━ ◓ 9m00s ▸ Bash go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛  
@@ -20,7 +20,7 @@
 ┃ tools           48 ┃                                  ▼                                 
 ┃ tokens   1,234,567 ┃                   ┏━ code-reviewer ━━━━━━━━━━━━┓                   
 ┃   in        12,345 ┃                   ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                   
-┃   out       98,765 ┃                   ┃ ctx ░░░░░░░░░░░░░░░░░   -- ┃                   
+┃   out       98,765 ┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬          -- ┃                   
 ┃   cache  1,123,457 ┃                   ┃      review the diff       ┃                   
 ┃ agents    ◓2 ✓1 ✗1 ┃                   ┃                            ┃                   
 ┃                    ┃                   ┗━ ◓ 2m00s ▸ Grep drawAgent ━┛                   
@@ -29,7 +29,7 @@
 ┃ state.go           ┃                                  ▼                                 
 ┃ layout.go          ┃                   ┏━ validator ━━━━━━━━━━━━━━━━┓                   
 ┃ README.md          ┃                   ┃         sonnet 4.5         ┃                   
-┃                    ┃                   ┃ ctx ██░░░░░░░░░░░░░░░  12% ┃                   
+┃                    ┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬         12% ┃                   
 ┃ last:              ┃                   ┃     validate a finding     ┃                   
 ┃ Slice 2 is next:   ┃                   ┃                            ┃                   
 ┃ the layered layout ┃                   ┗━ ✗ failed 1m00s ━━━━━━━━━━━┛                   

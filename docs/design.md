@@ -102,8 +102,10 @@ an env var).
   drawn whole on its own canvas and the visible window is blitted in; `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G` and
   `h`/`l` move the window, clamped at the edges, kept across snapshots, shown as `lines a-b/n  cols a-b/n` above
   the log. Boxes are 28–30 cols (widened for long names, never narrower), as many per row as fit, every agent drawn
-  (a depth wraps into as many lines as it needs); a viewport narrower than a box scrolls sideways. The ctx gauge
-  has eighth-block resolution and is ≥ 12 cells everywhere (≤ 5% per step). The view has its own neon palette
+  (a depth wraps into as many lines as it needs); a viewport narrower than a box scrolls sideways. Every ctx bar
+  (agent boxes and the lead in the session column) is 10 `▬` segments and the tools box's bars are 10 `■` segments,
+  each in 10% steps (nearest tenth, at least one segment above 0); the last filled tools segment blinks while the
+  session runs. The view has its own neon palette
   (`flowview.NeonPalette`: magenta/cyan/yellow families, violet accent header, a deep track behind bars, heavy
   panel borders and a double lead border; a toned-down light variant), overridden per field by
   `[theme.agent_view]` (also `[theme.light.agent_view]` / `[theme.dark.agent_view]`, resolved like `[theme]` in

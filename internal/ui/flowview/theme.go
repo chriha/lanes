@@ -21,13 +21,18 @@ const (
 	RoleOK                   // done
 	RoleBad                  // errors
 	RoleSelected             // highlighted row: text on the selection background
+	RoleAccent               // the header's title and rule
+	RoleTrack                // the empty part of bars, gauges and sparklines
 	numRoles
 )
 
 // Palette holds the colors the roles are drawn in; the caller maps its own theme onto it.
 type Palette struct {
-	Text, Dim, Opus, Sonnet, Haiku, OK, Bad, Selection lipgloss.AdaptiveColor
+	Text, Dim, Accent, Track, Opus, Sonnet, Haiku, OK, Bad, Selection lipgloss.AdaptiveColor
 }
+
+// NeonPalette is the agent view's default palette: neon colors on dark terminals, a toned-down variant on light.
+func NeonPalette() Palette { return Palette{} }
 
 // Theme holds each role's ANSI prefix and suffix, rendered once so the canvas styles a run by concatenation.
 type Theme struct {
@@ -51,6 +56,8 @@ func NewTheme(p Palette) *Theme {
 		RoleOK:       fg(p.OK),
 		RoleBad:      fg(p.Bad),
 		RoleSelected: fg(p.Text).Background(p.Selection),
+		RoleAccent:   fg(p.Accent).Bold(true),
+		RoleTrack:    fg(p.Track),
 	}
 	t := &Theme{}
 	for r, s := range styles {

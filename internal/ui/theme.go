@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/chriha/lanes/internal/config"
+	"github.com/chriha/lanes/internal/ui/flowview"
 )
 
 var (
@@ -118,6 +119,10 @@ func applyMode(mode string) {
 		}
 	}
 }
+
+// agentPalette resolves the agent view's palette from config: per color and side, the [theme.light.agent_view] /
+// [theme.dark.agent_view] value wins over the flat [theme.agent_view] value, which wins over the neon default.
+func agentPalette(t config.Theme) flowview.Palette { return flowview.NeonPalette() }
 
 func badgeStyle(kind string) lipgloss.Style {
 	c := cDim

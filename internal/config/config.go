@@ -41,6 +41,22 @@ type Colors struct {
 	Selection string `toml:"selection"`
 
 	Labels map[string]string `toml:"labels"` // label name (case-insensitive) -> hex color, for the preview's labels line
+
+	AgentView AgentView `toml:"agent_view"` // the agent view's colors, overriding its neon defaults
+}
+
+// AgentView holds the [theme.agent_view] table: hex colors overriding the agent view's neon defaults.
+type AgentView struct {
+	Text      string `toml:"text"`
+	Dim       string `toml:"dim"`
+	Accent    string `toml:"accent"`
+	Track     string `toml:"track"`
+	Opus      string `toml:"opus"`
+	Sonnet    string `toml:"sonnet"`
+	Haiku     string `toml:"haiku"`
+	OK        string `toml:"ok"`
+	Bad       string `toml:"bad"`
+	Selection string `toml:"selection"`
 }
 
 // Theme holds the [theme] table: the flat color keys apply to both modes, [theme.light] / [theme.dark] to one.

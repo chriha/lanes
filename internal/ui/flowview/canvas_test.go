@@ -17,6 +17,8 @@ func testPalette() Palette {
 	return Palette{
 		Text:      ac("#1F2430", "#E6E8EE"),
 		Dim:       ac("#8A90A0", "#6B7280"),
+		Accent:    ac("#B0128F", "#FF2BD6"),
+		Track:     ac("#E4DCEF", "#2A1F45"),
 		Opus:      ac("#6C3FD1", "#A78BFA"),
 		Sonnet:    ac("#B7791F", "#FBBF24"),
 		Haiku:     ac("#2B6CB0", "#60A5FA"),

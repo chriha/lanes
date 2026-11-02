@@ -18,7 +18,7 @@ type State struct {
 	Ended bool   // Claude exited: the frame is the final state
 	Start time.Time
 	Now   time.Time // the frame's clock
-	Phase int       // animation phase: spinner frame and tools-bar blink
+	Phase int       // animation phase: spinner frame
 	Snap  session.Snapshot
 	Log   []LogLine // oldest first
 }

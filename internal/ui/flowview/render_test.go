@@ -139,9 +139,9 @@ func TestAgentBoxContextGauge(t *testing.T) {
 		ctx  int
 		want string
 	}{
-		{"known", 50, "ctx ▬▬▬▬▬▬▬▬▬▬       50%"},
-		{"one percent shows", 1, "ctx ▬▬▬▬▬▬▬▬▬▬        1%"},
-		{"unknown", -1, "ctx ▬▬▬▬▬▬▬▬▬▬        --"},
+		{"known", 50, "ctx ▬▬▬▬▬▬▬▬▬▬ 50%"},
+		{"one percent shows", 1, "ctx ▌▬▬▬▬▬▬▬▬▬ 1%"},
+		{"unknown", -1, "ctx ▬▬▬▬▬▬▬▬▬▬ --"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -188,38 +188,47 @@ func TestContextBarsAreTenSegments(t *testing.T) {
 	}
 }
 
-func TestToolBarBlinksWhileRunning(t *testing.T) {
-	tests := []struct {
-		name   string
-		ended  bool
-		phase  int
-		filled int // top tool Read: 20 of 48 calls, 42%
-	}{
-		{"running, lit phase", false, 0, 4},
-		{"running, dark phase", false, 1, 3},
-		{"ended, lit phase", true, 0, 4},
-		{"ended, dark phase", true, 1, 4},
+func TestToolBarIgnoresPhase(t *testing.T) {
+	var base string
+	for i, tt := range []struct {
+		ended bool
+		phase int
+	}{{false, 0}, {false, 1}, {true, 0}, {true, 1}} {
+		st := fixtureState()
+		st.Ended, st.Phase = tt.ended, tt.phase
+		c := NewCanvas(leadW, 6, nil)
+		st.drawTools(c, Rect{0, 0, leadW, 6})
+		bar := rows(c)[2]
+		if i == 0 {
+			base = bar
+		}
+		if bar != base {
+			t.Errorf("ended %v phase %d: bar row %q, want %q", tt.ended, tt.phase, bar, base)
+		}
+		// top tool Read: 20 of 48 calls, 42% rounds to 40%: four full cells, role intact in every phase
+		full := 0
+		for _, r := range segmentRoles(c, 2, '■') {
+			if r != RoleTrack {
+				full++
+			}
+		}
+		if full != 4 {
+			t.Errorf("ended %v phase %d: %d full cells, want 4", tt.ended, tt.phase, full)
+		}
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			st := fixtureState()
-			st.Ended, st.Phase = tt.ended, tt.phase
-			c := NewCanvas(leadW, 6, nil)
-			st.drawTools(c, Rect{0, 0, leadW, 6})
-			got := segmentRoles(c, 2, '■')
-			if len(got) != 10 {
-				t.Fatalf("tool bar is %d segments, want 10", len(got))
-			}
-			n := 0
-			for _, r := range got {
-				if r != RoleTrack {
-					n++
-				}
-			}
-			if n != tt.filled {
-				t.Errorf("filled segments = %d, want %d", n, tt.filled)
-			}
-		})
+}
+
+func TestPercentFollowsTheBar(t *testing.T) {
+	tools := NewCanvas(leadW, 6, nil)
+	fixtureState().drawTools(tools, Rect{0, 0, leadW, 6})
+	// Read: 20 of 48 calls, 42% rounds to 40%; the % is one space after the bar, inside the border
+	if got := strings.Join(strings.Fields(rows(tools)[2]), " "); got != "┃ Read ■■■■■■■■■■ 42% ┃" {
+		t.Errorf("tools row = %q", got)
+	}
+	agent := NewCanvas(boxMinW, 5, nil)
+	State{}.drawAgent(agent, Rect{0, 0, boxMinW, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: 100})
+	if got := strings.TrimSpace(strings.Trim(rows(agent)[2], "┃")); got != "ctx ▬▬▬▬▬▬▬▬▬▬ 100%" {
+		t.Errorf("agent ctx row = %q", got)
 	}
 }
 

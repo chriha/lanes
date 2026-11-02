@@ -11,7 +11,7 @@
 ┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄    ┃                  ▼                                ▼                
 ┃                    ┃   ┏━ implementer ━━━━━━━━━━━━━━┓   ┏━ triager ━━━━━━━━━━━━━━━━━━┓  
 ┃ ◆ working          ┃   ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃  
-┃ ┆                  ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬         42% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬          7% ┃  
+┃ ┆                  ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬ 42%         ┃   ┃ ctx ▌▬▬▬▬▬▬▬▬▬ 7%          ┃  
 ┃ ◇ asking           ┃   ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  
 ┃ ┆                  ┃   ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  
 ┃ ◇ waiting          ┃   ┗━ ◓ 9m00s ▸ Bash go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛  

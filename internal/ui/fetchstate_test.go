@@ -16,6 +16,7 @@ import (
 	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/item"
+	"github.com/chriha/lanes/internal/provider"
 	"github.com/chriha/lanes/internal/trust"
 )
 
@@ -214,11 +215,11 @@ func TestFetchStatus(t *testing.T) {
 		{"cached: nothing fetched in this run", func(*Model) {}, "p cached"},
 		{"fetching: spinner and elapsed", func(m *Model) {
 			m.fetches = map[string]*fetchState{"p": {running: true, started: now.Add(-4 * time.Second)}}
-		}, "p ⠼ fetching 4s"},
+		}, "p [●    ] fetching 4s"},
 		{"fetching again: also the last duration", func(m *Model) {
 			m.fetches = map[string]*fetchState{"p": {running: true, started: now.Add(-1 * time.Second), last: 12340 * time.Millisecond}}
 			m.fetchedAt["p"] = now.Add(-time.Minute)
-		}, "p ⠙ fetching 1s · last 12.3s"},
+		}, "p [  ●  ] fetching 1s · last 12.3s"},
 		{"failed: phase and last duration", func(m *Model) {
 			m.fetches = map[string]*fetchState{"p": {last: 2 * time.Second}}
 			m.provErr["p"] = errors.New("boom")
@@ -249,6 +250,129 @@ func TestFetchStatusAdvancesEachTick(t *testing.T) {
 	}
 }
 
+func TestFetchStatusScannerFrames(t *testing.T) {
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		elapsed time.Duration
+		frame   string
+	}{
+		{0, "[●    ]"},
+		{100 * time.Millisecond, "[ ●   ]"},
+		{200 * time.Millisecond, "[  ●  ]"},
+		{300 * time.Millisecond, "[   ● ]"},
+		{400 * time.Millisecond, "[    ●]"},
+		{500 * time.Millisecond, "[   ● ]"},
+		{600 * time.Millisecond, "[  ●  ]"},
+		{700 * time.Millisecond, "[ ●   ]"},
+		{800 * time.Millisecond, "[●    ]"},                // the sweep repeats
+		{150 * time.Millisecond, "[ ●   ]"},                // a frame lasts 100ms
+		{10*time.Second + 100*time.Millisecond, "[   ● ]"}, // later in a long fetch
+	}
+	for _, tt := range tests {
+		t.Run(tt.elapsed.String(), func(t *testing.T) {
+			m := newBackoffModel(t)
+			m.fetches = map[string]*fetchState{"p": {running: true, started: now.Add(-tt.elapsed)}}
+			if got := m.fetchStatus("p", now); !strings.HasPrefix(got, "p "+tt.frame+" fetching ") {
+				t.Errorf("fetchStatus after %v = %q, want frame %q", tt.elapsed, got, tt.frame)
+			}
+		})
+	}
+}
+
+func TestFetchStatusWidthFixedAcrossFrames(t *testing.T) {
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	m := newBackoffModel(t)
+	m.fetches = map[string]*fetchState{"p": {running: true, started: now, last: 2 * time.Second}}
+	want := ansi.StringWidth(m.fetchStatus("p", now.Add(5*time.Second)))
+	for f := 1; f < 8; f++ {
+		at := now.Add(5*time.Second + time.Duration(f)*100*time.Millisecond)
+		if got := m.fetchStatus("p", at); ansi.StringWidth(got) != want {
+			t.Errorf("frame %d: %q is %d cells wide, want %d like frame 0", f, got, ansi.StringWidth(got), want)
+		}
+	}
+}
+
+func TestSpinTickStartsWithFirstFetch(t *testing.T) {
+	tests := []struct {
+		name  string
+		start func(m *Model)
+	}{
+		{"Init fetches the providers", func(m *Model) { m.Init() }},
+		{"a tick fetches a stale provider", func(m *Model) { m.Update(tickMsg(time.Now())) }},
+		{"R refreshes", func(m *Model) { m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")}) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newBackoffModel(t)
+			m.providers["p"] = blockProv{}
+			defer m.Close()
+			tt.start(m)
+			if !m.fetching("p") || !m.spinning {
+				t.Errorf("fetching=%v spinning=%v, want the animation tick running with the fetch", m.fetching("p"), m.spinning)
+			}
+		})
+	}
+}
+
+func TestSpinTickRearmsOnlyWhileFetching(t *testing.T) {
+	tests := []struct {
+		name     string
+		fetching []string
+		want     bool
+	}{
+		{"one provider fetches", []string{"linear"}, true},
+		{"several providers fetch", []string{"gitlab", "linear"}, true},
+		{"all providers idle", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTwoProviderModel(t)
+			m.spinning = true // the loop that delivers this tick
+			for _, name := range tt.fetching {
+				setFetching(m, name, true)
+			}
+			_, cmd := m.Update(spinTickMsg(time.Now()))
+			if (cmd != nil) != tt.want || m.spinning != tt.want {
+				t.Errorf("after a spin tick: cmd=%v spinning=%v, want a next tick %v", cmd != nil, m.spinning, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpinTickRunsOneLoop(t *testing.T) {
+	tests := []struct {
+		name  string
+		event func(m *Model)
+	}{
+		{"a second provider starts fetching", func(m *Model) { m.Update(tickMsg(time.Now())) }},
+		{"refresh during a fetch", func(m *Model) { m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")}) }},
+		{"config reload during a fetch", func(m *Model) {
+			m.Update(reloadedMsg{gen: m.reloadGen, cfg: m.cfg, providers: map[string]provider.Provider{
+				"gitlab": blockProv{}, "linear": blockProv{},
+			}})
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTwoProviderModel(t)
+			m.providers["gitlab"], m.providers["linear"] = blockProv{}, blockProv{}
+			defer m.Close()
+			m.fetch("gitlab")
+			m.fetchedAt["linear"] = time.Now().Add(-time.Hour)
+			if m.armSpin() == nil {
+				t.Fatal("first fetch: no animation tick started")
+			}
+			tt.event(m)
+			if !m.fetching("linear") || !m.spinning {
+				t.Fatalf("fetching linear=%v spinning=%v, want both", m.fetching("linear"), m.spinning)
+			}
+			if m.armSpin() != nil {
+				t.Error("a second animation tick loop started while one runs")
+			}
+		})
+	}
+}
+
 func newTwoProviderModel(t *testing.T) *Model {
 	t.Helper()
 	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "HOME"} {
@@ -271,7 +395,7 @@ func TestHeaderShowsEveryProviderStatus(t *testing.T) {
 	m.fetches["linear"].started = time.Now()
 	m.fetchedAt["gitlab"] = time.Now()
 	h := ansi.Strip(m.header())
-	for _, want := range []string{"gitlab updated", "linear ⠋ fetching 0s"} {
+	for _, want := range []string{"gitlab updated", "linear [", "] fetching 0s"} {
 		if !strings.Contains(h, want) {
 			t.Errorf("header %q lacks %q", h, want)
 		}
@@ -300,7 +424,7 @@ func TestEmptyListShowsFetchStatus(t *testing.T) {
 		{"fetching: status lines instead of loading…", func(m *Model) {
 			setFetching(m, "gitlab", true)
 			m.fetches["gitlab"].started = time.Now()
-		}, []string{"gitlab ⠋ fetching 0s", "linear cached"}, []string{"loading…"}},
+		}, []string{"gitlab [", "] fetching 0s", "linear cached"}, []string{"loading…"}},
 		{"idle and empty: nothing here", func(m *Model) {
 			m.fetchedAt["gitlab"] = time.Now()
 		}, []string{"nothing here"}, []string{"fetching"}},

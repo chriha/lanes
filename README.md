@@ -1154,8 +1154,8 @@ two projects never share history, views or sessions. The `$XDG_*` variables are 
   to `~/.tmux.conf`. Without focus reports lanes polls at `poll_interval` throughout. A failing provider is retried after `poll_interval`, doubling per consecutive failure up to 5 minutes (`R` / `:refresh` retry at once). New data is diffed into the list by item `id`, so the cursor and your marks
   stay put. Every view re-applies its filter on each refresh.
 - **Fetch status.** The right of the header shows each provider's status, updated every second:
-  `gitlab cached` (only the cached list so far), `gitlab ⠼ fetching 4s · last 12.3s` (a fetch running for 4s; the
-  previous one took 12.3s), `gitlab updated 12s ago · 1.4s` (the last fetch took 1.4s) or `gitlab ✗ failed · 2s` in
+  `gitlab cached` (only the cached list so far), `gitlab [  ●  ] fetching 4s · last 12.3s` (a fetch running for 4s,
+  with a dot sweeping back and forth in its track ten times a second; the previous one took 12.3s), `gitlab updated 12s ago · 1.4s` (the last fetch took 1.4s) or `gitlab ✗ failed · 2s` in
   the error colour. A slow provider shows up there without a profiler. When the terminal is too narrow for every
   provider, only the current view's one is shown. An empty view whose provider is still fetching lists the same
   status lines in place of the items.

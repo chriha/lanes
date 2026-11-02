@@ -14,7 +14,7 @@ const (
 	RoleNone     Role = iota // unstyled
 	RoleText                 // body text
 	RoleBold                 // titles and headers
-	RoleDim                  // rules, timestamps, idle connectors, bar tracks
+	RoleDim                  // rules, timestamps, idle connectors
 	RoleOpus                 // opus-family agents
 	RoleSonnet               // sonnet-family agents
 	RoleHaiku                // haiku-family agents

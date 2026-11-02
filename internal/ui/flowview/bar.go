@@ -90,3 +90,9 @@ func (c *Canvas) Spark(x, y int, counts []int, fill, track Role) {
 		c.Set(x+i, y, sparks[(n*(len(sparks)-1)+top-1)/top], fill)
 	}
 }
+
+// segmentCount is the number of segments of a bar.
+const segmentCount = 10
+
+// Segments draws a bar of segmentCount one-cell glyphs at x, y filled to v in 10% steps. Not implemented yet.
+func (c *Canvas) Segments(x, y int, glyph rune, v float64, blink bool, fill, track Role) {}

@@ -141,7 +141,7 @@ func TestViewFillsTheTerminal(t *testing.T) {
 func TestSetSessionKeepsTheFirstSnapshotStill(t *testing.T) {
 	m := New(nil)
 	m.SetSize(90, 46)
-	m.SetSession("fix~7", t0.Add(-time.Minute), t0)
+	m.SetSession("fix~7", "", t0.Add(-time.Minute), t0)
 	m.Apply(SnapshotEvent{session.Snapshot{
 		Lead:   session.Lead{Model: "claude-opus-4-1"},
 		Agents: []session.Agent{{ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Start: t0, Ctx: -1}},
@@ -158,6 +158,30 @@ func TestSetSessionKeepsTheFirstSnapshotStill(t *testing.T) {
 	}
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "AGENT VIEW · fix~7") || !strings.Contains(v, "1m00s") {
 		t.Errorf("view lacks the title or the session's age:\n%s", v)
+	}
+}
+
+func TestSetSessionTitlesTheHeader(t *testing.T) {
+	tests := []struct {
+		name, item string
+		want       string
+	}{
+		{"the item's title", "Fix the cache", "AGENT VIEW · Fix the cache"},
+		{"the session's name without one", "", "AGENT VIEW · fix~7"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New(nil)
+			m.SetSize(90, 24)
+			m.SetSession("fix~7", tt.item, t0.Add(-time.Minute), t0)
+			v := strings.Split(ansi.Strip(m.View()), "\n")
+			if got := strings.TrimSpace(v[0]); got != tt.want {
+				t.Errorf("header = %q, want %q", got, tt.want)
+			}
+			if !strings.Contains(v[3]+v[4], "fix~7") {
+				t.Errorf("session column lacks the session's name:\n%s", strings.Join(v, "\n"))
+			}
+		})
 	}
 }
 

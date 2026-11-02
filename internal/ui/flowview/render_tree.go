@@ -46,9 +46,9 @@ func (s State) drawTree(c *Canvas, d Diagram) [][]Point {
 // and still.
 func (s State) drawAgent(c *Canvas, r Rect, a session.Agent) {
 	running := a.Status == session.AgentRunning && !s.Ended // an ended session's agents are stopped
-	role, title, text, phase := ModelRole(a.Model), RoleBold, RoleText, s.Phase
+	role, title, text := ModelRole(a.Model), RoleBold, RoleText
 	if !running {
-		role, title, text, phase = RoleDim, RoleDim, RoleDim, 0
+		role, title, text = RoleDim, RoleDim, RoleDim
 	}
 	c.titled(r, a.Name, role, title)
 	row := []seg{{shortModel(a.Model), role}}
@@ -56,7 +56,7 @@ func (s State) drawAgent(c *Canvas, r Rect, a session.Agent) {
 		row = append(row, seg{" " + m, role}, seg{" " + strings.ToLower(a.Effort), RoleDim})
 	}
 	c.centerSegs(r, r.Y+1, row...)
-	c.ctxRow(r.X+2, r.Y+2, r.W-4, a.Ctx, phase, role, text)
+	c.ctxRow(r.X+2, r.Y+2, r.W-4, a.Ctx, role, text)
 	c.center(r, r.Y+3, a.Task, text)
 	y := r.Y + r.H - 1
 	x := c.Text(r.X+2, y, " ", role)

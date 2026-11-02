@@ -109,7 +109,8 @@ func TestAgentBoxContextGauge(t *testing.T) {
 		ctx  int
 		want string
 	}{
-		{"known", 50, "ctx ███████▒░░░░░░░  50%"},
+		{"known", 50, "ctx ███████▌░░░░░░░  50%"},
+		{"one percent shows", 1, "ctx ▏░░░░░░░░░░░░░░   1%"},
 		{"unknown", -1, "ctx ░░░░░░░░░░░░░░░   --"},
 	}
 	for _, tt := range tests {
@@ -120,6 +121,106 @@ func TestAgentBoxContextGauge(t *testing.T) {
 				t.Errorf("ctx row = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// gaugeCells counts the cells of row y drawn as a gauge: full, eighth or track.
+func gaugeCells(c *Canvas, y int) int {
+	n := 0
+	for _, r := range rows(c)[y] {
+		if r == '█' || r == '░' || r >= '▉' && r <= '▏' {
+			n++
+		}
+	}
+	return n
+}
+
+func TestContextGaugesAreAtLeast12Wide(t *testing.T) {
+	// the narrowest each gets: the session column is always sessionW wide, an agent box at least boxMinW
+	agent := NewCanvas(boxMinW, 5, nil)
+	State{}.drawAgent(agent, Rect{0, 0, boxMinW, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: 50})
+	col := NewCanvas(sessionW, 37, nil)
+	fixtureState().drawSession(col, Rect{0, 0, sessionW, 37})
+	for name, n := range map[string]int{"agent box": gaugeCells(agent, 2), "session column": gaugeCells(col, 3)} {
+		if n < 12 {
+			t.Errorf("%s gauge is %d cells, want at least 12", name, n)
+		}
+	}
+}
+
+func TestLeadBox(t *testing.T) {
+	noEffort := fixtureState()
+	noEffort.Snap.Lead.Effort = ""
+	tests := []struct {
+		name    string
+		st      State
+		want    string
+		without string
+	}{
+		{"effort meter and level", fixtureState(), "│ opus 4.1 · lead ▮▮▮▯ high │", ""},
+		{"unknown effort omits both", noEffort, "│ opus 4.1 · lead │", "▮"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCanvas(leadW, 5, nil)
+			tt.st.drawLead(c, Rect{0, 0, leadW, 5})
+			if g := strings.Join(strings.Fields(rows(c)[1]), " "); g != tt.want {
+				t.Errorf("lead row = %q, want %q", g, tt.want)
+			}
+			if tt.without != "" && strings.Contains(c.String(), tt.without) {
+				t.Errorf("lead box shows %q:\n%s", tt.without, c.String())
+			}
+		})
+	}
+}
+
+func TestLeadBoxColorsTheEffort(t *testing.T) {
+	c := NewCanvas(leadW, 5, nil)
+	fixtureState().drawLead(c, Rect{0, 0, leadW, 5})
+	row := []rune(rows(c)[1])
+	for i, r := range row {
+		switch {
+		case r == '▮' && c.At(i, 1).Role != RoleOpus:
+			t.Errorf("meter cell %d role %d, want the lead's family", i, c.At(i, 1).Role)
+		case r == 'h' && c.At(i, 1).Role != RoleDim:
+			t.Errorf("level cell %d role %d, want dim", i, c.At(i, 1).Role)
+		}
+	}
+}
+
+func TestHeader(t *testing.T) {
+	ended := fixtureState()
+	ended.Ended = true
+	titled := fixtureState()
+	titled.Item = "Make the agent view one scrollable dashboard"
+	tests := []struct {
+		name string
+		st   State
+		want string
+	}{
+		{"the item's title", titled, "AGENT VIEW · Make the agent view one scrollable dashboard"},
+		{"the session's name without an item title", fixtureState(), "AGENT VIEW · issue-196"},
+		{"ended, still no state", ended, "AGENT VIEW · issue-196"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := NewLayout(90, 24)
+			c := NewCanvas(90, 24, nil)
+			tt.st.drawHeader(c, l)
+			if got := strings.TrimSpace(rows(c)[0]); got != tt.want {
+				t.Errorf("header = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHeaderCutsALongTitle(t *testing.T) {
+	st := fixtureState()
+	st.Item = strings.Repeat("x", 100)
+	c := NewCanvas(52, 3, nil)
+	st.drawHeader(c, NewLayout(52, 15))
+	if got := rows(c)[0]; !strings.HasSuffix(strings.TrimSpace(got), "x…") || len([]rune(got)) != 52 {
+		t.Errorf("header = %q, want the title cut with … inside 52 cells", got)
 	}
 }
 
@@ -242,6 +343,8 @@ func TestStatusLineColorsFamilies(t *testing.T) {
 func TestSessionColumn(t *testing.T) {
 	noEffort, noAdvisor, ended, noFiles := fixtureState(), fixtureState(), fixtureState(), fixtureState()
 	noEffort.Snap.Lead.Effort = ""
+	noCtx := fixtureState()
+	noCtx.Snap.Lead.Ctx = -1
 	noAdvisor.Snap.Lead.AdvisorModel = ""
 	ended.Ended = true
 	noFiles.Snap.Files = nil
@@ -256,40 +359,42 @@ func TestSessionColumn(t *testing.T) {
 		want    map[int]string // row → what it holds, spaces collapsed
 		without []string       // must not appear anywhere in the column
 	}{
-		{"the whole dashboard", fixtureState(), 37, map[int]string{
+		{"the whole dashboard", fixtureState(), 38, map[int]string{
 			0:  "╭─ session ─",
 			1:  "│ issue-196 12m03s │",
-			2:  "│ ctx █████▓░░░ 61% │",
-			3:  "│ effort ▮▮▮▯ high │",
-			5:  "│ activity 3/min │",
-			6:  "│ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄ │",
-			8:  "│ ◆ working │",
-			9:  "│ ┆ │",
-			10: "│ ◇ asking │",
-			11: "│ ┆ │",
-			12: "│ ◇ waiting │",
-			14: "│ turns 12 │",
-			15: "│ tools 48 │",
-			16: "│ tokens 1,234,567 │",
-			17: "│ in 12,345 │",
-			18: "│ out 98,765 │",
-			19: "│ cache 1,123,457 │",
-			20: "│ agents ◓2 ✓1 ✗1 │",
-			22: "│ files │",
-			23: "│ render_panels.go │",
-			26: "│ README.md │",
-			28: "│ last: │",
-			29: "│ Slice 2 is next: │",
-			33: "│ advisor opus 4.1 │",
-			34: "│ calls 3 │",
-			36: "╰──",
+			2:  "│ ctx 61% │",
+			3:  "│ ███████████░░░░░░░ │",
+			4:  "│ effort ▮▮▮▯ high │",
+			6:  "│ activity 3/min │",
+			7:  "│ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄ │",
+			9:  "│ ◆ working │",
+			10: "│ ┆ │",
+			11: "│ ◇ asking │",
+			12: "│ ┆ │",
+			13: "│ ◇ waiting │",
+			15: "│ turns 12 │",
+			16: "│ tools 48 │",
+			17: "│ tokens 1,234,567 │",
+			18: "│ in 12,345 │",
+			19: "│ out 98,765 │",
+			20: "│ cache 1,123,457 │",
+			21: "│ agents ◓2 ✓1 ✗1 │",
+			23: "│ files │",
+			24: "│ render_panels.go │",
+			27: "│ README.md │",
+			29: "│ last: │",
+			30: "│ Slice 2 is next: │",
+			34: "│ advisor opus 4.1 │",
+			35: "│ calls 3 │",
+			37: "╰──",
 		}, nil},
-		{"unknown effort omits its row", noEffort, 37, map[int]string{3: "", 4: "│ activity 3/min │"}, []string{"effort", "▮"}},
-		{"no advisor, no advisor rows", noAdvisor, 37, map[int]string{33: "", 34: ""}, []string{"advisor"}},
-		{"no files, no files rows", noFiles, 37, map[int]string{22: "│ last: │"}, []string{"files"}},
-		{"ended: no checkpoint is active and no agent runs", ended, 37, map[int]string{8: "│ ◇ working │", 20: "│ agents ■0 ✓1 ✗1 │"}, []string{"◆", "◓"}},
-		{"double-digit agent counts fit", tenAgents, 37, map[int]string{20: "│ agents ◓10 ✓1 ✗1 │"}, nil},
-		{"rows past the bottom are left out", fixtureState(), 10, map[int]string{8: "│ ◆ working │", 9: "╰──"}, []string{"asking", "last:"}},
+		{"unknown effort omits its row", noEffort, 38, map[int]string{4: "", 5: "│ activity 3/min │"}, []string{"effort", "▮"}},
+		{"unknown context", noCtx, 38, map[int]string{2: "│ ctx -- │", 3: "│ ░░░░░░░░░░░░░░░░░░ │"}, nil},
+		{"no advisor, no advisor rows", noAdvisor, 38, map[int]string{34: "", 35: ""}, []string{"advisor"}},
+		{"no files, no files rows", noFiles, 38, map[int]string{23: "│ last: │"}, []string{"files"}},
+		{"ended: no checkpoint is active and no agent runs", ended, 38, map[int]string{9: "│ ◇ working │", 21: "│ agents ■0 ✓1 ✗1 │"}, []string{"◆", "◓"}},
+		{"double-digit agent counts fit", tenAgents, 38, map[int]string{21: "│ agents ◓10 ✓1 ✗1 │"}, nil},
+		{"rows past the bottom are left out", fixtureState(), 11, map[int]string{9: "│ ◆ working │", 10: "╰──"}, []string{"asking", "last:"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -312,14 +417,14 @@ func TestSessionColumn(t *testing.T) {
 }
 
 func TestSessionColumnHighlightsTheHookState(t *testing.T) {
-	c := NewCanvas(22, 37, nil)
-	fixtureState().drawSession(c, Rect{0, 0, 22, 37})
+	c := NewCanvas(22, 38, nil)
+	fixtureState().drawSession(c, Rect{0, 0, 22, 38})
 	for x := 1; x < 21; x++ {
-		if got := c.At(x, 8).Role; got != RoleSelected {
+		if got := c.At(x, 9).Role; got != RoleSelected {
 			t.Fatalf("cell %d of the working row has role %d, want the selection", x, got)
 		}
 	}
-	if got := c.At(2, 6).Role; got != RoleOpus {
+	if got := c.At(2, 7).Role; got != RoleOpus {
 		t.Errorf("sparkline drawn in role %d, want the lead's family", got)
 	}
 }

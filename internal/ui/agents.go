@@ -63,7 +63,7 @@ func flowTheme() *flowview.Theme {
 func (m *Model) agentsOfItem(it item.Item) tea.Cmd {
 	for _, s := range m.sessionsOf(it) { // newest first
 		if session.ClaudeTranscript(s.Name) != "" {
-			return m.openAgents(s, modeNormal)
+			return m.openAgents(s, modeNormal, it.Title)
 		}
 	}
 	m.say(lvWarn, "no Claude session for this item")
@@ -76,12 +76,12 @@ func (m *Model) agentsOfSession(s session.Info) tea.Cmd {
 		m.say(lvWarn, "no Claude session in "+s.Name)
 		return nil
 	}
-	return m.openAgents(s, modeSessions)
+	return m.openAgents(s, modeSessions, "")
 }
 
-// openAgents opens the agent view on session s, which has a Claude transcript, and returns to back on close. It
-// starts the animation tick and the first read.
-func (m *Model) openAgents(s session.Info, back mode) tea.Cmd {
+// openAgents opens the agent view on session s, which has a Claude transcript, titled with the item's title ("" for
+// the session name), and returns to back on close. It starts the animation tick and the first read.
+func (m *Model) openAgents(s session.Info, back mode, title string) tea.Cmd {
 	m.agentGen++
 	a := &agentView{
 		name:   s.Name,
@@ -93,7 +93,7 @@ func (m *Model) openAgents(s session.Info, back mode) tea.Cmd {
 		ended:  claudeEnded(s),
 	}
 	a.fv.SetSize(m.width, m.height)
-	a.fv.SetSession(s.Name, s.Created, time.Now())
+	a.fv.SetSession(s.Name, title, s.Created, time.Now())
 	a.fv.Apply(flowview.HookEvent{Hook: s.Claude})
 	m.agents, m.mode, m.pendingG = a, modeAgents, false
 	return tea.Batch(a.fv.Init(), a.poll())

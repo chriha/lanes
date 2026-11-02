@@ -87,7 +87,7 @@ func TestScriptedSession(t *testing.T) {
 	for _, l := range f.Log {
 		log = append(log, l.Actor+" "+l.Text)
 	}
-	want := "lead working\nlead spawned implementer\nimplementer spawned reviewer\nreviewer failed\nimplementer done\nlead waiting"
+	want := "lead spawned implementer\nimplementer spawned reviewer\nreviewer failed\nimplementer done\nlead waiting"
 	if got := strings.Join(log, "\n"); got != want {
 		t.Errorf("log:\n%s\nwant:\n%s", got, want)
 	}

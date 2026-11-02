@@ -140,14 +140,15 @@ func ease(cur, target int, dt time.Duration) int {
 }
 
 // Apply takes an event into the view's state: a snapshot sends a packet down for agents that spawned, a burst up
-// for those that finished, and logs its events; a hook event moves the checkpoint and logs a change; the end event
+// for those that finished, and logs its events; a hook event moves the checkpoint and logs a change from a known
+// state; the end event
 // freezes the view.
 func (m *Model) Apply(ev Event) {
 	switch ev := ev.(type) {
 	case SnapshotEvent:
 		m.applySnapshot(ev.Snap)
 	case HookEvent:
-		if ev.Hook != "" && ev.Hook != m.st.Hook {
+		if m.st.Hook != "" && ev.Hook != "" && ev.Hook != m.st.Hook { // the first state is no change
 			m.appendLog(LogLine{At: m.st.Now, Actor: "lead", Model: m.st.Snap.Lead.Model, Text: ev.Hook})
 		}
 		m.st.Hook = ev.Hook

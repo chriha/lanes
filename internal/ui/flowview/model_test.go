@@ -653,3 +653,18 @@ func TestSessionColumnScrolls(t *testing.T) {
 		})
 	}
 }
+
+func TestLogPositionLeftOutWhenItDoesNotFit(t *testing.T) {
+	s := State{Log: numberedLog(10)}
+	for _, tt := range []struct {
+		w    int
+		want bool
+	}{{40, true}, {22, false}} {
+		c := NewCanvas(tt.w, 6, nil)
+		s.drawLog(c, Rect{0, 0, tt.w, 6})
+		top := rows(c)[0]
+		if strings.Contains(top, "10/10") != tt.want || !strings.Contains(top, "session log") {
+			t.Errorf("width %d: top border %q, want the title and the position shown %v", tt.w, top, tt.want)
+		}
+	}
+}

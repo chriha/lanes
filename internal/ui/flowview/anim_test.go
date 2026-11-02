@@ -620,7 +620,7 @@ func TestTokenSplitEases(t *testing.T) {
 func TestHookEventLogsChanges(t *testing.T) {
 	m := liveModel() // hook working
 	m.st.Now = t0.Add(time.Minute)
-	for _, h := range []string{"working", "asking", "asking", "", "waiting"} {
+	for _, h := range []string{"working", "asking", "asking", "waiting"} {
 		m.Apply(HookEvent{h})
 	}
 	var got []string
@@ -630,6 +630,14 @@ func TestHookEventLogsChanges(t *testing.T) {
 	want := "14:01:00 lead claude-opus-4-1 asking\n14:01:00 lead claude-opus-4-1 waiting"
 	if s := strings.Join(got, "\n"); s != want {
 		t.Errorf("log:\n%s\nwant:\n%s", s, want)
+	}
+}
+
+func TestFirstHookStateIsNotLogged(t *testing.T) {
+	m := New(nil)
+	m.Apply(HookEvent{"working"})
+	if len(m.st.Log) != 0 {
+		t.Errorf("the hook state on open logged %+v, want nothing", m.st.Log)
 	}
 }
 
@@ -652,8 +660,11 @@ func TestLogKeepsTheNewestLines(t *testing.T) {
 				snap.Events = []session.LogEvent{{At: t0.Add(time.Duration(i) * time.Second), Actor: "lead", Text: fmt.Sprint(i)}}
 				m.Apply(SnapshotEvent{snap})
 			}
-			if len(m.st.Log) != tt.wantLen || m.st.Log[0].Text != tt.wantFirst {
-				t.Errorf("log of %d lines from %q, want %d from %q", len(m.st.Log), m.st.Log[0].Text, tt.wantLen, tt.wantFirst)
+			if len(m.st.Log) != tt.wantLen {
+				t.Fatalf("log of %d lines, want %d", len(m.st.Log), tt.wantLen)
+			}
+			if m.st.Log[0].Text != tt.wantFirst {
+				t.Errorf("log from %q, want from %q", m.st.Log[0].Text, tt.wantFirst)
 			}
 		})
 	}

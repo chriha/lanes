@@ -320,9 +320,10 @@ func (s State) drawLogFrom(c *Canvas, r Rect, start int, focused bool) {
 	n := max(r.H-2, 0)
 	start = min(max(start, 0), len(s.Log))
 	lines := s.Log[start:min(start+n, len(s.Log))]
-	if len(s.Log) > n {
-		pos := fmt.Sprintf(" %d/%d ", start+len(lines), len(s.Log))
-		c.Text(r.X+r.W-2-len(pos), r.Y, pos, title)
+	pos := func(k int) string { return fmt.Sprintf(" %d/%d ", k, len(s.Log)) }
+	if len(s.Log) > n && r.W >= runeLen("session log")+len(pos(len(s.Log)))+8 {
+		p := pos(start + len(lines))
+		c.Text(r.X+r.W-2-len(p), r.Y, p, title)
 	}
 	aw := s.actorWidth()
 	for i, ln := range lines {

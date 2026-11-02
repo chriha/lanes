@@ -1018,7 +1018,8 @@ does not ask again there. Anything else — an empty answer, other text, `esc`, 
   `<root> is not trusted; run lanes in a terminal to trust it` and exit 1. There is deliberately no way to trust a
   project from a script — no subcommand, flag or environment variable; a person has to type `yes`.
 - **Silent commands.** `lanes status` and the Claude Code hooks (`lanes hook`) never ask: in an untrusted project
-  `status` prints nothing and the hooks do nothing.
+  `status` prints nothing and the hooks do nothing, except in a session `lanes` started itself (its working
+  directory, e.g. a git worktree, may be a root of its own).
 - **The trust list** is `trust.json` in the state directory (see [Where things live](#where-things-live)), mode 0600,
   one entry per project root. Delete an entry, or the file, to be asked again. A corrupt file trusts nothing: `lanes`
   reports the error and leaves the file alone rather than overwriting it.

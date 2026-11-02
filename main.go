@@ -54,6 +54,7 @@ func runTUI(updates update.Checker, upgrade string) int {
 		return 1
 	}
 	m := ui.New(cfg, ui.WithUpdateCheck(updates, upgrade))
+	defer m.Close() // cancels the fetches still running, which stops their provider subprocesses
 	if _, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus()).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)
 		return 1

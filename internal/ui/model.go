@@ -59,6 +59,7 @@ type head struct {
 
 type fetchedMsg struct {
 	name    string
+	gen     int // fetchState.gen when the fetch started
 	items   []item.Item
 	err     error
 	partial bool // quick result; a full one follows
@@ -80,7 +81,7 @@ type Model struct {
 	fetchedAt map[string]time.Time
 	// fullFetched marks providers with a full result in this run; their polls skip the Quick pass.
 	fullFetched map[string]bool
-	loading     map[string]bool
+	fetches     map[string]*fetchState // by provider; created on first fetch
 	provErr     map[string]error
 	fails       map[string]int       // consecutive failed fetches per provider
 	retryAt     map[string]time.Time // no refetch before this
@@ -141,7 +142,6 @@ func New(cfg *config.Config, opts ...Option) *Model {
 	m := &Model{
 		data:         map[string][]item.Item{},
 		fetchedAt:    map[string]time.Time{},
-		loading:      map[string]bool{},
 		provErr:      map[string]error{},
 		fails:        map[string]int{},
 		retryAt:      map[string]time.Time{},
@@ -379,27 +379,31 @@ func tick() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
+// fetch starts a fetch of provider name unless one is in flight. Its context is cancelled by cancelFetches.
 func (m *Model) fetch(name string) tea.Cmd {
-	if m.loading[name] {
+	st := m.fetchStateOf(name)
+	if st.running {
 		return nil
 	}
-	m.loading[name] = true
+	parent, cancel := context.WithCancel(context.Background())
+	st.running, st.started, st.cancel = true, time.Now(), cancel
+	gen := st.gen
 	p := m.providers[name]
 	full := func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 60*time.Second)
 		defer cancel()
 		items, err := p.Fetch(ctx)
-		return fetchedMsg{name: name, items: item.Sanitize(items), err: err}
+		return fetchedMsg{name: name, gen: gen, items: item.Sanitize(items), err: err}
 	}
 	q, ok := p.(provider.Quicker)
 	if !ok || m.fullFetched[name] {
 		return full
 	}
 	quick := func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 		defer cancel()
 		items, err := q.Quick(ctx)
-		return fetchedMsg{name: name, items: item.Sanitize(items), err: err, partial: true}
+		return fetchedMsg{name: name, gen: gen, items: item.Sanitize(items), err: err, partial: true}
 	}
 	return tea.Sequence(quick, full)
 }
@@ -431,9 +435,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.agents.fv.SetSize(msg.Width, msg.Height)
 		}
 	case fetchedMsg:
+		st := m.fetchStateOf(msg.name)
+		if msg.gen != st.gen {
+			return m, nil // a cancelled fetch: the fetch that replaced it delivers newer data
+		}
 		var again tea.Cmd
 		if !msg.partial {
-			m.loading[msg.name] = false
+			st.finish()
 			again = m.fetchLanded(msg.name)
 		}
 		if msg.err != nil {
@@ -549,7 +557,7 @@ func (m *Model) holdUntilRefetched(keys []string, ok bool) {
 		return
 	}
 	for name := range m.providers {
-		if m.loading[name] {
+		if m.fetching(name) {
 			m.refetchAfter[name] = true // its result predates the run
 		}
 	}
@@ -672,6 +680,7 @@ func (m *Model) reload() tea.Cmd {
 		m.cfgMod = config.Mtime() // do not retry the same broken file every tick
 		return nil
 	}
+	m.cancelFetches() // their results belong to the old config; refreshAll below fetches at once
 	m.applyConfig(cfg)
 	m.say(lvInfo, fmt.Sprintf("config reloaded: %d views, %d actions", len(m.views), len(cfg.Action)))
 	for k := range cfg.Keymap {
@@ -1020,7 +1029,7 @@ func (m *Model) usageText(now time.Time) string {
 func (m *Model) freshness() string {
 	name := m.views[m.cur].cfg.Provider
 	switch {
-	case m.loading[name]:
+	case m.fetching(name):
 		return "⟳ refreshing"
 	case m.fetchedAt[name].IsZero():
 		return "cached"
@@ -1068,7 +1077,7 @@ func (m *Model) list() string {
 				e += " · retry in " + time.Until(t).Round(time.Second).String()
 			}
 			rows = append(rows, "", "  "+sErr.Render(e))
-		case m.loading[v.cfg.Provider]:
+		case m.fetching(v.cfg.Provider):
 			rows = append(rows, "", "  "+sDim.Render("loading…"))
 		default:
 			rows = append(rows, "", "  "+sDim.Render(msg))

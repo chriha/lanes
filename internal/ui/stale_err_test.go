@@ -23,7 +23,6 @@ func TestApplyConfigClearsStaleProviderError(t *testing.T) {
 		ov:        &config.Overrides{Filters: map[string]string{}},
 		data:      map[string][]item.Item{},
 		fetchedAt: map[string]time.Time{},
-		loading:   map[string]bool{},
 		provErr:   map[string]error{},
 		marks:     map[string]bool{},
 	}
@@ -32,7 +31,7 @@ func TestApplyConfigClearsStaleProviderError(t *testing.T) {
 		t.Fatal("a failed build should record provErr")
 	}
 	m.applyConfig(cfg("command"))
-	m.loading["p"] = true // the refetch the reload triggers
+	setFetching(m, "p", true) // the refetch the reload triggers
 	if m.provErr["p"] != nil {
 		t.Errorf("provErr = %v, want cleared once the provider builds", m.provErr["p"])
 	}

@@ -17,7 +17,6 @@ func TestSortSurvivesRefresh(t *testing.T) {
 		ov:        &config.Overrides{Filters: map[string]string{}},
 		data:      map[string][]item.Item{"p": {n("a", 1), n("b", 2), n("c", 3)}},
 		fetchedAt: map[string]time.Time{},
-		loading:   map[string]bool{},
 		marks:     map[string]bool{"a": true},
 	}
 	m.applyConfig(&config.Config{View: []config.View{{Name: "v", Provider: "p", Sort: "-n"}}})

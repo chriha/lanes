@@ -7,7 +7,7 @@
 ┃ ███████████░░░░░░░ ┃ ║         ◓ working 12m03s   
 ┃ effort ▮▮▮▯ high   ┃ ╚════════════════════════════
 ┗━━━━━━━━━━━━━━━━━━━━┛                   │          
-                         lines 1-6/49  cols 1-29/36 
+                         lines 1-6/41  cols 1-29/75 
 ──┤ session log ├───────────────────────────────────
  14:28:00 implementer   spawned code-reviewer       
  14:28:30 code-reviewer spawned validator           

@@ -23,13 +23,10 @@ const (
 	burstGap    = 0.2                     // the share of a trip between two packets of a burst
 )
 
-// toolEdge is the Agent of packets on the lead's connector to the tool layer. Agent ids are never empty.
-const toolEdge = ""
-
 // Packet is a dot travelling along a connector: down from the parent while the agent runs, up to the parent in a
-// burst when it finishes or fails. Packets on the toolEdge run from the lead to the tool layer while it works.
+// burst when it finishes or fails.
 type Packet struct {
-	Agent string  // the agent whose connector it travels, or toolEdge
+	Agent string  // the agent whose connector it travels
 	Up    bool    // child to parent (finish) instead of parent to child
 	Pos   float64 // progress along the connector, 0..1; a burst's later packets start below 0 and show from 0
 }
@@ -64,14 +61,10 @@ func (m *Model) Step(dt time.Duration) {
 	m.typed = min(m.typed+typeRate*dt.Seconds(), float64(len([]rune(lead.LastText))))
 }
 
-// stream sends the packets due after dt on the streaming edges: the lead's to the tool layer while it works and
-// each running agent's from its parent. An edge that starts streaming sends its first packet after its jitter, so
+// stream sends the packets due after dt on the streaming edges: each running agent's from its parent. An edge that starts streaming sends its first packet after its jitter, so
 // edges don't move in lockstep; a packet due while the edge has maxInFlight on their way is dropped.
 func (m *Model) stream(dt time.Duration) {
-	ids := make([]string, 0, len(m.st.Snap.Agents)+1)
-	if m.st.Hook == "working" {
-		ids = append(ids, toolEdge)
-	}
+	ids := make([]string, 0, len(m.st.Snap.Agents))
 	for _, a := range m.st.Snap.Agents {
 		if a.Status == session.AgentRunning {
 			ids = append(ids, a.ID)
@@ -253,7 +246,7 @@ func (m Model) frame() State {
 // drawPackets draws each packet on its connector: a head with a fading tail behind it, in the sender's color: the
 // parent's on the way down, the agent's on the way up. Packets further along are drawn last, so their heads win
 // where connectors share cells. Packets of agents without a box, and burst packets not started yet, aren't drawn.
-func (s State) drawPackets(c *Canvas, packets []Packet, nodes []Node, paths [][]Point, tools []Point) {
+func (s State) drawPackets(c *Canvas, packets []Packet, nodes []Node, paths [][]Point) {
 	node := map[string]int{}
 	for i, n := range nodes {
 		node[s.Snap.Agents[n.Agent].ID] = i
@@ -270,22 +263,16 @@ func (s State) drawPackets(c *Canvas, packets []Packet, nodes []Node, paths [][]
 	}
 	sort.SliceStable(order, func(i, j int) bool { return order[i].Pos < order[j].Pos })
 	for _, p := range order {
-		var path []Point
-		var role Role
-		if p.Agent == toolEdge {
-			path, role = tools, ModelRole(s.Snap.Lead.Model)
-		} else {
-			i, ok := node[p.Agent]
-			if !ok {
-				continue
-			}
-			a := s.Snap.Agents[nodes[i].Agent]
-			path, role = paths[i], ModelRole(a.Model)
-			if pm, ok := model[a.Parent]; !p.Up && ok {
-				role = ModelRole(pm)
-			} else if !p.Up {
-				role = ModelRole(s.Snap.Lead.Model) // an unknown parent is the lead
-			}
+		i, ok := node[p.Agent]
+		if !ok {
+			continue
+		}
+		a := s.Snap.Agents[nodes[i].Agent]
+		path, role := paths[i], ModelRole(a.Model)
+		if pm, ok := model[a.Parent]; !p.Up && ok {
+			role = ModelRole(pm)
+		} else if !p.Up {
+			role = ModelRole(s.Snap.Lead.Model) // an unknown parent is the lead
 		}
 		if len(path) == 0 {
 			continue

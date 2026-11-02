@@ -153,9 +153,6 @@ func TestRunningEdgesStream(t *testing.T) {
 			st.Snap.Agents[0].Status = session.AgentDone
 			m.SetState(st)
 		}, "a1", false, false},
-		{"the lead streams to the tools while working", func(m *Model) {}, toolEdge, true, false},
-		{"the lead doesn't stream while asking", func(m *Model) { m.Apply(HookEvent{"asking"}) }, toolEdge, false, false},
-		{"the lead doesn't stream while waiting", func(m *Model) { m.Apply(HookEvent{"waiting"}) }, toolEdge, false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -203,23 +200,6 @@ func TestBurstPacketsAllArrive(t *testing.T) {
 	}
 	if len(m.Packets()) != 0 {
 		t.Errorf("packets left after the burst: %v", m.Packets())
-	}
-}
-
-func TestHookChangeStartsAndStopsTheToolStream(t *testing.T) {
-	const dt = 100 * time.Millisecond
-	m := liveModel()
-	m.Apply(HookEvent{"asking"})
-	if got := run(&m, 30, dt)[toolEdge]; got != nil && got.down != 0 {
-		t.Fatalf("asking: sent %d to the tools, want none", got.down)
-	}
-	m.Apply(HookEvent{"working"})
-	if got := run(&m, 30, dt)[toolEdge]; got == nil || got.down == 0 {
-		t.Fatalf("working: sent nothing to the tools")
-	}
-	m.Apply(HookEvent{"waiting"})
-	if got := run(&m, 30, dt)[toolEdge]; got != nil && got.down != 0 {
-		t.Errorf("waiting: sent %d to the tools, want none", got.down)
 	}
 }
 
@@ -299,7 +279,7 @@ func TestPacketIsDrawnOnItsConnector(t *testing.T) {
 
 		l := m.layout
 		d := l.Diagram(m.st.Snap.Agents)
-		paths := treePaths(d.Nodes, d.Tools, d.Tree)
+		paths := treePaths(d.Nodes, d.Lead, d.Tree)
 		if len(paths) != 2 {
 			t.Fatalf("up=%v: %d connectors, want 2", up, len(paths))
 		}

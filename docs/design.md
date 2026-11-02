@@ -87,7 +87,7 @@ an env var).
 - **Agent view** (`A` on an item or on the sessions screen) — a full-screen animated diagram of a Claude
   session as a dense dashboard: a full-height session column as the lead's dashboard (context bar, effort meter,
   tool-call sparkline over 15 min, hook states on a `┆` timeline, counters incl. the token split and agent counts,
-  last 4 files touched, last text, advisor), lead box, tool layer, layered agent tree, session log and a status line
+  last 4 files touched, last text, advisor), lead box with the tools box right of it, layered agent tree, session log and a status line
   with one colored entry per model family plus totals (an ended session reports no running agents). Agent boxes
   show full name, model, effort meter, ctx bar, task, live text and status (`▸ tool arg` while running). The box is
   6 rows. The task (`session.Agent.Task`) is the subagent's `meta.json` description, else the first sentence of its
@@ -95,7 +95,7 @@ an env var).
   `» text`) is the first line of its newest assistant text, ≤ 60 chars, dim once the agent is done or failed. One layout at every size (no compact
   or too-small mode): a pinned header (`AGENT VIEW · <item title>`, the session name as fallback; no live/ended
   state, the status line has it) with the family legend under its rule, session column, session log and status
-  line, and between them a viewport onto the diagram (lead with its effort, tool layer, agent tree). The diagram is
+  line, and between them a viewport onto the diagram (lead with its effort and the tools box right of it, agent tree). The diagram is
   drawn whole on its own canvas and the visible window is blitted in; `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G` and
   `h`/`l` move the window, clamped at the edges, kept across snapshots, shown as `lines a-b/n  cols a-b/n` above
   the log. Boxes are 28–30 cols (widened for long names, never narrower), as many per row as fit, every agent drawn
@@ -105,8 +105,7 @@ an env var).
   panel borders and a double lead border; a toned-down light variant), overridden per field by
   `[theme.agent_view]` (also `[theme.light.agent_view]` / `[theme.dark.agent_view]`, resolved like `[theme]` in
   `internal/ui/theme.go`). Packets stream continuously: parent → child along a running agent's edge (~1.2 s,
-  jittered per edge, ≤ 3 in flight), a burst of 3 child → parent on finish/fail, lead → tool layer while
-  `working`, none when ended. Lives in `internal/ui/flowview`: a character-grid canvas with
+  jittered per edge, ≤ 3 in flight), a burst of 3 child → parent on finish/fail, none when ended. Lives in `internal/ui/flowview`: a character-grid canvas with
   run-length styled output, a pure `State` changed by events (`Apply`) and stepped by `dt` (`Step`), panel
   renderers and the tree layout; it has its own tick (~70 ms) that runs only while the view is open. Its data
   comes from `session.Tailer` (`internal/session/transcript.go`), which reads only the new bytes of the

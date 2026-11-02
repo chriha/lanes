@@ -25,15 +25,9 @@ func treePaths(nodes []Node, root, area Rect) [][]Point {
 	return paths
 }
 
-// toolPath is the diagram's connector from the lead to the tool layer.
-func toolPath(d Diagram) []Point {
-	return elbow(Point{d.Lead.X + d.Lead.W/2, d.Lead.Y + d.Lead.H}, Point{d.Tools.X + d.Tools.W/2, d.Tools.Y - 1})
-}
-
-// drawTree draws the tool layer's connector, the agent boxes and their connectors, and returns each box's connector.
+// drawTree draws the agent boxes and their connectors, and returns each box's connector.
 func (s State) drawTree(c *Canvas, d Diagram) [][]Point {
-	c.drawPaths([][]Point{toolPath(d)}, RoleDim)
-	paths := treePaths(d.Nodes, d.Tools, d.Tree)
+	paths := treePaths(d.Nodes, d.Lead, d.Tree)
 	c.drawPaths(paths, RoleDim)
 	for _, n := range d.Nodes {
 		s.drawAgent(c, n.Rect, s.Snap.Agents[n.Agent])

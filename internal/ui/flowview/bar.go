@@ -10,8 +10,8 @@ const segmentCount = 10
 
 // Segments draws a bar of segmentCount one-cell glyphs at x, y, filled to v (clamped to 0..1) in 10% steps: the
 // first n as glyph in fill, the rest as glyph in track. n is v rounded to the nearest tenth, but at least 1 for any
-// v above 0. With blink the last filled segment is drawn in track, so a caller can make the bar's edge flash.
-func (c *Canvas) Segments(x, y int, glyph rune, v float64, blink bool, fill, track Role) {
+// v above 0.
+func (c *Canvas) Segments(x, y int, glyph rune, v float64, fill, track Role) {
 	v = min(max(v, 0), 1)
 	n := int(math.Round(v * segmentCount))
 	if v > 0 {
@@ -19,7 +19,7 @@ func (c *Canvas) Segments(x, y int, glyph rune, v float64, blink bool, fill, tra
 	}
 	for i := 0; i < segmentCount; i++ {
 		r := track
-		if i < n && !(blink && i == n-1) {
+		if i < n {
 			r = fill
 		}
 		c.Set(x+i, y, glyph, r)

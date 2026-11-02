@@ -4,6 +4,8 @@ import (
 	"context"
 	"sort"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // fetchState is one provider's fetch status. It changes only on the UI goroutine (fetch, the fetchedMsg handler,
@@ -72,7 +74,7 @@ func (m *Model) fetchStatus(name string, now time.Time) string {
 	switch {
 	case st != nil && st.running:
 		el := now.Sub(st.started)
-		s = name + " " + spinFrames[int(el/time.Second)%len(spinFrames)] + " fetching " + el.Round(time.Second).String()
+		s = name + " " + scanFrames[int(el/spinEvery)%len(scanFrames)] + " fetching " + el.Round(time.Second).String()
 		if st.last > 0 {
 			return s + " · last " + fetchDur(st.last)
 		}
@@ -90,8 +92,27 @@ func (m *Model) fetchStatus(name string, now time.Time) string {
 	return s
 }
 
-// spinFrames animate a running fetch; the status shows one frame per second of the fetch, advanced by the tick.
-var spinFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+// scanFrames animate a running fetch: a dot sweeping back and forth in a fixed-width track, one frame per spinEvery
+// of the fetch.
+var scanFrames = []string{"[●    ]", "[ ●   ]", "[  ●  ]", "[   ● ]", "[    ●]", "[   ● ]", "[  ●  ]", "[ ●   ]"}
+
+// spinEvery is how long a scanFrames frame shows, and the interval of the spinTickMsg loop that redraws it.
+const spinEvery = 100 * time.Millisecond
+
+// armSpin starts the animation tick loop when a provider fetches and no loop runs yet; nil otherwise. The loop
+// ends at the first spinTickMsg that finds every provider idle, so at most one runs and none while all are idle.
+func (m *Model) armSpin() tea.Cmd {
+	if m.spinning {
+		return nil
+	}
+	for _, st := range m.fetches {
+		if st.running {
+			m.spinning = true
+			return tea.Tick(spinEvery, func(t time.Time) tea.Msg { return spinTickMsg(t) })
+		}
+	}
+	return nil
+}
 
 // fetchDur is a fetch duration for the status: tenths of a second from 1s, milliseconds below.
 func fetchDur(d time.Duration) string {

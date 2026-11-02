@@ -79,7 +79,10 @@ an env var).
 - Fetch status: per provider (`fetchState` in `internal/ui/fetchstate.go`, changed only on the UI goroutine) —
   cached / fetching with spinner and elapsed / failed / updated, plus the last fetch duration, at the right of the
   header (only the current view's provider when it does not fit) and in place of an empty view's list while it
-  fetches. The text is computed in `View` from the start times, so the 1 s tick is what advances it.
+  fetches. The text is computed in `View` from the start times. The spinner is a fixed-width scanner (`[ ●   ]`, a
+  dot sweeping back and forth, `scanFrames`) at one frame per 100 ms of the fetch; a `spinTickMsg` loop redraws it.
+  `Update` starts that loop (`armSpin`) when a fetch runs and none does, and the loop ends at the first tick that
+  finds every provider idle, so at most one runs and none while idle. The 1 s tick advances the elapsed text.
 - Reload: trust check, `config.Load` and provider construction run in a `tea.Cmd`; the old config stays active
   until its `reloadedMsg` lands, which cancels the old config's in-flight fetches (their results are dropped by
   fetch generation) and fetches every provider at once.

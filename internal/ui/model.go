@@ -65,6 +65,9 @@ type fetchedMsg struct {
 	partial bool // quick result; a full one follows
 }
 type tickMsg time.Time
+
+// spinTickMsg advances the fetch animation; its loop runs only while a provider fetches.
+type spinTickMsg time.Time
 type usageMsg struct {
 	text string
 	at   time.Time
@@ -82,6 +85,7 @@ type Model struct {
 	// fullFetched marks providers with a full result in this run; their polls skip the Quick pass.
 	fullFetched map[string]bool
 	fetches     map[string]*fetchState // by provider; created on first fetch
+	spinning    bool                   // a spinTickMsg loop is running
 	provErr     map[string]error
 	fails       map[string]int       // consecutive failed fetches per provider
 	retryAt     map[string]time.Time // no refetch before this
@@ -394,7 +398,7 @@ func (m *Model) Init() tea.Cmd {
 	for name := range m.providers {
 		cmds = append(cmds, m.fetch(name))
 	}
-	return tea.Batch(cmds...)
+	return tea.Batch(append(cmds, m.armSpin())...)
 }
 
 func tick() tea.Cmd {
@@ -449,7 +453,16 @@ func (m *Model) refreshAll() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// Update handles msg, then starts the fetch animation's tick loop if a fetch is running and no loop is.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	model, cmd := m.update(msg)
+	if spin := m.armSpin(); spin != nil {
+		cmd = tea.Batch(cmd, spin)
+	}
+	return model, cmd
+}
+
+func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -500,6 +513,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.FocusMsg:
 		m.blurred = false
 		return m, m.fetchStale(m.cfg.Poll())
+	case spinTickMsg:
+		m.spinning = false // this loop ends; Update re-arms it while a provider fetches
+		return m, nil
 	case tickMsg:
 		if m.wake(time.Time(msg), nil) {
 			m.rebuild()

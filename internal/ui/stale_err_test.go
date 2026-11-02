@@ -38,7 +38,7 @@ func TestApplyConfigClearsStaleProviderError(t *testing.T) {
 	if m.provErr["p"] != nil {
 		t.Errorf("provErr = %v, want cleared once the provider builds", m.provErr["p"])
 	}
-	if out := m.list(); strings.Contains(out, "bogus") || !strings.Contains(ansi.Strip(out), "p ⠋ fetching") {
+	if out := m.list(); strings.Contains(out, "bogus") || !strings.Contains(ansi.Strip(out), "p [") || !strings.Contains(ansi.Strip(out), "] fetching") {
 		t.Errorf("list should show the fetch status, got %q", out)
 	}
 }

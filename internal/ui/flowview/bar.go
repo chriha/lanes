@@ -8,21 +8,27 @@ import (
 // segmentCount is the number of segments of a bar.
 const segmentCount = 10
 
-// Segments draws a bar of segmentCount one-cell glyphs at x, y, filled to v (clamped to 0..1) in 10% steps: the
-// first n as glyph in fill, the rest as glyph in track. n is v rounded to the nearest tenth, but at least 1 for any
-// v above 0. With blink the last filled segment is drawn in track, so a caller can make the bar's edge flash.
-func (c *Canvas) Segments(x, y int, glyph rune, v float64, blink bool, fill, track Role) {
+// halfGlyph is the half-filled cell of a bar.
+const halfGlyph = '▌'
+
+// Segments draws a bar of segmentCount one-cell glyphs at x, y, filled to v (clamped to 0..1) in 5% steps: the
+// full cells as glyph in fill, then at most one half cell as ▌ in fill, the rest as glyph in track. v is rounded to
+// the nearest 5% (half a cell), but to at least one half cell for any v above 0.
+func (c *Canvas) Segments(x, y int, glyph rune, v float64, fill, track Role) {
 	v = min(max(v, 0), 1)
-	n := int(math.Round(v * segmentCount))
+	halves := int(math.Round(v * segmentCount * 2))
 	if v > 0 {
-		n = max(n, 1)
+		halves = max(halves, 1)
 	}
 	for i := 0; i < segmentCount; i++ {
-		r := track
-		if i < n && !(blink && i == n-1) {
-			r = fill
+		switch {
+		case i < halves/2:
+			c.Set(x+i, y, glyph, fill)
+		case i == halves/2 && halves%2 == 1:
+			c.Set(x+i, y, halfGlyph, fill)
+		default:
+			c.Set(x+i, y, glyph, track)
 		}
-		c.Set(x+i, y, glyph, r)
 	}
 }
 

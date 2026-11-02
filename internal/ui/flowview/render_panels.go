@@ -10,7 +10,8 @@ import (
 	"github.com/chriha/lanes/internal/session"
 )
 
-var border = lipgloss.RoundedBorder()
+// border frames the panels and agent boxes; leadBorder sets the lead apart.
+var border, leadBorder = lipgloss.ThickBorder(), lipgloss.DoubleBorder()
 
 // fit strips escape sequences from s (transcript text is untrusted) and cuts it to w runes, ending in … when cut.
 // Runes, not display width: the canvas draws every rune in one cell.
@@ -86,7 +87,7 @@ func ctxFill(ctx int) float64 { return float64(max(ctx, 0)) / 100 }
 // ctxRow draws a context gauge in w cells from x: the label, the gauge and the percent.
 func (c *Canvas) ctxRow(x, y, w, ctx int, fill, text Role) {
 	c.Text(x, y, "ctx", RoleDim)
-	c.Gauge(x+4, y, w-9, ctxFill(ctx), fill, RoleDim)
+	c.Gauge(x+4, y, w-9, ctxFill(ctx), fill, RoleTrack)
 	c.Text(x+w-4, y, fmt.Sprintf("%4s", ctxPct(ctx)), text)
 }
 
@@ -113,8 +114,8 @@ func (s State) drawHeader(c *Canvas, l Layout) {
 	if title == "" {
 		title = s.Title
 	}
-	c.textIn(f.X+1, f.Y, f.W-2, "AGENT VIEW · "+title, RoleBold)
-	c.HLine(f.X, f.X+f.W-1, f.Y+1, '═', RoleDim)
+	c.textIn(f.X+1, f.Y, f.W-2, "AGENT VIEW · "+title, RoleAccent)
+	c.HLine(f.X, f.X+f.W-1, f.Y+1, '═', RoleAccent)
 	x := f.X + (f.W-28)/2
 	for _, fam := range knownFamilies {
 		c.Set(x, f.Y+2, '■', ModelRole(fam))
@@ -155,7 +156,7 @@ func (s State) drawSession(c *Canvas, r Rect) {
 	rows := []func(y int){
 		label(s.Title, since(s.Start, s.Now), RoleText),
 		label("ctx", ctxPct(lead.Ctx), RoleBold),
-		func(y int) { c.Gauge(x, y, w, ctxFill(lead.Ctx), role, RoleDim) },
+		func(y int) { c.Gauge(x, y, w, ctxFill(lead.Ctx), role, RoleTrack) },
 	}
 	if m := effortMeter(lead.Effort); m != "" {
 		rows = append(rows, func(y int) {
@@ -165,7 +166,7 @@ func (s State) drawSession(c *Canvas, r Rect) {
 	counts := activity(s.Snap.ToolTimes, s.Now)
 	rows = append(rows, nil,
 		label("activity", fmt.Sprintf("%d/min", counts[len(counts)-1]), RoleBold),
-		func(y int) { c.Spark(x, y, counts, role, RoleDim) },
+		func(y int) { c.Spark(x, y, counts, role, RoleTrack) },
 		nil)
 	for i, h := range hookStates {
 		if i > 0 {
@@ -242,7 +243,7 @@ func (s State) drawSession(c *Canvas, r Rect) {
 func (s State) drawLead(c *Canvas, r Rect) {
 	lead := s.Snap.Lead
 	role := ModelRole(lead.Model)
-	c.Box(r, border, role)
+	c.Box(r, leadBorder, role)
 	row := []seg{{strings.TrimSpace(shortModel(lead.Model) + " · lead"), role}}
 	if m := effortMeter(lead.Effort); m != "" {
 		row = append(row, seg{" " + m, role}, seg{" " + strings.ToLower(lead.Effort), RoleDim})
@@ -271,7 +272,7 @@ func (s State) drawTools(c *Canvas, r Rect) {
 	for i, t := range s.topTools(3) {
 		y := r.Y + 2 + i
 		c.textIn(x, y, 8, t.Name, RoleText)
-		c.Bar(x+9, y, w-14, t.Share, s.Phase, role, RoleDim)
+		c.Bar(x+9, y, w-14, t.Share, s.Phase, role, RoleTrack)
 		c.Text(x+w-4, y, fmt.Sprintf("%3.0f%%", t.Share*100), RoleText)
 	}
 }

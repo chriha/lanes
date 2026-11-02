@@ -14,19 +14,41 @@ const (
 	RoleNone     Role = iota // unstyled
 	RoleText                 // body text
 	RoleBold                 // titles and headers
-	RoleDim                  // rules, timestamps, idle connectors, bar tracks
+	RoleDim                  // rules, timestamps, idle connectors
 	RoleOpus                 // opus-family agents
 	RoleSonnet               // sonnet-family agents
 	RoleHaiku                // haiku-family agents
 	RoleOK                   // done
 	RoleBad                  // errors
 	RoleSelected             // highlighted row: text on the selection background
+	RoleAccent               // the header's title and rule
+	RoleTrack                // the empty part of bars, gauges and sparklines
 	numRoles
 )
 
 // Palette holds the colors the roles are drawn in; the caller maps its own theme onto it.
 type Palette struct {
-	Text, Dim, Opus, Sonnet, Haiku, OK, Bad, Selection lipgloss.AdaptiveColor
+	Text, Dim, Accent, Track, Opus, Sonnet, Haiku, OK, Bad, Selection lipgloss.AdaptiveColor
+}
+
+// NeonPalette is the agent view's default palette: magenta, cyan and yellow families with a violet accent on a
+// deep track on dark terminals; a toned-down variant of the same hues, readable on white, on light terminals.
+func NeonPalette() Palette {
+	ac := func(light, dark string) lipgloss.AdaptiveColor {
+		return lipgloss.AdaptiveColor{Light: light, Dark: dark}
+	}
+	return Palette{
+		Text:      ac("#1B1530", "#E8F4FF"),
+		Dim:       ac("#6E6888", "#7A75A8"),
+		Accent:    ac("#6A1FB0", "#B26BFF"),
+		Track:     ac("#E2D8F0", "#2B1F4A"),
+		Opus:      ac("#A3108F", "#FF4FE3"),
+		Sonnet:    ac("#00707F", "#00F0FF"),
+		Haiku:     ac("#7A5C00", "#FFE600"),
+		OK:        ac("#1A6E1A", "#39FF14"),
+		Bad:       ac("#C0102E", "#FF3B5C"),
+		Selection: ac("#F3DDF7", "#3D1A5B"),
+	}
 }
 
 // Theme holds each role's ANSI prefix and suffix, rendered once so the canvas styles a run by concatenation.
@@ -51,6 +73,8 @@ func NewTheme(p Palette) *Theme {
 		RoleOK:       fg(p.OK),
 		RoleBad:      fg(p.Bad),
 		RoleSelected: fg(p.Text).Background(p.Selection),
+		RoleAccent:   fg(p.Accent).Bold(true),
+		RoleTrack:    fg(p.Track),
 	}
 	t := &Theme{}
 	for r, s := range styles {

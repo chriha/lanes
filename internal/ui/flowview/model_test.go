@@ -330,7 +330,7 @@ func TestScrollMovesOnlyTheDiagram(t *testing.T) {
 					}
 				}
 			}
-			for _, pinned := range []string{"AGENT VIEW", "■ opus", "╭─ session", "session log", "● live"} {
+			for _, pinned := range []string{"AGENT VIEW", "■ opus", "┏━ session", "session log", "● live"} {
 				if !strings.Contains(ansi.Strip(after.View()), pinned) {
 					t.Errorf("scrolled frame lacks %q", pinned)
 				}
@@ -354,7 +354,7 @@ func TestScrollReachesEveryAgent(t *testing.T) {
 					}
 				}
 				for _, a := range agents {
-					if !strings.Contains(seen.String(), "─ "+a.Name+" ─") {
+					if !strings.Contains(seen.String(), "━ "+a.Name+" ━") {
 						t.Errorf("no frame scrolled to shows the box of %s", a.Name)
 					}
 				}

@@ -176,4 +176,6 @@ const projectTail = `
 # accent = "#A78BFA"
 # [theme.dark.labels]  # also [theme.labels] / [theme.light.labels]; merged per label with the global config
 # bug = "#FCA5A5"
+# [theme.agent_view]   # the agent view's neon colors; also [theme.light.agent_view] / [theme.dark.agent_view]
+# opus = "#FF4FE3"     # also: sonnet, haiku, text, dim, accent, track, ok, bad, selection
 `

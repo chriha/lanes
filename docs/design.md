@@ -82,9 +82,19 @@ an env var).
   tool-call sparkline over 15 min, hook states on a `┆` timeline, counters incl. the token split and agent counts,
   last 4 files touched, last text, advisor), lead box, tool layer, layered agent tree, session log and a status line
   with one colored entry per model family plus totals (an ended session reports no running agents). Agent boxes
-  show full name, model, effort meter, ctx bar, task, `▸ tool arg` and status. The full layout uses the terminal's
-  whole width: boxes of 28–30 cols (widened for long names) as many per row as fit, a depth wrapping into at most 2
-  lines before `+n more`. Packets stream continuously: parent → child along a running agent's edge (~1.2 s,
+  show full name, model, effort meter, ctx bar, task, `▸ tool arg` and status. One layout at every size (no compact
+  or too-small mode): a pinned header (`AGENT VIEW · <item title>`, the session name as fallback; no live/ended
+  state, the status line has it) with the family legend under its rule, session column, session log and status
+  line, and between them a viewport onto the diagram (lead with its effort, tool layer, agent tree). The diagram is
+  drawn whole on its own canvas and the visible window is blitted in; `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G` and
+  `h`/`l` move the window, clamped at the edges, kept across snapshots, shown as `lines a-b/n  cols a-b/n` above
+  the log. Boxes are 28–30 cols (widened for long names, never narrower), as many per row as fit, every agent drawn
+  (a depth wraps into as many lines as it needs); a viewport narrower than a box scrolls sideways. The ctx gauge
+  has eighth-block resolution and is ≥ 12 cells everywhere (≤ 5% per step). The view has its own neon palette
+  (`flowview.NeonPalette`: magenta/cyan/yellow families, violet accent header, a deep track behind bars, heavy
+  panel borders and a double lead border; a toned-down light variant), overridden per field by
+  `[theme.agent_view]` (also `[theme.light.agent_view]` / `[theme.dark.agent_view]`, resolved like `[theme]` in
+  `internal/ui/theme.go`). Packets stream continuously: parent → child along a running agent's edge (~1.2 s,
   jittered per edge, ≤ 3 in flight), a burst of 3 child → parent on finish/fail, lead → tool layer while
   `working`, none when ended. Lives in `internal/ui/flowview`: a character-grid canvas with
   run-length styled output, a pure `State` changed by events (`Apply`) and stepped by `dt` (`Step`), panel
@@ -94,7 +104,7 @@ an env var).
   agent-<id>.{jsonl,meta.json}`; `internal/ui/agents.go` polls it in a `tea.Cmd` every 500 ms and hands the
   snapshot over as a message. Context % uses one model-id table (`session.ContextWindow`, 200k default, 1M for
   `[1m]`). Effort is the newest `effort` field per transcript (absent → the meter is omitted). An ended session is
-  read once more and frozen. Full layout from 90×46, compact (no session column, tool layer or task) from 60×24.
+  read once more and frozen.
 
 ## Config (`~/.config/lanes/config.toml`, hot reloaded)
 
@@ -124,6 +134,9 @@ s = "sync"
 type = "session"
 run = 'claude "/local-code-review {{.url}}"'
 confirm = "none"
+
+[theme.agent_view]   # the agent view's neon palette, per field; also under [theme.light] / [theme.dark]
+opus = "#FF4FE3"
 ```
 
 ## Layout

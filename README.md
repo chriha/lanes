@@ -98,8 +98,8 @@ look at a list, press a key, and the work starts in the background in a session 
 - **Item history** — per-item log of which actions ran, when and how they ended.
 - **Notes** — your own note per item (`N`), shown in every view, usable in filters and templates.
 - **Snooze** — put an item aside (`z`) until a time or until it changes; it leaves every view until then.
-- **Agent view** — `A` shows a Claude session as a live diagram: which agents run, who spawned whom, their
-  model, context use and current tool.
+- **Agent view** — `A` shows a Claude session as a live, scrollable neon dashboard: which agents run, who spawned
+  whom, their model, effort, context use and current tool.
 - **Preview pane** — details of the selected item, its sessions and last run.
 - **Notifications** — desktop notification when a session needs you or ends.
 - **Global + project config** — one config for you, optional `.lanes.toml` per project that overrides only what
@@ -693,7 +693,12 @@ selected session. `esc`, `q` or `A` go back. It needs the [hooks](#claude-code-i
 (`--settings {{.settings}}`): they record where Claude keeps the session's transcript. Without them, or before
 Claude has started, the footer says `no Claude session for this item`.
 
-The view is a dashboard across the whole terminal. It shows, top to bottom:
+The view is a dashboard across the whole terminal, with one layout at every size: it never hides or replaces
+anything because the terminal is small. It shows, top to bottom:
+
+- **header** — `AGENT VIEW · <title>`: the item's title, or the session's name when the view was opened from the
+  sessions screen (or the title is unknown); under its rule a **legend** of the model family colors
+  (`■ opus  ■ sonnet  ■ haiku`), always drawn.
 
 - **session** (left column, full height) — the lead's dashboard:
   - the item's name and how long the session has run, the lead's `ctx` bar with its % and its `effort` meter;
@@ -705,21 +710,31 @@ The view is a dashboard across the whole terminal. It shows, top to bottom:
   - `files` — the last 4 files that Edit, Write or NotebookEdit touched, newest first;
   - `last:` — the lead's newest text, typed out;
   - `advisor` — the advisor model and its `calls`, when the session uses one.
-- **lead** — the main Claude: its model, current tool and argument, state and elapsed time.
+- **lead** — the main Claude, in a double border: its model and `effort` meter with its level (left out when
+  unknown), current tool and argument, state and elapsed time.
 - **tools** — the lead's three most used tools, with their share of all its calls.
 - **agents** — the subagents as a layered tree, one row per spawn depth, each connected to the agent that
   spawned it (or to the lead). Each box has the agent's full name in its top border, then its model and `effort`
   meter, a `ctx` bar with its %, and its task; the bottom border shows the status: a spinner with elapsed time and
   `▸ <tool> <argument>` while running, `✓ done` with its duration, `✗` when it failed. The border takes the
-  model family's color; finished agents are dimmed. As many boxes as fit go side by side; a depth that doesn't fit
-  one line wraps into a second, and what still doesn't fit ends in a `+n more` box.
+  model family's color; finished agents are dimmed. Every agent is drawn: as many boxes as fit go side by side,
+  and a depth that doesn't fit one line wraps into as many lines as it needs.
 - **session log** — spawns, finishes and failures, with their time. The name column fits names of up to 20
   characters.
 - **status line** — one entry per model family in its color, e.g. `opus [2 running]`, `sonnet [1 failed]`,
   `haiku [done]`; then `agents [running/total]`, `tools [n]`, `tokens [n]` and `● live` or `■ ended`.
 
-Colors follow the model family: opus purple, sonnet orange, haiku blue (your [theme](#theme)'s `accent`, `warn`
-and `info`). Labels are dim and values bright; numbers have thousands separators.
+**Scrolling.** The diagram (lead, tools and agent tree) scrolls as one block when it is higher or wider than the
+space between the session column and the log: `j`/`k` (or the arrows) a line, `ctrl-d`/`ctrl-u` half a page,
+`g`/`G` to the top/bottom, `h`/`l` (or the arrows) a column sideways when it is wider than the terminal. Scrolling
+stops at the edges and keeps its place as the session updates. The header, legend, session column, log and status
+line stay put; above the log, `lines 1-6/45` and `cols 1-29/36` show where you are (nothing when it all fits).
+
+**Look.** The view has its own neon palette: opus magenta, sonnet cyan, haiku yellow, a violet header, heavy box
+borders with a double one around the lead, and bars that light up over a deep track. Light terminals get a
+toned-down variant of the same hues. Change any of its colors under
+[`[theme.agent_view]`](#agent-view-colors); the app's `[theme]` colors don't apply here. Labels are dim and
+values bright; numbers have thousands separators.
 
 **Effort** is the newest `effort` in the lead's or the agent's transcript, shown as a 4-cell meter: `low ▮▯▯▯`,
 `medium ▮▮▯▯`, `high ▮▮▮▯`, `xhigh` / `max ▮▮▮▮`. When a transcript has none, the meter is left out.
@@ -742,13 +757,13 @@ model's context window: 1,000,000 for model ids ending in `[1m]`, otherwise 200,
 1M window).
 
 **Ended sessions.** When Claude exits or the session finishes, the view reads the transcripts once more and
-freezes on that final state; the header says `ended` instead of `live`. Nothing moves, no packets run, and no
+freezes on that final state; the status line says `■ ended` instead of `● live`. Nothing moves, no packets run, and no
 agent counts as running: agents that hadn't finished show as `stopped` in the status line.
 
-**Size.** The full dashboard needs 90×46 and uses the whole terminal width: the wider the terminal, the more
-agent boxes (28–30 columns each, wider when a name needs it) fit side by side, e.g. 5 at 200 columns. From 60×24
-a compact layout drops the session column and the tool panel (their numbers move to the status line) and uses
-smaller agent boxes without the task. Below that the view only says `resize to ≥ 60×24`.
+**Size.** The dashboard uses the whole terminal: the wider it is, the more agent boxes (28–30 columns each,
+wider when a name needs it) fit side by side, e.g. 5 at 200 columns. Boxes never get narrower than 28 columns: on
+a terminal narrower than about 52 columns (the session column plus one box) the diagram scrolls sideways instead.
+Rows of the session column that don't fit its height are left out.
 
 ### Notifications
 
@@ -935,7 +950,7 @@ The project config **overlays** the global one — it does not replace it. You o
 | Section            | Merged                                                                 |
 |--------------------|------------------------------------------------------------------------|
 | `[settings]`       | per field — set only `preview = false` and `poll_interval` is kept     |
-| `[theme]`          | per field                                                              |
+| `[theme]`          | per field, also within `[theme.light]`, `[theme.dark]` and `[theme.agent_view]` |
 | `[keymap]`         | per key                                                                |
 | `[provider.<n>]`   | by name — a provider defined in the project replaces the global one of that name as a whole |
 | `[action.<n>]`     | by name, as a whole                                                    |
@@ -1041,6 +1056,9 @@ when    = '<expression>'    # only run on items it matches; empty = every item
 
 [theme]
 accent = "#A78BFA"          # also: ok, warn, bad, info, text, dim, selection
+
+[theme.agent_view]
+opus = "#FF4FE3"            # also: sonnet, haiku, text, dim, accent, track, ok, bad, selection
 ```
 
 ### Theme
@@ -1081,6 +1099,23 @@ bug = "#F87171"
 needs-info = "#FBBF24"
 [theme.light.labels]
 bug = "#C53030"        # light mode only
+```
+
+#### Agent view colors
+
+The [agent view](#agent-view) has its own neon palette. `[theme.agent_view]` overrides any of its colors: `opus`,
+`sonnet` and `haiku` (the model families), `text`, `dim` (labels, connectors), `accent` (header), `track` (the
+empty part of bars and gauges), `ok`, `bad` and `selection` (the active hook state). `[theme.light.agent_view]`
+and `[theme.dark.agent_view]` take the same keys for one mode; per key, the active mode's table wins over
+`[theme.agent_view]`, which wins over the neon default. Global config and `.lanes.toml` merge per key:
+
+```toml
+[theme.agent_view]
+sonnet = "#00F0FF"     # both modes
+[theme.light.agent_view]
+sonnet = "#00707F"     # light mode only
+[theme.dark.agent_view]
+track = "#1A1030"      # dark mode only
 ```
 
 Colors must be `#RGB` or `#RRGGBB` (case-insensitive); an empty value keeps the default (a label color cannot be

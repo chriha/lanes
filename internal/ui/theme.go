@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/chriha/lanes/internal/config"
+	"github.com/chriha/lanes/internal/ui/flowview"
 )
 
 var (
@@ -23,6 +24,9 @@ var (
 )
 
 var base [8]lipgloss.AdaptiveColor
+
+// cAgent is the agent view's resolved palette.
+var cAgent = flowview.NeonPalette()
 
 // cLabels maps a lowercased label name to its resolved color; a label without an entry renders in cText.
 var cLabels map[string]lipgloss.AdaptiveColor
@@ -60,6 +64,7 @@ func applyTheme(t config.Theme) {
 	}
 	cAccent, cOK, cWarn, cBad, cInfo, cText, cDim, cSelBg = pal[0], pal[1], pal[2], pal[3], pal[4], pal[5], pal[6], pal[7]
 	cLabels = labelColors(t)
+	cAgent = agentPalette(t)
 	applyMode(t.Mode)
 	buildStyles()
 }
@@ -117,6 +122,32 @@ func applyMode(mode string) {
 			lipgloss.SetHasDarkBackground(*detectedDark)
 		}
 	}
+}
+
+// agentPalette resolves the agent view's palette from config: per color and side, the [theme.light.agent_view] /
+// [theme.dark.agent_view] value wins over the flat [theme.agent_view] value, which wins over the neon default.
+func agentPalette(t config.Theme) flowview.Palette {
+	p := flowview.NeonPalette()
+	f, l, d := t.AgentView, t.Light.AgentView, t.Dark.AgentView
+	for _, c := range []struct {
+		dst               *lipgloss.AdaptiveColor
+		flat, light, dark string
+	}{
+		{&p.Text, f.Text, l.Text, d.Text},
+		{&p.Dim, f.Dim, l.Dim, d.Dim},
+		{&p.Accent, f.Accent, l.Accent, d.Accent},
+		{&p.Track, f.Track, l.Track, d.Track},
+		{&p.Opus, f.Opus, l.Opus, d.Opus},
+		{&p.Sonnet, f.Sonnet, l.Sonnet, d.Sonnet},
+		{&p.Haiku, f.Haiku, l.Haiku, d.Haiku},
+		{&p.OK, f.OK, l.OK, d.OK},
+		{&p.Bad, f.Bad, l.Bad, d.Bad},
+		{&p.Selection, f.Selection, l.Selection, d.Selection},
+	} {
+		c.dst.Light = cmp.Or(c.light, c.flat, c.dst.Light)
+		c.dst.Dark = cmp.Or(c.dark, c.flat, c.dst.Dark)
+	}
+	return p
 }
 
 func badgeStyle(kind string) lipgloss.Style {

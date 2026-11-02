@@ -51,13 +51,8 @@ func (a *agentView) poll() tea.Cmd {
 // state is gone.
 func claudeEnded(s session.Info) bool { return s.Dead || s.Claude == "" }
 
-// flowTheme maps the app's theme onto the agent view's roles: opus in the accent purple, sonnet in the warn
-// orange, haiku in the info blue.
-func flowTheme() *flowview.Theme {
-	return flowview.NewTheme(flowview.Palette{
-		Text: cText, Dim: cDim, Opus: cAccent, Sonnet: cWarn, Haiku: cInfo, OK: cOK, Bad: cBad, Selection: cSelBg,
-	})
-}
+// flowTheme renders the agent view's palette: the neon defaults with the [theme.agent_view] overrides.
+func flowTheme() *flowview.Theme { return flowview.NewTheme(cAgent) }
 
 // agentsOfItem opens the agent view on the item's newest session with a Claude transcript.
 func (m *Model) agentsOfItem(it item.Item) tea.Cmd {

@@ -104,7 +104,7 @@ func TestAgentKeyOpensTheView(t *testing.T) {
 			if !strings.Contains(v, "AGENT VIEW · "+tt.header) {
 				t.Errorf("header does not name %q:\n%s", tt.header, v)
 			}
-			if !strings.Contains(v, "│ "+tt.want+" ") {
+			if !strings.Contains(v, "┃ "+tt.want+" ") {
 				t.Errorf("session column does not name %s:\n%s", tt.want, v)
 			}
 		})

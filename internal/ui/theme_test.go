@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/chriha/lanes/internal/config"
+	"github.com/chriha/lanes/internal/ui/flowview"
 )
 
 // trueColorTheme renders styles in true color and restores the palette, the background detection and the
@@ -120,5 +121,42 @@ func TestApplyThemeLabelColors(t *testing.T) {
 				t.Errorf("cLabels[%q] = %+v, %v; want %+v, %v", tt.label, got, ok, tt.want, tt.ok)
 			}
 		})
+	}
+}
+
+func TestAgentPalettePrecedence(t *testing.T) {
+	neon := flowview.NeonPalette()
+	got := agentPalette(config.Theme{
+		Colors: config.Colors{AgentView: config.AgentView{Opus: "#010101", Sonnet: "#020202"}},
+		Light:  config.Colors{AgentView: config.AgentView{Opus: "#030303"}},
+		Dark:   config.Colors{AgentView: config.AgentView{Sonnet: "#040404", Track: "#050505"}, Accent: "#060606"},
+	})
+	tests := []struct {
+		name      string
+		got, want lipgloss.AdaptiveColor
+	}{
+		{"opus: light table, flat on dark", got.Opus, lipgloss.AdaptiveColor{Light: "#030303", Dark: "#010101"}},
+		{"sonnet: flat on light, dark table", got.Sonnet, lipgloss.AdaptiveColor{Light: "#020202", Dark: "#040404"}},
+		{"track: neon on light, dark table", got.Track, lipgloss.AdaptiveColor{Light: neon.Track.Light, Dark: "#050505"}},
+		{"accent: neon, the app's [theme.dark] accent does not apply", got.Accent, neon.Accent},
+		{"haiku: neon", got.Haiku, neon.Haiku},
+	}
+	for _, tt := range tests {
+		if tt.got != tt.want {
+			t.Errorf("%s: got %+v, want %+v", tt.name, tt.got, tt.want)
+		}
+	}
+	if got := agentPalette(config.Theme{}); got != neon {
+		t.Errorf("without [theme.agent_view] the palette = %+v, want the neon defaults %+v", got, neon)
+	}
+}
+
+func TestFlowThemeUsesTheAgentViewTheme(t *testing.T) {
+	trueColorTheme(t)
+	applyTheme(config.Theme{Mode: "dark", Colors: config.Colors{AgentView: config.AgentView{Opus: "#123456"}}})
+	c := flowview.NewCanvas(1, 1, flowTheme())
+	c.Set(0, 0, 'x', flowview.RoleOpus)
+	if got := c.String(); !strings.Contains(got, "38;2;18;52;86") {
+		t.Errorf("opus cell = %q, want it in the [theme.agent_view] opus #123456", got)
 	}
 }

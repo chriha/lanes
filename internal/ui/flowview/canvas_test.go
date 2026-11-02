@@ -1,6 +1,8 @@
 package flowview
 
 import (
+	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -340,5 +342,72 @@ func TestBlit(t *testing.T) {
 				t.Errorf("blitted cell has role %d, want the source's", c.At(1, 1).Role)
 			}
 		})
+	}
+}
+
+// contrast is the WCAG contrast ratio of two #RRGGBB colors.
+func contrast(t *testing.T, a, b string) float64 {
+	t.Helper()
+	lum := func(hex string) float64 {
+		var r, g, bl uint8
+		if _, err := fmt.Sscanf(hex, "#%02x%02x%02x", &r, &g, &bl); err != nil {
+			t.Fatalf("color %q: %v", hex, err)
+		}
+		lin := func(c uint8) float64 {
+			v := float64(c) / 255
+			if v <= 0.03928 {
+				return v / 12.92
+			}
+			return math.Pow((v+0.055)/1.055, 2.4)
+		}
+		return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(bl)
+	}
+	la, lb := lum(a), lum(b)
+	return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+}
+
+func TestNeonPaletteIsReadable(t *testing.T) {
+	p := NeonPalette()
+	const darkBg, lightBg = "#000000", "#FFFFFF"
+	tests := []struct {
+		name string
+		c    lipgloss.AdaptiveColor
+		min  float64 // contrast against the terminal background on each side
+	}{
+		{"text", p.Text, 7},
+		{"accent", p.Accent, 4.5},
+		{"opus", p.Opus, 4.5},
+		{"sonnet", p.Sonnet, 4.5},
+		{"haiku", p.Haiku, 4.5},
+		{"ok", p.OK, 4.5},
+		{"bad", p.Bad, 4.5},
+		{"dim", p.Dim, 3},
+		{"text on selection", lipgloss.AdaptiveColor{}, 4.5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lightFg, lightBgc, darkFg, darkBgc := tt.c.Light, lightBg, tt.c.Dark, darkBg
+			if tt.name == "text on selection" {
+				lightFg, lightBgc, darkFg, darkBgc = p.Text.Light, p.Selection.Light, p.Text.Dark, p.Selection.Dark
+			}
+			if r := contrast(t, darkFg, darkBgc); r < tt.min {
+				t.Errorf("dark: %s on %s contrast %.1f, want ≥ %.1f", darkFg, darkBgc, r, tt.min)
+			}
+			if r := contrast(t, lightFg, lightBgc); r < tt.min {
+				t.Errorf("light: %s on %s contrast %.1f, want ≥ %.1f (toned down for light terminals)", lightFg, lightBgc, r, tt.min)
+			}
+		})
+	}
+}
+
+func TestNeonPaletteTrackSitsBetweenBackgroundAndDim(t *testing.T) {
+	p := NeonPalette()
+	for _, side := range []struct{ name, bg, track, dim string }{
+		{"dark", "#000000", p.Track.Dark, p.Dim.Dark},
+		{"light", "#FFFFFF", p.Track.Light, p.Dim.Light},
+	} {
+		if bt, bd := contrast(t, side.track, side.bg), contrast(t, side.dim, side.bg); bt <= 1.1 || bt >= bd {
+			t.Errorf("%s: track %s contrast %.2f, want visible (> 1.1) and below dim's %.2f", side.name, side.track, bt, bd)
+		}
 	}
 }

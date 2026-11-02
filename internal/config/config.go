@@ -69,9 +69,21 @@ type Theme struct {
 
 var hexColor = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
-// validate rejects any non-empty color that is not #RGB or #RRGGBB; it walks the string fields, so new keys are covered.
+// validate rejects any non-empty color that is not #RGB or #RRGGBB, in the table and its labels and agent_view.
 func (c Colors) validate(prefix string) error {
-	v := reflect.ValueOf(c)
+	if err := validateHexFields(c, prefix); err != nil {
+		return err
+	}
+	if err := validateHexFields(c.AgentView, prefix+"agent_view."); err != nil {
+		return err
+	}
+	return validateLabels(c.Labels, prefix+"labels.")
+}
+
+// validateHexFields rejects any non-empty string field of the struct colors that is not #RGB or #RRGGBB; it walks
+// the string fields, so new keys are covered.
+func validateHexFields(colors any, prefix string) error {
+	v := reflect.ValueOf(colors)
 	for i := 0; i < v.NumField(); i++ {
 		if v.Field(i).Kind() != reflect.String {
 			continue
@@ -80,7 +92,7 @@ func (c Colors) validate(prefix string) error {
 			return fmt.Errorf("%s%s %q: want #RGB or #RRGGBB", prefix, v.Type().Field(i).Tag.Get("toml"), s)
 		}
 	}
-	return validateLabels(c.Labels, prefix+"labels.")
+	return nil
 }
 
 // validateLabels rejects a label color that is not #RGB or #RRGGBB, and two names that differ only in case.
@@ -475,4 +487,6 @@ run = 'glab mr update {{.iid}} --ready'
 # [theme.labels]       # preview label colors by name, case-insensitive; also [theme.light.labels] / [theme.dark.labels]
 # bug = "#F87171"
 # needs-info = "#FBBF24"
+# [theme.agent_view]   # the agent view's neon colors; also [theme.light.agent_view] / [theme.dark.agent_view]
+# opus = "#FF4FE3"     # also: sonnet, haiku, text, dim, accent, track, ok, bad, selection
 `

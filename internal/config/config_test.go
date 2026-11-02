@@ -845,3 +845,106 @@ when = 'kind == "pr"'
 		})
 	}
 }
+
+func TestThemeAgentViewValidation(t *testing.T) {
+	const base = `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+`
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"short hex", "#abc", false},
+		{"long hex", "#FF2BD6", false},
+		{"empty", "", false},
+		{"no hash", "FF2BD6", true},
+		{"color name", "magenta", true},
+	}
+	fields := reflect.TypeOf(AgentView{})
+	for _, scope := range []string{"global", "project"} {
+		for _, table := range []string{"theme.agent_view", "theme.light.agent_view", "theme.dark.agent_view"} {
+			for i := 0; i < fields.NumField(); i++ {
+				field := fields.Field(i).Tag.Get("toml")
+				key := table + "." + field
+				for _, tt := range tests {
+					t.Run(scope+"/"+key+"/"+tt.name, func(t *testing.T) {
+						tmp := t.TempDir()
+						t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+						t.Setenv("HOME", tmp)
+						old, _ := os.Getwd()
+						defer os.Chdir(old)
+						if err := os.Chdir(tmp); err != nil {
+							t.Fatal(err)
+						}
+						theme := "\n[" + table + "]\n" + field + " = " + strconv.Quote(tt.value) + "\n"
+						if scope == "global" {
+							write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), base+theme)
+						} else {
+							write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), base)
+							write(t, filepath.Join(tmp, ".lanes.toml"), theme)
+						}
+						_, err := Load()
+						if (err != nil) != tt.wantErr {
+							t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+						}
+						if err != nil && !strings.Contains(err.Error(), key+" "+strconv.Quote(tt.value)) {
+							t.Errorf("error %q does not name the key and value", err)
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
+func TestThemeAgentViewProjectMerge(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+	t.Setenv("HOME", tmp)
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[theme.agent_view]
+opus = "#111111"
+sonnet = "#222222"
+[theme.dark.agent_view]
+track = "#333333"
+`)
+	write(t, filepath.Join(tmp, ".lanes.toml"), `
+[theme.agent_view]
+sonnet = "#aaaaaa"
+haiku = "#bbbbbb"
+[theme.light.agent_view]
+accent = "#cccccc"
+`)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		table     string
+		got, want AgentView
+	}{
+		{"theme.agent_view", c.Theme.AgentView, AgentView{Opus: "#111111", Sonnet: "#aaaaaa", Haiku: "#bbbbbb"}},
+		{"theme.light.agent_view", c.Theme.Light.AgentView, AgentView{Accent: "#cccccc"}},
+		{"theme.dark.agent_view", c.Theme.Dark.AgentView, AgentView{Track: "#333333"}},
+	}
+	for _, tt := range tests {
+		if tt.got != tt.want {
+			t.Errorf("[%s] = %+v, want %+v (merged per field)", tt.table, tt.got, tt.want)
+		}
+	}
+}

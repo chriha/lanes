@@ -31,8 +31,25 @@ type Palette struct {
 	Text, Dim, Accent, Track, Opus, Sonnet, Haiku, OK, Bad, Selection lipgloss.AdaptiveColor
 }
 
-// NeonPalette is the agent view's default palette: neon colors on dark terminals, a toned-down variant on light.
-func NeonPalette() Palette { return Palette{} }
+// NeonPalette is the agent view's default palette: magenta, cyan and yellow families with a violet accent on a
+// deep track on dark terminals; a toned-down variant of the same hues, readable on white, on light terminals.
+func NeonPalette() Palette {
+	ac := func(light, dark string) lipgloss.AdaptiveColor {
+		return lipgloss.AdaptiveColor{Light: light, Dark: dark}
+	}
+	return Palette{
+		Text:      ac("#1B1530", "#E8F4FF"),
+		Dim:       ac("#6E6888", "#7A75A8"),
+		Accent:    ac("#6A1FB0", "#B26BFF"),
+		Track:     ac("#E2D8F0", "#2B1F4A"),
+		Opus:      ac("#A3108F", "#FF4FE3"),
+		Sonnet:    ac("#00707F", "#00F0FF"),
+		Haiku:     ac("#7A5C00", "#FFE600"),
+		OK:        ac("#1A6E1A", "#39FF14"),
+		Bad:       ac("#C0102E", "#FF3B5C"),
+		Selection: ac("#F3DDF7", "#3D1A5B"),
+	}
+}
 
 // Theme holds each role's ANSI prefix and suffix, rendered once so the canvas styles a run by concatenation.
 type Theme struct {

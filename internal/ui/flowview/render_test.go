@@ -53,17 +53,17 @@ func TestAgentBox(t *testing.T) {
 		without string   // must not appear anywhere in the box
 	}{
 		{"running", base, false,
-			[]string{"╭─ implementer ─", "│ opus 4.1 ▮▮▮▯ high │", "│ ctx", "│ slice 2 of #196 │", "╰─ ◓ 9m00s ▸ Bash go test ─"}, ""},
+			[]string{"┏━ implementer ━", "┃ opus 4.1 ▮▮▮▯ high ┃", "┃ ctx", "┃ slice 2 of #196 ┃", "┗━ ◓ 9m00s ▸ Bash go test ━"}, ""},
 		{"unknown effort omits the meter", with(func(a *session.Agent) { a.Effort = "" }), false,
-			[]string{"", "│ opus 4.1 │"}, "▮"},
+			[]string{"", "┃ opus 4.1 ┃"}, "▮"},
 		{"running without a tool", with(func(a *session.Agent) { a.Tool, a.ToolArg = "", "" }), false,
-			[]string{"", "", "", "", "╰─ ◓ running 9m00s ─"}, "▸"},
+			[]string{"", "", "", "", "┗━ ◓ running 9m00s ━"}, "▸"},
 		{"done", with(func(a *session.Agent) { a.Status, a.End = session.AgentDone, a.Start.Add(time.Minute) }), false,
-			[]string{"", "", "", "", "╰─ ✓ done 1m00s ─"}, "▸"},
+			[]string{"", "", "", "", "┗━ ✓ done 1m00s ━"}, "▸"},
 		{"failed", with(func(a *session.Agent) { a.Status, a.End = session.AgentError, a.Start.Add(time.Minute) }), false,
-			[]string{"", "", "", "", "╰─ ✗ failed 1m00s ─"}, "▸"},
+			[]string{"", "", "", "", "┗━ ✗ failed 1m00s ━"}, "▸"},
 		{"running in an ended session is stopped", base, true,
-			[]string{"", "", "", "", "╰─ ■ stopped 9m00s ─"}, "◓"},
+			[]string{"", "", "", "", "┗━ ■ stopped 9m00s ━"}, "◓"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -117,7 +117,7 @@ func TestAgentBoxContextGauge(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := NewCanvas(28, 5, nil)
 			State{}.drawAgent(c, Rect{0, 0, 28, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: tt.ctx})
-			if got := strings.TrimSpace(strings.Trim(rows(c)[2], "│")); got != tt.want {
+			if got := strings.TrimSpace(strings.Trim(rows(c)[2], "┃")); got != tt.want {
 				t.Errorf("ctx row = %q, want %q", got, tt.want)
 			}
 		})
@@ -157,8 +157,8 @@ func TestLeadBox(t *testing.T) {
 		want    string
 		without string
 	}{
-		{"effort meter and level", fixtureState(), "│ opus 4.1 · lead ▮▮▮▯ high │", ""},
-		{"unknown effort omits both", noEffort, "│ opus 4.1 · lead │", "▮"},
+		{"effort meter and level", fixtureState(), "║ opus 4.1 · lead ▮▮▮▯ high ║", ""},
+		{"unknown effort omits both", noEffort, "║ opus 4.1 · lead ║", "▮"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -233,9 +233,9 @@ func TestAgentBoxTitleFitsTheName(t *testing.T) {
 		want   string
 		maxBox int
 	}{
-		{"a name wider than the default box widens it", 200, 50, "a-rather-long-agent-name-here", "─ a-rather-long-agent-name-here ─", 200},
-		{"on a narrow terminal too", 60, 46, "code-reviewer", "─ code-reviewer ─", 60},
-		{"a name wider than the row is cut", 90, 46, strings.Repeat(long, 3), "─ " + strings.Repeat("x", 60) + "… ─", 90},
+		{"a name wider than the default box widens it", 200, 50, "a-rather-long-agent-name-here", "━ a-rather-long-agent-name-here ━", 200},
+		{"on a narrow terminal too", 60, 46, "code-reviewer", "━ code-reviewer ━", 60},
+		{"a name wider than the row is cut", 90, 46, strings.Repeat(long, 3), "━ " + strings.Repeat("x", 60) + "… ━", 90},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -360,41 +360,41 @@ func TestSessionColumn(t *testing.T) {
 		without []string       // must not appear anywhere in the column
 	}{
 		{"the whole dashboard", fixtureState(), 38, map[int]string{
-			0:  "╭─ session ─",
-			1:  "│ issue-196 12m03s │",
-			2:  "│ ctx 61% │",
-			3:  "│ ███████████░░░░░░░ │",
-			4:  "│ effort ▮▮▮▯ high │",
-			6:  "│ activity 3/min │",
-			7:  "│ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄ │",
-			9:  "│ ◆ working │",
-			10: "│ ┆ │",
-			11: "│ ◇ asking │",
-			12: "│ ┆ │",
-			13: "│ ◇ waiting │",
-			15: "│ turns 12 │",
-			16: "│ tools 48 │",
-			17: "│ tokens 1,234,567 │",
-			18: "│ in 12,345 │",
-			19: "│ out 98,765 │",
-			20: "│ cache 1,123,457 │",
-			21: "│ agents ◓2 ✓1 ✗1 │",
-			23: "│ files │",
-			24: "│ render_panels.go │",
-			27: "│ README.md │",
-			29: "│ last: │",
-			30: "│ Slice 2 is next: │",
-			34: "│ advisor opus 4.1 │",
-			35: "│ calls 3 │",
-			37: "╰──",
+			0:  "┏━ session ━",
+			1:  "┃ issue-196 12m03s ┃",
+			2:  "┃ ctx 61% ┃",
+			3:  "┃ ███████████░░░░░░░ ┃",
+			4:  "┃ effort ▮▮▮▯ high ┃",
+			6:  "┃ activity 3/min ┃",
+			7:  "┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄ ┃",
+			9:  "┃ ◆ working ┃",
+			10: "┃ ┆ ┃",
+			11: "┃ ◇ asking ┃",
+			12: "┃ ┆ ┃",
+			13: "┃ ◇ waiting ┃",
+			15: "┃ turns 12 ┃",
+			16: "┃ tools 48 ┃",
+			17: "┃ tokens 1,234,567 ┃",
+			18: "┃ in 12,345 ┃",
+			19: "┃ out 98,765 ┃",
+			20: "┃ cache 1,123,457 ┃",
+			21: "┃ agents ◓2 ✓1 ✗1 ┃",
+			23: "┃ files ┃",
+			24: "┃ render_panels.go ┃",
+			27: "┃ README.md ┃",
+			29: "┃ last: ┃",
+			30: "┃ Slice 2 is next: ┃",
+			34: "┃ advisor opus 4.1 ┃",
+			35: "┃ calls 3 ┃",
+			37: "┗━━",
 		}, nil},
-		{"unknown effort omits its row", noEffort, 38, map[int]string{4: "", 5: "│ activity 3/min │"}, []string{"effort", "▮"}},
-		{"unknown context", noCtx, 38, map[int]string{2: "│ ctx -- │", 3: "│ ░░░░░░░░░░░░░░░░░░ │"}, nil},
+		{"unknown effort omits its row", noEffort, 38, map[int]string{4: "", 5: "┃ activity 3/min ┃"}, []string{"effort", "▮"}},
+		{"unknown context", noCtx, 38, map[int]string{2: "┃ ctx -- ┃", 3: "┃ ░░░░░░░░░░░░░░░░░░ ┃"}, nil},
 		{"no advisor, no advisor rows", noAdvisor, 38, map[int]string{34: "", 35: ""}, []string{"advisor"}},
-		{"no files, no files rows", noFiles, 38, map[int]string{23: "│ last: │"}, []string{"files"}},
-		{"ended: no checkpoint is active and no agent runs", ended, 38, map[int]string{9: "│ ◇ working │", 21: "│ agents ■0 ✓1 ✗1 │"}, []string{"◆", "◓"}},
-		{"double-digit agent counts fit", tenAgents, 38, map[int]string{21: "│ agents ◓10 ✓1 ✗1 │"}, nil},
-		{"rows past the bottom are left out", fixtureState(), 11, map[int]string{9: "│ ◆ working │", 10: "╰──"}, []string{"asking", "last:"}},
+		{"no files, no files rows", noFiles, 38, map[int]string{23: "┃ last: ┃"}, []string{"files"}},
+		{"ended: no checkpoint is active and no agent runs", ended, 38, map[int]string{9: "┃ ◇ working ┃", 21: "┃ agents ■0 ✓1 ✗1 ┃"}, []string{"◆", "◓"}},
+		{"double-digit agent counts fit", tenAgents, 38, map[int]string{21: "┃ agents ◓10 ✓1 ✗1 ┃"}, nil},
+		{"rows past the bottom are left out", fixtureState(), 11, map[int]string{9: "┃ ◆ working ┃", 10: "┗━━"}, []string{"asking", "last:"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -403,7 +403,7 @@ func TestSessionColumn(t *testing.T) {
 			got := rows(c)
 			for i, w := range tt.want {
 				g := strings.Join(strings.Fields(got[i]), " ")
-				if w == "" && strings.Trim(g, "│ ") != "" || w != "" && !strings.Contains(g, w) {
+				if w == "" && strings.Trim(g, "┃ ") != "" || w != "" && !strings.Contains(g, w) {
 					t.Errorf("row %d = %q, want it to hold %q", i, got[i], w)
 				}
 			}
@@ -426,5 +426,83 @@ func TestSessionColumnHighlightsTheHookState(t *testing.T) {
 	}
 	if got := c.At(2, 7).Role; got != RoleOpus {
 		t.Errorf("sparkline drawn in role %d, want the lead's family", got)
+	}
+}
+
+func TestHeaderGlowsInTheAccent(t *testing.T) {
+	c := NewCanvas(90, 3, nil)
+	fixtureState().drawHeader(c, NewLayout(90, 24))
+	for _, p := range []Point{{1, 0}, {5, 0}, {0, 1}, {89, 1}} { // "AGENT VIEW" and both ends of the rule
+		if got := c.At(p.X, p.Y).Role; got != RoleAccent {
+			t.Errorf("header cell %v %q role %d, want the accent", p, c.At(p.X, p.Y).R, got)
+		}
+	}
+}
+
+func TestTracksAreDrawnInTheTrackRole(t *testing.T) {
+	// trackRoles collects the roles of the ░ track cells and ▁ zero sparks of row y.
+	trackRoles := func(c *Canvas, y int, empty rune) map[Role]int {
+		got := map[Role]int{}
+		for x := 0; x < c.W; x++ {
+			if cell := c.At(x, y); cell.R == empty {
+				got[cell.Role]++
+			}
+		}
+		return got
+	}
+	agent := NewCanvas(boxMinW, 5, nil)
+	State{}.drawAgent(agent, Rect{0, 0, boxMinW, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: 50})
+	col := NewCanvas(sessionW, 37, nil)
+	fixtureState().drawSession(col, Rect{0, 0, sessionW, 37})
+	tools := NewCanvas(leadW, 6, nil)
+	fixtureState().drawTools(tools, Rect{0, 0, leadW, 6})
+	tests := []struct {
+		name  string
+		c     *Canvas
+		y     int
+		empty rune
+	}{
+		{"agent box ctx gauge", agent, 2, '░'},
+		{"session ctx gauge", col, 3, '░'},
+		{"session activity sparkline", col, 7, '▁'},
+		{"tool bar", tools, 2, '░'},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := trackRoles(tt.c, tt.y, tt.empty)
+			if len(got) != 1 || got[RoleTrack] == 0 {
+				t.Errorf("track cells by role = %v, want all in RoleTrack (%d)", got, RoleTrack)
+			}
+		})
+	}
+}
+
+func TestBorders(t *testing.T) {
+	lead := NewCanvas(leadW, 5, nil)
+	fixtureState().drawLead(lead, Rect{0, 0, leadW, 5})
+	agent := NewCanvas(boxMinW, 5, nil)
+	State{}.drawAgent(agent, Rect{0, 0, boxMinW, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1"})
+	tools := NewCanvas(leadW, 6, nil)
+	fixtureState().drawTools(tools, Rect{0, 0, leadW, 6})
+	col := NewCanvas(sessionW, 37, nil)
+	fixtureState().drawSession(col, Rect{0, 0, sessionW, 37})
+	tests := []struct {
+		name    string
+		c       *Canvas
+		corners string // top left, top right, bottom left, bottom right
+	}{
+		{"lead: double", lead, "╔╗╚╝"},
+		{"agent box: heavy", agent, "┏┓┗┛"},
+		{"tool layer: heavy", tools, "┏┓┗┛"},
+		{"session column: heavy", col, "┏┓┗┛"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := tt.c
+			got := string([]rune{c.At(0, 0).R, c.At(c.W-1, 0).R, c.At(0, c.H-1).R, c.At(c.W-1, c.H-1).R})
+			if got != tt.corners {
+				t.Errorf("corners = %q, want %q", got, tt.corners)
+			}
+		})
 	}
 }

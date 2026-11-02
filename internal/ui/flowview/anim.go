@@ -61,8 +61,9 @@ func (m *Model) Step(dt time.Duration) {
 	m.typed = min(m.typed+typeRate*dt.Seconds(), float64(len([]rune(lead.LastText))))
 }
 
-// stream sends the packets due after dt on the streaming edges: each running agent's from its parent. An edge that starts streaming sends its first packet after its jitter, so
-// edges don't move in lockstep; a packet due while the edge has maxInFlight on their way is dropped.
+// stream sends the packets due after dt on each running agent's edge from its
+// parent. An edge that starts streaming sends its first packet after its jitter, so edges don't move in lockstep;
+// a packet due while the edge has maxInFlight on their way is dropped.
 func (m *Model) stream(dt time.Duration) {
 	ids := make([]string, 0, len(m.st.Snap.Agents))
 	for _, a := range m.st.Snap.Agents {

@@ -1,6 +1,9 @@
 package flowview
 
-import "strings"
+import (
+	"math"
+	"strings"
+)
 
 // shades are the bar's edge glyphs from light to dark.
 var shades = [3]rune{'░', '▒', '▓'}
@@ -29,8 +32,26 @@ func (c *Canvas) Bar(x, y, w int, v float64, phase int, fill, track Role) {
 	}
 }
 
-// Gauge draws a w-cell gauge filled to v (clamped to 0..1) at x, y in eighths of a cell. Not implemented yet.
-func (c *Canvas) Gauge(x, y, w int, v float64, fill, track Role) {}
+// eighths are a cell filled from the left by one to seven eighths.
+var eighths = [...]rune{'▏', '▎', '▍', '▌', '▋', '▊', '▉'}
+
+// Gauge draws a w-cell gauge filled to v (clamped to 0..1, rounded to the nearest eighth of a cell) at x, y: full
+// cells as █ and the partly filled edge cell as an eighth block in fill, the rest as a ░ track in track. Unlike Bar
+// it does not shimmer: one step is an eighth of a cell, so the fill reads as the value.
+func (c *Canvas) Gauge(x, y, w int, v float64, fill, track Role) {
+	v = min(max(v, 0), 1)
+	n := int(math.Round(v * float64(w*8)))
+	for i := 0; i < w; i++ {
+		switch e := n - i*8; {
+		case e >= 8:
+			c.Set(x+i, y, '█', fill)
+		case e > 0:
+			c.Set(x+i, y, eighths[e-1], fill)
+		default:
+			c.Set(x+i, y, '░', track)
+		}
+	}
+}
 
 // effortMeter is the 4-cell meter of an effort level: low ▮▯▯▯, medium ▮▮▯▯, high ▮▮▮▯, xhigh and max ▮▮▮▮; ""
 // for an unknown level.

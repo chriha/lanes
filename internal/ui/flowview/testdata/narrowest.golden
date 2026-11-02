@@ -1,11 +1,11 @@
- AGENT VIEW · issue-196                        live 
+ AGENT VIEW · issue-196                             
 ════════════════════════════════════════════════════
             ■ opus   ■ sonnet   ■ haiku             
 ╭─ session ──────────╮ ╭────────────────────────────
-│ issue-196   12m03s │ │         opus 4.1 · lead    
-│ ctx █████▓░░░  61% │ │        Agent implementer   
-│ effort ▮▮▮▯ high   │ │         ◓ working 12m03s   
-│                    │ ╰────────────────────────────
+│ issue-196   12m03s │ │    opus 4.1 · lead ▮▮▮▯ hig
+│ ctx            61% │ │        Agent implementer   
+│ ███████████░░░░░░░ │ │         ◓ working 12m03s   
+│ effort ▮▮▮▯ high   │ ╰────────────────────────────
 ╰────────────────────╯                   │          
                          lines 1-6/45  cols 1-29/36 
 ──┤ session log ├───────────────────────────────────

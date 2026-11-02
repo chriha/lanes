@@ -61,12 +61,13 @@ func TestAgentKeyOpensTheView(t *testing.T) {
 		cursor   int      // sessions screen cursor
 		claude   []string // sessions with a recorded Claude transcript
 		want     string   // session the view opens on, "" for none
+		header   string   // what the header names
 		notice   string
 	}{
-		{name: "item: newest Claude session", claude: []string{"fix~1", "review~1"}, want: "fix~1"},
-		{name: "item: skips sessions without Claude", claude: []string{"review~1"}, want: "review~1"},
+		{name: "item: newest Claude session", claude: []string{"fix~1", "review~1"}, want: "fix~1", header: "first"},
+		{name: "item: skips sessions without Claude", claude: []string{"review~1"}, want: "review~1", header: "first"},
 		{name: "item: no Claude session", notice: "no Claude session for this item"},
-		{name: "sessions screen: selected session", sessions: true, cursor: 1, claude: []string{"fix~1", "review~1"}, want: "review~1"},
+		{name: "sessions screen: selected session", sessions: true, cursor: 1, claude: []string{"fix~1", "review~1"}, want: "review~1", header: "review~1"},
 		{name: "sessions screen: no Claude session", sessions: true, claude: []string{"review~1"}, notice: "no Claude session in fix~1"},
 	}
 	for _, tt := range tests {
@@ -99,8 +100,12 @@ func TestAgentKeyOpensTheView(t *testing.T) {
 			if cmd == nil {
 				t.Error("opening returned no command: no first read, no tick")
 			}
-			if v := ansi.Strip(m.View()); !strings.Contains(v, "AGENT VIEW · "+tt.want) {
-				t.Errorf("view does not show the agent view of %s:\n%s", tt.want, v)
+			v := ansi.Strip(m.View())
+			if !strings.Contains(v, "AGENT VIEW · "+tt.header) {
+				t.Errorf("header does not name %q:\n%s", tt.header, v)
+			}
+			if !strings.Contains(v, "│ "+tt.want+" ") {
+				t.Errorf("session column does not name %s:\n%s", tt.want, v)
 			}
 		})
 	}

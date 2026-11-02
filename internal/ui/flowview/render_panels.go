@@ -72,15 +72,22 @@ func (c *Canvas) centerSegs(r Rect, y int, runs ...seg) {
 	c.segs(r.X+(r.W-n)/2, y, n, runs...)
 }
 
-// ctxRow draws a context gauge in w cells from x: the label, a shimmering bar and the percent, or -- when unknown.
-func (c *Canvas) ctxRow(x, y, w, ctx, phase int, fill, text Role) {
-	pct := "  --"
-	if ctx >= 0 {
-		pct = fmt.Sprintf("%3d%%", ctx)
+// ctxPct is a context use as a whole percent, -- when unknown.
+func ctxPct(ctx int) string {
+	if ctx < 0 {
+		return "--"
 	}
+	return fmt.Sprintf("%d%%", ctx)
+}
+
+// ctxFill is a context use as the fraction a gauge is filled to, empty when unknown.
+func ctxFill(ctx int) float64 { return float64(max(ctx, 0)) / 100 }
+
+// ctxRow draws a context gauge in w cells from x: the label, the gauge and the percent.
+func (c *Canvas) ctxRow(x, y, w, ctx int, fill, text Role) {
 	c.Text(x, y, "ctx", RoleDim)
-	c.Bar(x+4, y, w-9, float64(max(ctx, 0))/100, phase, fill, RoleDim)
-	c.Text(x+w-4, y, pct, text)
+	c.Gauge(x+4, y, w-9, ctxFill(ctx), fill, RoleDim)
+	c.Text(x+w-4, y, fmt.Sprintf("%4s", ctxPct(ctx)), text)
 }
 
 // spread draws left at the start and right at the end of w cells from x.
@@ -98,14 +105,15 @@ func (c *Canvas) titled(r Rect, title string, role, titleRole Role) {
 	}
 }
 
+// drawHeader draws the header, AGENT VIEW and the item's title (the session's name when unknown), its rule and the
+// legend of the model families under it.
 func (s State) drawHeader(c *Canvas, l Layout) {
 	f := l.Frame
-	c.textIn(f.X+1, f.Y, f.W-8, "AGENT VIEW · "+s.Title, RoleBold)
-	state, role := "live", RoleOK
-	if s.Ended {
-		state, role = "ended", RoleBad
+	title := s.Item
+	if title == "" {
+		title = s.Title
 	}
-	c.Text(f.X+f.W-1-len(state), f.Y, state, role)
+	c.textIn(f.X+1, f.Y, f.W-2, "AGENT VIEW · "+title, RoleBold)
 	c.HLine(f.X, f.X+f.W-1, f.Y+1, '═', RoleDim)
 	x := f.X + (f.W-28)/2
 	for _, fam := range knownFamilies {
@@ -146,7 +154,8 @@ func (s State) drawSession(c *Canvas, r Rect) {
 	}
 	rows := []func(y int){
 		label(s.Title, since(s.Start, s.Now), RoleText),
-		func(y int) { c.ctxRow(x, y, w, lead.Ctx, s.Phase, role, RoleBold) },
+		label("ctx", ctxPct(lead.Ctx), RoleBold),
+		func(y int) { c.Gauge(x, y, w, ctxFill(lead.Ctx), role, RoleDim) },
 	}
 	if m := effortMeter(lead.Effort); m != "" {
 		rows = append(rows, func(y int) {
@@ -228,11 +237,17 @@ func (s State) drawSession(c *Canvas, r Rect) {
 	}
 }
 
+// drawLead draws the lead box: the model and the effort meter with its level (left out when unknown), the current
+// tool and the hook state with the session's age.
 func (s State) drawLead(c *Canvas, r Rect) {
 	lead := s.Snap.Lead
 	role := ModelRole(lead.Model)
 	c.Box(r, border, role)
-	c.center(r, r.Y+1, strings.TrimSpace(shortModel(lead.Model)+" · lead"), role)
+	row := []seg{{strings.TrimSpace(shortModel(lead.Model) + " · lead"), role}}
+	if m := effortMeter(lead.Effort); m != "" {
+		row = append(row, seg{" " + m, role}, seg{" " + strings.ToLower(lead.Effort), RoleDim})
+	}
+	c.centerSegs(r, r.Y+1, row...)
 	if lead.Tool != "" {
 		c.center(r, r.Y+2, strings.TrimSpace(lead.Tool+" "+lead.ToolArg), RoleText)
 	} else {

@@ -59,6 +59,7 @@ type head struct {
 
 type fetchedMsg struct {
 	name    string
+	gen     int // fetchState.gen when the fetch started
 	items   []item.Item
 	err     error
 	partial bool // quick result; a full one follows
@@ -81,6 +82,7 @@ type Model struct {
 	// fullFetched marks providers with a full result in this run; their polls skip the Quick pass.
 	fullFetched map[string]bool
 	loading     map[string]bool
+	fetches     map[string]*fetchState // by provider; created on first fetch
 	provErr     map[string]error
 	fails       map[string]int       // consecutive failed fetches per provider
 	retryAt     map[string]time.Time // no refetch before this

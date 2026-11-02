@@ -120,7 +120,7 @@ func TestCanvasGaugeSteps(t *testing.T) {
 		last := -1
 		for ctx := 0; ctx <= 100; ctx += 5 {
 			c := NewCanvas(w, 1, nil)
-			c.Gauge(0, 0, w, ctxFill(ctx), RoleHaiku, RoleDim)
+			c.Gauge(0, 0, w, float64(ctx)/100, RoleHaiku, RoleDim)
 			g := c.String()
 			if prev, ok := seen[g]; ok {
 				t.Errorf("width %d: ctx %d%% and %d%% both draw %q", w, prev, ctx, g)

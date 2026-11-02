@@ -101,7 +101,11 @@ an env var).
   line, and between them a viewport onto the diagram (lead with its effort and the tools box right of it, agent tree). The diagram is
   drawn whole on its own canvas and the visible window is blitted in; `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G` and
   `h`/`l` move the window, clamped at the edges, kept across snapshots, shown as `lines a-b/n  cols a-b/n` above
-  the log. Boxes are 28–30 cols (widened for long names, never narrower), as many per row as fit, every agent drawn
+  the log. `tab` / `shift+tab` cycle the focus session column → diagram → session log (the diagram on open); the
+  focused area has its border / title in the accent and takes the scroll keys, so the others stay put. The session
+  log is a closed rounded box of 4 lines (`time actor message`, the actor in its family color, failed calls in the
+  bad color) holding the newest 200 lines: it follows the newest line until scrolled up, then holds its place
+  while lines append and shows `n/total` in its top border; `G` follows again. Boxes are 28–30 cols (widened for long names, never narrower), as many per row as fit, every agent drawn
   (a depth wraps into as many lines as it needs); a viewport narrower than a box scrolls sideways. Every ctx bar
   (agent boxes and the lead in the session column) is 10 `▬` segments and the tools box's bars are 10 `■` segments,
   each in 5% steps (nearest 5%, drawn with a half-filled `▌` cell, at least a half cell above 0); the tools and agent ctx
@@ -116,7 +120,11 @@ an env var).
   comes from `session.Tailer` (`internal/session/transcript.go`), which reads only the new bytes of the
   transcript the hooks recorded (`transcript_path` in the session's sidecar) and of `<session>/subagents/
   agent-<id>.{jsonl,meta.json}`; `internal/ui/agents.go` polls it in a `tea.Cmd` every 500 ms and hands the
-  snapshot over as a message. Context % uses one model-id table (`session.ContextWindow`, 200k default, 1M for
+  snapshot over as a message. Each snapshot carries the log events since the last poll (`Snapshot.Events`, each
+  once): tool calls once their result is in (with a failure flag, at the call's time), the first line of each
+  assistant text, and the spawns, finishes and failures it diffs against the last snapshot, for the lead and every
+  agent, ordered by time; lines without a timestamp or a tool name give no event. The view adds the lead's hook
+  state changes on `HookEvent`. Context % uses one model-id table (`session.ContextWindow`, 200k default, 1M for
   `[1m]`). Effort is the newest `effort` field per transcript (absent → the meter is omitted). An ended session is
   read once more and frozen.
 

@@ -725,16 +725,27 @@ anything because the terminal is small. It shows, top to bottom:
   agent's newest text, at most 60 characters, cut to the box; it changes while the agent runs, and a done or
   failed agent keeps its last text, dimmed. Every agent is drawn: as many boxes as fit go side by side,
   and a depth that doesn't fit one line wraps into as many lines as it needs.
-- **session log** — spawns, finishes and failures, with their time. The name column fits names of up to 20
-  characters.
+- **session log** — a closed box of 4 lines, newest at the bottom, of everything the lead and the agents do:
+  their tool calls (`Read file.go`, `Bash go test ./…`; failed calls in red), the first line of each of their
+  texts, spawns, finishes and failures, and the lead's hook state changes (`working`, `asking`, `waiting`). Each
+  line is `time actor message`, the actor in its model family's color; the name column fits names of up to 20
+  characters. It keeps the newest 200 lines; an ended session keeps its log.
 - **status line** — one entry per model family in its color, e.g. `opus [2 running]`, `sonnet [1 failed]`,
   `haiku [done]`; then `agents [running/total]`, `tools [n]`, `tokens [n]` and `● live` or `■ ended`.
+
+**Focus.** `tab` and `shift+tab` move the focus between the session column, the diagram and the session log (and
+around); the diagram has it when the view opens. The focused area is highlighted in the accent color (the
+diagram's name shows above the log) and takes the scroll keys; the others stay where they are.
 
 **Scrolling.** The diagram (lead, tools box and agent tree) scrolls as one block when it is higher or wider than the
 space between the session column and the log: `j`/`k` (or the arrows) a line, `ctrl-d`/`ctrl-u` half a page,
 `g`/`G` to the top/bottom, `h`/`l` (or the arrows) a column sideways when it is wider than the terminal. Scrolling
 stops at the edges and keeps its place as the session updates. The header, legend, session column, log and status
-line stay put; above the log, `lines 1-6/45` and `cols 1-29/36` show where you are (nothing when it all fits).
+line stay put; above the log, `lines 1-6/45` and `cols 1-29/36` show where you are (nothing when it all fits and
+the diagram has no focus). The session log scrolls back with the same keys: it follows the newest line until you
+scroll up; then it stays put while new lines come in, its top border shows the newest line shown and the total
+(`12/87`), and `G` (or scrolling back to the bottom) follows the newest line again. The session column scrolls
+when it is taller than the terminal.
 
 **Look.** The view has its own neon palette: opus magenta, sonnet cyan, haiku yellow, a violet header, heavy box
 borders with a double one around the lead, and bars that light up over a deep track. Light terminals get a

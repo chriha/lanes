@@ -365,9 +365,9 @@ func TestLogActorColumn(t *testing.T) {
 			for _, n := range tt.agents {
 				s.Snap.Agents = append(s.Snap.Agents, session.Agent{Name: n})
 			}
-			c := NewCanvas(60, 2, nil)
-			s.drawLog(c, Rect{0, 0, 60, 2})
-			if got := strings.TrimSpace(rows(c)[1]); got != tt.want {
+			c := NewCanvas(60, 3, nil)
+			s.drawLog(c, Rect{0, 0, 60, 3})
+			if got := strings.TrimSpace(strings.Trim(rows(c)[1], "│")); got != tt.want {
 				t.Errorf("log line = %q, want %q", got, tt.want)
 			}
 		})

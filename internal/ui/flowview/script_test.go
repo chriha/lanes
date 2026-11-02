@@ -27,12 +27,19 @@ func script() []cue {
 	revFailed, implDone := rev, impl
 	revFailed.Status, revFailed.End = session.AgentError, at(4)
 	implDone.Status, implDone.End = session.AgentDone, at(6)
+	ev := func(s int, actor, model, text string) []session.LogEvent {
+		return []session.LogEvent{{At: at(s), Actor: actor, Model: model, Text: text}}
+	}
 	return []cue{
 		{0, HookEvent{"working"}},
-		{1 * time.Second, SnapshotEvent{session.Snapshot{Lead: lead(2, 1, "spawning the implementer"), Agents: []session.Agent{impl}}}},
-		{3 * time.Second, SnapshotEvent{session.Snapshot{Lead: lead(3, 1, "waiting"), Agents: []session.Agent{impl, rev}}}},
-		{4 * time.Second, SnapshotEvent{session.Snapshot{Lead: lead(3, 1, "waiting"), Agents: []session.Agent{impl, revFailed}}}},
-		{6 * time.Second, SnapshotEvent{session.Snapshot{Lead: lead(5, 2, "slice shipped"), Agents: []session.Agent{implDone, revFailed}}}},
+		{1 * time.Second, SnapshotEvent{session.Snapshot{Lead: lead(2, 1, "spawning the implementer"), Agents: []session.Agent{impl},
+			Events: ev(1, "lead", impl.Model, "spawned implementer")}}},
+		{3 * time.Second, SnapshotEvent{session.Snapshot{Lead: lead(3, 1, "waiting"), Agents: []session.Agent{impl, rev},
+			Events: ev(3, "implementer", impl.Model, "spawned reviewer")}}},
+		{4 * time.Second, SnapshotEvent{session.Snapshot{Lead: lead(3, 1, "waiting"), Agents: []session.Agent{impl, revFailed},
+			Events: ev(4, "reviewer", rev.Model, "failed")}}},
+		{6 * time.Second, SnapshotEvent{session.Snapshot{Lead: lead(5, 2, "slice shipped"), Agents: []session.Agent{implDone, revFailed},
+			Events: ev(6, "implementer", impl.Model, "done")}}},
 		{7 * time.Second, HookEvent{"waiting"}},
 		{9 * time.Second, EndEvent{}},
 	}
@@ -80,7 +87,7 @@ func TestScriptedSession(t *testing.T) {
 	for _, l := range f.Log {
 		log = append(log, l.Actor+" "+l.Text)
 	}
-	want := "lead spawned implementer\nimplementer spawned reviewer\nreviewer failed\nimplementer done"
+	want := "lead spawned implementer\nimplementer spawned reviewer\nreviewer failed\nimplementer done\nlead waiting"
 	if got := strings.Join(log, "\n"); got != want {
 		t.Errorf("log:\n%s\nwant:\n%s", got, want)
 	}

@@ -14,7 +14,7 @@ const (
 	packetTime = 800 * time.Millisecond // a packet's trip along its connector
 	easeTime   = 400 * time.Millisecond // a counter covers a step's share dt/easeTime of the gap to its target
 	typeRate   = 40.0                   // runes per second the typewriter types
-	maxLog     = 100                    // session log lines kept
+	maxLog     = 200                    // session log lines kept
 
 	streamEvery = 1200 * time.Millisecond // a running edge sends a packet about this often, jittered per edge
 	streamJit   = 400 * time.Millisecond  // the spread of the per-edge interval around streamEvery
@@ -140,12 +140,17 @@ func ease(cur, target int, dt time.Duration) int {
 }
 
 // Apply takes an event into the view's state: a snapshot sends a packet down for agents that spawned, a burst up
-// for those that finished, and log lines for both since the last one, a hook event moves the checkpoint, the end event freezes the view.
+// for those that finished, and logs its events; a hook event moves the checkpoint and logs a change from a known
+// state; the end event
+// freezes the view.
 func (m *Model) Apply(ev Event) {
 	switch ev := ev.(type) {
 	case SnapshotEvent:
 		m.applySnapshot(ev.Snap)
 	case HookEvent:
+		if m.st.Hook != "" && ev.Hook != "" && ev.Hook != m.st.Hook { // the first state is no change
+			m.appendLog(LogLine{At: m.st.Now, Actor: "lead", Model: m.st.Snap.Lead.Model, Text: ev.Hook})
+		}
 		m.st.Hook = ev.Hook
 	case EndEvent:
 		m.st.Ended = true
@@ -160,49 +165,38 @@ func (m *Model) applySnapshot(snap session.Snapshot) {
 		m.typed = 0
 	}
 	m.st.Snap = snap
-	byID := make(map[string]session.Agent, len(snap.Agents))
-	for _, a := range snap.Agents {
-		byID[a.ID] = a
-	}
-	spawner := func(a session.Agent) (string, string) {
-		if p, ok := byID[a.Parent]; ok {
-			return p.Name, p.Model
-		}
-		return "lead", snap.Lead.Model
-	}
-	var lines []LogLine
 	for _, a := range snap.Agents {
 		prev, seen := m.seen[a.ID]
-		if !seen {
-			actor, model := spawner(a)
-			lines = append(lines, LogLine{At: m.at(a.Start), Actor: actor, Model: model, Text: "spawned " + a.Name})
-			if m.primed && a.Status == session.AgentRunning {
-				m.packets = append(m.packets, Packet{Agent: a.ID})
-				if m.due == nil {
-					m.due = map[string]time.Duration{}
-				}
-				m.due[a.ID] = every(a.ID)
+		if !seen && m.primed && a.Status == session.AgentRunning {
+			m.packets = append(m.packets, Packet{Agent: a.ID})
+			if m.due == nil {
+				m.due = map[string]time.Duration{}
 			}
+			m.due[a.ID] = every(a.ID)
 		}
-		if a.Status == session.AgentRunning || seen && prev != session.AgentRunning {
-			continue // not finished, or finished before
+		if a.Status == session.AgentRunning || seen && prev != session.AgentRunning || !m.primed {
+			continue // not finished, finished before, or history
 		}
-		text := "done"
-		if a.Status == session.AgentError {
-			text = "failed"
-		}
-		lines = append(lines, LogLine{At: m.at(a.End), Actor: a.Name, Model: a.Model, Text: text})
-		if m.primed {
-			m.drop(a.ID) // the burst replaces the stream: at most burstSize packets on the edge
-			for i := 0; i < burstSize; i++ {
-				m.packets = append(m.packets, Packet{Agent: a.ID, Up: true, Pos: -burstGap * float64(i)})
-			}
+		m.drop(a.ID) // the burst replaces the stream: at most burstSize packets on the edge
+		for i := 0; i < burstSize; i++ {
+			m.packets = append(m.packets, Packet{Agent: a.ID, Up: true, Pos: -burstGap * float64(i)})
 		}
 	}
+	lines := make([]LogLine, 0, len(snap.Events))
+	for _, e := range snap.Events {
+		lines = append(lines, LogLine{At: m.at(e.At), Actor: e.Actor, Model: e.Model, Text: e.Text, Bad: e.Failed})
+	}
 	sort.SliceStable(lines, func(i, j int) bool { return lines[i].At.Before(lines[j].At) })
-	m.st.Log = append(m.st.Log, lines...)
-	m.st.Log = m.st.Log[max(len(m.st.Log)-maxLog, 0):]
+	m.appendLog(lines...)
 	m.track(snap.Agents)
+}
+
+// appendLog adds lines to the log and keeps the newest maxLog. A held log keeps showing the same lines.
+func (m *Model) appendLog(lines ...LogLine) {
+	m.st.Log = append(m.st.Log, lines...)
+	drop := max(len(m.st.Log)-maxLog, 0)
+	m.st.Log = m.st.Log[drop:]
+	m.logTop = max(m.logTop-drop, 0)
 }
 
 // at is t, or the frame's clock when t is unknown.

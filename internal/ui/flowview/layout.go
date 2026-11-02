@@ -14,6 +14,7 @@ const (
 	sessionW         = 22     // the session column
 	leadW            = 36
 	boxH             = 6 // agent box height: border, model, ctx, task, live text, border
+	logLines         = 4 // the lines the session log shows
 )
 
 // Layout holds the pinned panels' rectangles for one terminal size and the viewport the diagram scrolls in. There
@@ -24,7 +25,7 @@ type Layout struct {
 	View    Rect // the viewport the diagram scrolls in: right of the session column, between the legend and the log
 	Box     Rect // the size (W, H) of one agent box
 	Gap     int  // columns between agent boxes side by side
-	Log     Rect // the log's title rule is its first row
+	Log     Rect // the log box: a border around logLines lines
 	Status  int  // row of the status line
 }
 
@@ -34,7 +35,7 @@ type Layout struct {
 // 28, a narrower viewport scrolls sideways.
 func NewLayout(w, h int) Layout {
 	l := Layout{Frame: Rect{0, 0, w, h}, Status: h - 1, Gap: wideGap}
-	l.Log = Rect{0, h - 5, w, 4}
+	l.Log = Rect{0, h - 3 - logLines, w, logLines + 2}
 	l.Session = Rect{0, 3, sessionW, max(l.Log.Y-4, 0)} // down to a row above the log
 	l.View = Rect{sessionW + 1, 3, max(w-sessionW-1, 0), l.Session.H}
 	slots := max((l.View.W+wideGap)/(boxMinW+wideGap), 1)

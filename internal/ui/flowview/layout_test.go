@@ -134,8 +134,8 @@ func TestNewLayout(t *testing.T) {
 			if want := (Rect{sessionW + 1, 3, w - sessionW - 1, l.Log.Y - 4}); l.View != want {
 				t.Errorf("viewport %+v, want %+v: right of the session column, from below the legend to a row above the log", l.View, want)
 			}
-			if l.Log != (Rect{0, h - 5, w, 4}) || l.Status != h-1 {
-				t.Errorf("log %+v, status %d; want the 4 rows above the status line on the last row", l.Log, l.Status)
+			if l.Log != (Rect{0, h - 7, w, 6}) || l.Status != h-1 {
+				t.Errorf("log %+v, status %d; want the 6 rows (4 lines in a border) above the status line on the last row", l.Log, l.Status)
 			}
 		})
 	}

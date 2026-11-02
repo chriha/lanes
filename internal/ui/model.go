@@ -65,6 +65,9 @@ type fetchedMsg struct {
 	partial bool // quick result; a full one follows
 }
 type tickMsg time.Time
+
+// spinTickMsg advances the fetch animation; its loop runs only while a provider fetches.
+type spinTickMsg time.Time
 type usageMsg struct {
 	text string
 	at   time.Time
@@ -82,6 +85,7 @@ type Model struct {
 	// fullFetched marks providers with a full result in this run; their polls skip the Quick pass.
 	fullFetched map[string]bool
 	fetches     map[string]*fetchState // by provider; created on first fetch
+	spinning    bool                   // a spinTickMsg loop is running
 	provErr     map[string]error
 	fails       map[string]int       // consecutive failed fetches per provider
 	retryAt     map[string]time.Time // no refetch before this

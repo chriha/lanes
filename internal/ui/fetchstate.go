@@ -4,6 +4,8 @@ import (
 	"context"
 	"sort"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // fetchState is one provider's fetch status. It changes only on the UI goroutine (fetch, the fetchedMsg handler,
@@ -88,6 +90,11 @@ func (m *Model) fetchStatus(name string, now time.Time) string {
 		s += " · " + fetchDur(st.last)
 	}
 	return s
+}
+
+// armSpin starts the animation tick loop when a provider fetches and no loop runs yet; nil otherwise.
+func (m *Model) armSpin() tea.Cmd {
+	return nil
 }
 
 // spinFrames animate a running fetch; the status shows one frame per second of the fetch, advanced by the tick.

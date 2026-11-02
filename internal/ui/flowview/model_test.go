@@ -50,8 +50,8 @@ func fixtureState() State {
 			ToolTimes: toolTimes(now, map[int]int{20: 4, 14: 2, 10: 1, 7: 6, 5: 2, 3: 4, 2: 8, 1: 5, 0: 3}),
 			Files:     []string{"render_panels.go", "state.go", "layout.go", "README.md"},
 			Agents: []session.Agent{
-				{ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Task: "slice 2 of #196", Start: ago(9 * time.Minute), Tool: "Bash", ToolArg: "go test ./...", Ctx: 42, Effort: "high"},
-				{ID: "a2", Name: "triager", Model: "claude-haiku-4-5", Task: "triage #201", Status: session.AgentDone, Start: ago(11 * time.Minute), End: ago(10 * time.Minute), Ctx: 7, Effort: "low"},
+				{ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Task: "slice 2 of #196", Text: "Running the whole test suite now", Start: ago(9 * time.Minute), Tool: "Bash", ToolArg: "go test ./...", Ctx: 42, Effort: "high"},
+				{ID: "a2", Name: "triager", Model: "claude-haiku-4-5", Task: "triage #201", Text: "Labelled it as a bug", Status: session.AgentDone, Start: ago(11 * time.Minute), End: ago(10 * time.Minute), Ctx: 7, Effort: "low"},
 				{ID: "a3", Parent: "a1", Name: "code-reviewer", Model: "claude-sonnet-4-5", Task: "review the diff", Start: ago(2 * time.Minute), Tool: "Grep", ToolArg: "drawAgent", Ctx: -1, Effort: "medium"},
 				{ID: "a4", Parent: "a3", Name: "validator", Model: "claude-sonnet-4-5", Task: "validate a finding", Status: session.AgentError, Start: ago(90 * time.Second), End: ago(30 * time.Second), Ctx: 12},
 			},
@@ -221,7 +221,7 @@ func scrolled(st State, w, h int, keys ...string) Model {
 }
 
 func TestScrollKeys(t *testing.T) {
-	// At 90×24 the viewport is 67×15 and the deep diagram 67×69: it scrolls 54 lines and no column. At 52×15 the
+	// At 90×24 the viewport is 67×15 and the deep diagram 67×76: it scrolls 61 lines and no column. At 52×15 the
 	// viewport is 29×6 and the diagram 36 wide: it scrolls 7 columns.
 	tests := []struct {
 		name   string
@@ -234,9 +234,9 @@ func TestScrollKeys(t *testing.T) {
 		{"k stops at the top", 90, 24, []string{"k"}, 0, 0},
 		{"ctrl+d moves half the viewport down", 90, 24, []string{"ctrl+d"}, 0, 7},
 		{"ctrl+u moves half the viewport up", 90, 24, []string{"ctrl+d", "ctrl+d", "ctrl+u"}, 0, 7},
-		{"G goes to the bottom", 90, 24, []string{"G"}, 0, 54},
-		{"j stops at the bottom", 90, 24, []string{"G", "j"}, 0, 54},
-		{"ctrl+d stops at the bottom", 90, 24, []string{"G", "k", "ctrl+d"}, 0, 54},
+		{"G goes to the bottom", 90, 24, []string{"G"}, 0, 61},
+		{"j stops at the bottom", 90, 24, []string{"G", "j"}, 0, 61},
+		{"ctrl+d stops at the bottom", 90, 24, []string{"G", "k", "ctrl+d"}, 0, 61},
 		{"g goes to the top", 90, 24, []string{"G", "g"}, 0, 0},
 		{"l does nothing when the diagram fits the width", 90, 24, []string{"l"}, 0, 0},
 		{"h does nothing when the diagram fits the width", 90, 24, []string{"h"}, 0, 0},
@@ -286,12 +286,12 @@ func TestScrollOffsetSurvivesSnapshots(t *testing.T) {
 		t.Errorf("after a snapshot: offset %d,%d; want 0,3", x, y)
 	}
 	m, _ = m.Update(keyMsg("G"))
-	snap.Agents = snap.Agents[:1] // the diagram shrinks to 67×21: 6 lines past the viewport
+	snap.Agents = snap.Agents[:1] // the diagram shrinks to 67×22: 7 lines past the viewport
 	m.Apply(SnapshotEvent{snap})
-	if x, y := m.Offset(); x != 0 || y != 6 {
-		t.Errorf("after the diagram shrank: offset %d,%d; want 0,6, the new bottom", x, y)
+	if x, y := m.Offset(); x != 0 || y != 7 {
+		t.Errorf("after the diagram shrank: offset %d,%d; want 0,7, the new bottom", x, y)
 	}
-	if m, _ = m.Update(keyMsg("k")); func() int { _, y := m.Offset(); return y }() != 5 {
+	if m, _ = m.Update(keyMsg("k")); func() int { _, y := m.Offset(); return y }() != 6 {
 		t.Errorf("k after the shrink did not move up from the new bottom")
 	}
 }
@@ -376,8 +376,8 @@ func TestScrollIndicator(t *testing.T) {
 		without []string
 	}{
 		{"nothing to scroll, no indicator", 200, 50, fixtureState().Snap.Agents, nil, "", []string{"lines ", "cols "}},
-		{"lines shown of the diagram's", 90, 24, deep(), []string{"j"}, "lines 2-16/69", []string{"cols "}},
-		{"columns too on a narrow terminal", 52, 15, deep(), []string{"l"}, "lines 1-6/109  cols 2-30/36", nil},
+		{"lines shown of the diagram's", 90, 24, deep(), []string{"j"}, "lines 2-16/76", []string{"cols "}},
+		{"columns too on a narrow terminal", 52, 15, deep(), []string{"l"}, "lines 1-6/121  cols 2-30/36", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

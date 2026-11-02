@@ -37,7 +37,7 @@ func TestCenterSanitizesAndFits(t *testing.T) {
 func TestAgentBox(t *testing.T) {
 	now := time.Date(2026, 11, 1, 14, 30, 0, 0, time.UTC)
 	base := session.Agent{
-		ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Effort: "high", Ctx: 42, Task: "slice 2 of #196",
+		ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Effort: "high", Ctx: 42, Task: "slice 2 of #196", Text: "Reading the diff",
 		Start: now.Add(-9 * time.Minute), Tool: "Bash", ToolArg: "go test",
 	}
 	with := func(f func(a *session.Agent)) session.Agent {
@@ -53,23 +53,27 @@ func TestAgentBox(t *testing.T) {
 		without string   // must not appear anywhere in the box
 	}{
 		{"running", base, false,
-			[]string{"┏━ implementer ━", "┃ opus 4.1 ▮▮▮▯ high ┃", "┃ ctx", "┃ slice 2 of #196 ┃", "┗━ ◓ 9m00s ▸ Bash go test ━"}, ""},
+			[]string{"┏━ implementer ━", "┃ opus 4.1 ▮▮▮▯ high ┃", "┃ ctx", "┃ slice 2 of #196 ┃", "┃ » Reading the diff ┃", "┗━ ◓ 9m00s ▸ Bash go test ━"}, ""},
+		{"no text leaves the row empty", with(func(a *session.Agent) { a.Text = "" }), false,
+			[]string{"", "", "", "┃ slice 2 of #196 ┃", "┃ ┃"}, "»"},
+		{"long text is cut to the box", with(func(a *session.Agent) { a.Text = strings.Repeat("word ", 12) }), false,
+			[]string{"", "", "", "", "┃» word word word word word …┃"}, ""},
 		{"unknown effort omits the meter", with(func(a *session.Agent) { a.Effort = "" }), false,
 			[]string{"", "┃ opus 4.1 ┃"}, "▮"},
 		{"running without a tool", with(func(a *session.Agent) { a.Tool, a.ToolArg = "", "" }), false,
-			[]string{"", "", "", "", "┗━ ◓ running 9m00s ━"}, "▸"},
+			[]string{"", "", "", "", "", "┗━ ◓ running 9m00s ━"}, "▸"},
 		{"done", with(func(a *session.Agent) { a.Status, a.End = session.AgentDone, a.Start.Add(time.Minute) }), false,
-			[]string{"", "", "", "", "┗━ ✓ done 1m00s ━"}, "▸"},
+			[]string{"", "", "", "", "", "┗━ ✓ done 1m00s ━"}, "▸"},
 		{"failed", with(func(a *session.Agent) { a.Status, a.End = session.AgentError, a.Start.Add(time.Minute) }), false,
-			[]string{"", "", "", "", "┗━ ✗ failed 1m00s ━"}, "▸"},
+			[]string{"", "", "", "", "", "┗━ ✗ failed 1m00s ━"}, "▸"},
 		{"running in an ended session is stopped", base, true,
-			[]string{"", "", "", "", "┗━ ■ stopped 9m00s ━"}, "◓"},
+			[]string{"", "", "", "", "", "┗━ ■ stopped 9m00s ━"}, "◓"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := NewCanvas(30, 5, nil)
+			c := NewCanvas(30, 6, nil)
 			s := State{Now: now, Phase: 1, Ended: tt.ended}
-			s.drawAgent(c, Rect{0, 0, 30, 5}, tt.agent)
+			s.drawAgent(c, Rect{0, 0, 30, 6}, tt.agent)
 			got := rows(c)
 			for i, w := range tt.want {
 				if w == "" {
@@ -81,6 +85,32 @@ func TestAgentBox(t *testing.T) {
 			}
 			if tt.without != "" && strings.Contains(c.String(), tt.without) {
 				t.Errorf("box shows %q:\n%s", tt.without, c.String())
+			}
+		})
+	}
+}
+
+func TestAgentBoxTextIsDimOnceFinished(t *testing.T) {
+	tests := []struct {
+		name   string
+		status session.AgentStatus
+		want   Role
+	}{
+		{"running", session.AgentRunning, RoleText},
+		{"done", session.AgentDone, RoleDim},
+		{"failed", session.AgentError, RoleDim},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCanvas(28, 6, nil)
+			a := session.Agent{Name: "a", Model: "claude-opus-4-1", Text: "hello", Status: tt.status, Start: time.Now()}
+			State{Phase: 1}.drawAgent(c, Rect{0, 0, 28, 6}, a)
+			x := strings.Index(rows(c)[4], "»")
+			if x < 0 {
+				t.Fatalf("no text row:\n%s", c.String())
+			}
+			if got := c.At(len([]rune(rows(c)[4][:x])), 4).Role; got != tt.want {
+				t.Errorf("text role %d, want %d", got, tt.want)
 			}
 		})
 	}

@@ -41,8 +41,8 @@ func (s State) drawTree(c *Canvas, d Diagram) [][]Point {
 	return paths
 }
 
-// drawAgent draws an agent box: the name in the top border; the model and effort, the context bar and the task
-// inside; the status and, while running, the current activity in the bottom border. A finished agent's box is dim
+// drawAgent draws an agent box: the name in the top border; the model and effort, the context bar, the task and
+// `» ` with the newest text of the agent inside; the status and, while running, the current activity in the bottom border. A finished agent's box is dim
 // and still.
 func (s State) drawAgent(c *Canvas, r Rect, a session.Agent) {
 	running := a.Status == session.AgentRunning && !s.Ended // an ended session's agents are stopped
@@ -58,6 +58,9 @@ func (s State) drawAgent(c *Canvas, r Rect, a session.Agent) {
 	c.centerSegs(r, r.Y+1, row...)
 	c.ctxRow(r.X+2, r.Y+2, r.W-4, a.Ctx, role, text)
 	c.center(r, r.Y+3, a.Task, text)
+	if a.Text != "" {
+		c.center(r, r.Y+4, "» "+a.Text, text)
+	}
 	y := r.Y + r.H - 1
 	x := c.Text(r.X+2, y, " ", role)
 	x = c.segs(x, y, r.W-6, s.agentStatus(a, role)...)

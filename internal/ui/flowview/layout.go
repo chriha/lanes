@@ -13,6 +13,7 @@ const (
 	boxMinW, boxMaxW = 28, 30 // agent box width
 	sessionW         = 22     // the session column
 	leadW            = 36
+	boxH             = 6 // agent box height: border, model, ctx, task, live text, border
 )
 
 // Layout holds the pinned panels' rectangles for one terminal size and the viewport the diagram scrolls in. There
@@ -37,7 +38,7 @@ func NewLayout(w, h int) Layout {
 	l.Session = Rect{0, 3, sessionW, max(l.Log.Y-4, 0)} // down to a row above the log
 	l.View = Rect{sessionW + 1, 3, max(w-sessionW-1, 0), l.Session.H}
 	slots := max((l.View.W+wideGap)/(boxMinW+wideGap), 1)
-	l.Box = Rect{W: max(min(boxMaxW, (l.View.W+wideGap)/slots-wideGap), boxMinW), H: 5}
+	l.Box = Rect{W: max(min(boxMaxW, (l.View.W+wideGap)/slots-wideGap), boxMinW), H: boxH}
 	return l
 }
 

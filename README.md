@@ -715,9 +715,13 @@ anything because the terminal is small. It shows, top to bottom:
 - **tools** — the lead's three most used tools, with their share of all its calls.
 - **agents** — the subagents as a layered tree, one row per spawn depth, each connected to the agent that
   spawned it (or to the lead). Each box has the agent's full name in its top border, then its model and `effort`
-  meter, a `ctx` bar with its %, and its task; the bottom border shows the status: a spinner with elapsed time and
+  meter, a `ctx` bar with its %, its task and a live text row; the bottom border shows the status: a spinner with elapsed time and
   `▸ <tool> <argument>` while running, `✓ done` with its duration, `✗` when it failed. The border takes the
-  model family's color; finished agents are dimmed. Every agent is drawn: as many boxes as fit go side by side,
+  model family's color; finished agents are dimmed.
+  The **task** is the subagent's description, else the first sentence of its first prompt (a leading
+  `Read and follow …` line skipped), at most 40 characters. The **live text** `» …` is the first line of the
+  agent's newest text, at most 60 characters, cut to the box; it changes while the agent runs, and a done or
+  failed agent keeps its last text, dimmed. Every agent is drawn: as many boxes as fit go side by side,
   and a depth that doesn't fit one line wraps into as many lines as it needs.
 - **session log** — spawns, finishes and failures, with their time. The name column fits names of up to 20
   characters.

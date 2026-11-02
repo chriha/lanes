@@ -139,9 +139,9 @@ func TestAgentBoxContextGauge(t *testing.T) {
 		ctx  int
 		want string
 	}{
-		{"known", 50, "ctx ▬▬▬▬▬▬▬▬▬▬ 50%"},
-		{"one percent shows", 1, "ctx ▌▬▬▬▬▬▬▬▬▬ 1%"},
-		{"unknown", -1, "ctx ▬▬▬▬▬▬▬▬▬▬ --"},
+		{"known", 50, "ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  50%"},
+		{"one percent shows", 1, "ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   1%"},
+		{"unknown", -1, "ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   --"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -172,26 +172,70 @@ func segmentRoles(c *Canvas, y int, glyph rune) []Role {
 	return out
 }
 
-func TestContextBarsAreTenSegments(t *testing.T) {
-	// the narrowest each gets: the session column is always sessionW wide, an agent box at least boxMinW
-	agent := NewCanvas(boxMinW, 5, nil)
-	State{}.drawAgent(agent, Rect{0, 0, boxMinW, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: 50})
-	col := NewCanvas(sessionW, 37, nil)
-	fixtureState().drawSession(col, Rect{0, 0, sessionW, 37})
-	for name, got := range map[string][]Role{"agent box": segmentRoles(agent, 2, '▬'), "session column": segmentRoles(col, 3, '▬')} {
-		if len(got) != 10 {
-			t.Errorf("%s ctx bar is %d segments, want 10", name, len(got))
-		}
-	}
-	// the lead is at 61%: six segments filled
-	filled := 0
-	for _, r := range segmentRoles(col, 3, '▬') {
+// filledCells counts the filled glyph cells of row y.
+func filledCells(c *Canvas, y int, glyph rune) int {
+	n := 0
+	for _, r := range segmentRoles(c, y, glyph) {
 		if r != RoleTrack {
-			filled++
+			n++
 		}
 	}
-	if filled != 6 {
-		t.Errorf("session ctx bar has %d filled segments, want 6", filled)
+	return n
+}
+
+func TestBarsFillTheirRow(t *testing.T) {
+	// the narrowest each gets: the session column is always sessionW wide, an agent box at least boxMinW, the
+	// tools box leadW. The bar is every cell between the label and the percent, one space on each side.
+	wide := 60
+	agent := func(w, ctx int) *Canvas {
+		c := NewCanvas(w, 5, nil)
+		State{}.drawAgent(c, Rect{0, 0, w, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: ctx})
+		return c
+	}
+	col := func(w int) *Canvas {
+		c := NewCanvas(w, 37, nil)
+		fixtureState().drawSession(c, Rect{0, 0, w, 37})
+		return c
+	}
+	tools := func(w int) *Canvas {
+		c := NewCanvas(w, 6, nil)
+		fixtureState().drawTools(c, Rect{0, 0, w, 6})
+		return c
+	}
+	tests := []struct {
+		name   string
+		c      *Canvas
+		y      int
+		glyph  rune
+		cells  int // the bar's width
+		filled int
+		row    string // the row between the borders
+	}{
+		{"agent box, narrowest", agent(boxMinW, 50), 2, '▬', 15, 8, "ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 50%"},
+		{"agent box, wide", agent(wide, 50), 2, '▬', wide - 4 - 9, (wide - 4 - 9 + 1) / 2, "ctx " + strings.Repeat("▬", wide-4-9) + " 50%"},
+		{"agent box, 100%", agent(boxMinW, 100), 2, '▬', 15, 15, "ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 100%"},
+		{"session column, narrowest", col(sessionW), 2, '▬', 9, 5, "ctx ▬▬▬▬▬▬▬▬▬ 61%"},
+		{"session column, wide", col(wide), 2, '▬', wide - 4 - 9, 29, "ctx " + strings.Repeat("▬", wide-4-9) + " 61%"},
+		{"tools box, narrowest", tools(leadW), 2, '■', 18, 8, "Read     ■■■■■■■■■■■■■■■■■■ 42%"},
+		{"tools box, wide", tools(wide), 2, '■', wide - 4 - 14, 18, "Read     " + strings.Repeat("■", wide-4-14) + " 42%"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := len(segmentRoles(tt.c, tt.y, tt.glyph)); got != tt.cells {
+				t.Errorf("bar is %d cells, want %d", got, tt.cells)
+			}
+			if got := filledCells(tt.c, tt.y, tt.glyph); got != tt.filled {
+				t.Errorf("%d cells filled, want %d", got, tt.filled)
+			}
+			// ┃ at both edges, one blank before the label and one after the percent
+			r := []rune(rows(tt.c)[tt.y])
+			if got := strings.Join(strings.Fields(string(r[1:len(r)-1])), " "); got != strings.Join(strings.Fields(tt.row), " ") {
+				t.Errorf("row = %q, want %q", got, tt.row)
+			}
+			if string(r[len(r)-3]) == " " || string(r[len(r)-2]) != " " {
+				t.Errorf("the percent does not end at the right inner edge: %q", string(r))
+			}
+		})
 	}
 }
 
@@ -212,15 +256,9 @@ func TestToolBarIgnoresPhase(t *testing.T) {
 		if bar != base {
 			t.Errorf("ended %v phase %d: bar row %q, want %q", tt.ended, tt.phase, bar, base)
 		}
-		// top tool Read: 20 of 48 calls, 42% rounds to 40%: four full cells, role intact in every phase
-		full := 0
-		for _, r := range segmentRoles(c, 2, '■') {
-			if r != RoleTrack {
-				full++
-			}
-		}
-		if full != 4 {
-			t.Errorf("ended %v phase %d: %d full cells, want 4", tt.ended, tt.phase, full)
+		// top tool Read: 20 of 48 calls, 42% of 18 cells is 8 full cells, role intact in every phase
+		if full := filledCells(c, 2, '■'); full != 8 {
+			t.Errorf("ended %v phase %d: %d full cells, want 8", tt.ended, tt.phase, full)
 		}
 	}
 }
@@ -228,13 +266,13 @@ func TestToolBarIgnoresPhase(t *testing.T) {
 func TestPercentFollowsTheBar(t *testing.T) {
 	tools := NewCanvas(leadW, 6, nil)
 	fixtureState().drawTools(tools, Rect{0, 0, leadW, 6})
-	// Read: 20 of 48 calls, 42% rounds to 40%; the % is one space after the bar, inside the border
-	if got := strings.TrimSpace(strings.Trim(rows(tools)[2], "┃")); got != "Read     ■■■■■■■■■■ 42%" {
+	// Read: 20 of 48 calls; the % is one space after the bar, inside the border
+	if got := strings.TrimSpace(strings.Trim(rows(tools)[2], "┃")); got != "Read     ■■■■■■■■■■■■■■■■■■  42%" {
 		t.Errorf("tools row = %q", got)
 	}
 	agent := NewCanvas(boxMinW, 5, nil)
 	State{}.drawAgent(agent, Rect{0, 0, boxMinW, 5}, session.Agent{Name: "a", Model: "claude-opus-4-1", Ctx: 100})
-	if got := strings.TrimSpace(strings.Trim(rows(agent)[2], "┃")); got != "ctx ▬▬▬▬▬▬▬▬▬▬ 100%" {
+	if got := strings.TrimSpace(strings.Trim(rows(agent)[2], "┃")); got != "ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ 100%" {
 		t.Errorf("agent ctx row = %q", got)
 	}
 }
@@ -450,42 +488,41 @@ func TestSessionColumn(t *testing.T) {
 		want    map[int]string // row → what it holds, spaces collapsed
 		without []string       // must not appear anywhere in the column
 	}{
-		{"the whole dashboard", fixtureState(), 38, map[int]string{
+		{"the whole dashboard", fixtureState(), 37, map[int]string{
 			0:  "┏━ session ━",
 			1:  "┃ issue-196 12m03s ┃",
-			2:  "┃ ctx 61% ┃",
-			3:  "┃ ▬▬▬▬▬▬▬▬▬▬ ┃",
-			4:  "┃ effort ▮▮▮▯ high ┃",
-			6:  "┃ activity 3/min ┃",
-			7:  "┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄ ┃",
-			9:  "┃ ◆ working ┃",
-			10: "┃ ┆ ┃",
-			11: "┃ ◇ asking ┃",
-			12: "┃ ┆ ┃",
-			13: "┃ ◇ waiting ┃",
-			15: "┃ turns 12 ┃",
-			16: "┃ tools 48 ┃",
-			17: "┃ tokens 1,234,567 ┃",
-			18: "┃ in 12,345 ┃",
-			19: "┃ out 98,765 ┃",
-			20: "┃ cache 1,123,457 ┃",
-			21: "┃ agents ◓2 ✓1 ✗1 ┃",
-			23: "┃ files ┃",
-			24: "┃ render_panels.go ┃",
-			27: "┃ README.md ┃",
-			29: "┃ last: ┃",
-			30: "┃ Slice 2 is next: ┃",
-			34: "┃ advisor opus 4.1 ┃",
-			35: "┃ calls 3 ┃",
-			37: "┗━━",
+			2:  "┃ ctx ▬▬▬▬▬▬▬▬▬ 61% ┃",
+			3:  "┃ effort ▮▮▮▯ high ┃",
+			5:  "┃ activity 3/min ┃",
+			6:  "┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄ ┃",
+			8:  "┃ ◆ working ┃",
+			9:  "┃ ┆ ┃",
+			10: "┃ ◇ asking ┃",
+			11: "┃ ┆ ┃",
+			12: "┃ ◇ waiting ┃",
+			14: "┃ turns 12 ┃",
+			15: "┃ tools 48 ┃",
+			16: "┃ tokens 1,234,567 ┃",
+			17: "┃ in 12,345 ┃",
+			18: "┃ out 98,765 ┃",
+			19: "┃ cache 1,123,457 ┃",
+			20: "┃ agents ◓2 ✓1 ✗1 ┃",
+			22: "┃ files ┃",
+			23: "┃ render_panels.go ┃",
+			26: "┃ README.md ┃",
+			28: "┃ last: ┃",
+			29: "┃ Slice 2 is next: ┃",
+			33: "┃ advisor opus 4.1 ┃",
+			34: "┃ calls 3 ┃",
+			36: "┗━━",
 		}, nil},
-		{"unknown effort omits its row", noEffort, 38, map[int]string{4: "", 5: "┃ activity 3/min ┃"}, []string{"effort", "▮"}},
-		{"unknown context", noCtx, 38, map[int]string{2: "┃ ctx -- ┃", 3: "┃ ▬▬▬▬▬▬▬▬▬▬ ┃"}, nil},
-		{"no advisor, no advisor rows", noAdvisor, 38, map[int]string{34: "", 35: ""}, []string{"advisor"}},
-		{"no files, no files rows", noFiles, 38, map[int]string{23: "┃ last: ┃"}, []string{"files"}},
-		{"ended: no checkpoint is active and no agent runs", ended, 38, map[int]string{9: "┃ ◇ working ┃", 21: "┃ agents ■0 ✓1 ✗1 ┃"}, []string{"◆", "◓"}},
-		{"double-digit agent counts fit", tenAgents, 38, map[int]string{21: "┃ agents ◓10 ✓1 ✗1 ┃"}, nil},
-		{"rows past the bottom are left out", fixtureState(), 11, map[int]string{9: "┃ ◆ working ┃", 10: "┗━━"}, []string{"asking", "last:"}},
+		{"unknown effort omits its row", noEffort, 37, map[int]string{3: "", 4: "┃ activity 3/min ┃"}, []string{"effort", "▮"}},
+		{"unknown context", noCtx, 37, map[int]string{2: "┃ ctx ▬▬▬▬▬▬▬▬▬ -- ┃"}, nil},
+		{"no advisor, no advisor rows", noAdvisor, 37, map[int]string{33: "", 34: ""}, []string{"advisor"}},
+		{"no files, no files rows", noFiles, 37, map[int]string{22: "┃ last: ┃"}, []string{"files"}},
+		{"ended: no checkpoint is active and no agent runs", ended, 37, map[int]string{8: "┃ ◇ working ┃", 20: "┃ agents ■0 ✓1 ✗1 ┃"}, []string{"◆", "◓"}},
+		{"double-digit agent counts fit", tenAgents, 37, map[int]string{20: "┃ agents ◓10 ✓1 ✗1 ┃"}, nil},
+		{"rows past the bottom are left out", fixtureState(), 10, map[int]string{8: "┃ ◆ working ┃", 9: "┗━━"}, []string{"asking", "last:"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -508,14 +545,14 @@ func TestSessionColumn(t *testing.T) {
 }
 
 func TestSessionColumnHighlightsTheHookState(t *testing.T) {
-	c := NewCanvas(22, 38, nil)
-	fixtureState().drawSession(c, Rect{0, 0, 22, 38})
+	c := NewCanvas(22, 37, nil)
+	fixtureState().drawSession(c, Rect{0, 0, 22, 37})
 	for x := 1; x < 21; x++ {
-		if got := c.At(x, 9).Role; got != RoleSelected {
+		if got := c.At(x, 8).Role; got != RoleSelected {
 			t.Fatalf("cell %d of the working row has role %d, want the selection", x, got)
 		}
 	}
-	if got := c.At(2, 7).Role; got != RoleOpus {
+	if got := c.At(2, 6).Role; got != RoleOpus {
 		t.Errorf("sparkline drawn in role %d, want the lead's family", got)
 	}
 }
@@ -553,7 +590,7 @@ func TestTracksAreDrawnInTheTrackRole(t *testing.T) {
 		y     int
 		empty rune
 	}{
-		{"session activity sparkline", col, 7, '▁'},
+		{"session activity sparkline", col, 6, '▁'},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

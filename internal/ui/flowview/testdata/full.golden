@@ -3,38 +3,38 @@
                                ■ opus   ■ sonnet   ■ haiku                                
 ┏━ session ━━━━━━━━━━┓                 ╔══════════════════════════════════╗   ┏━━━━━━━━━━━
 ┃ issue-196   12m03s ┃                 ║    opus 4.1 · lead ▮▮▮▯ high     ║   ┃ tools     
-┃ ctx            61% ┃                 ║        Agent implementer         ║   ┃ Read     ■
-┃ ▬▬▬▬▬▬▬▬▬▬         ┃                 ║         ◓ working 12m03s         ║   ┃ Bash     ■
-┃ effort ▮▮▮▯ high   ┃                 ╚══════════════════════════════════╝   ┃ Agent    ■
-┃                    ┃                                   │                    ┗━━━━━━━━━━━
-┃ activity     3/min ┃                  ┌────────────────┴───────────────┐                
-┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄    ┃                  ▼                                ▼                
-┃                    ┃   ┏━ implementer ━━━━━━━━━━━━━━┓   ┏━ triager ━━━━━━━━━━━━━━━━━━┓  
-┃ ◆ working          ┃   ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃  
-┃ ┆                  ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬ 42%         ┃   ┃ ctx ▌▬▬▬▬▬▬▬▬▬ 7%          ┃  
-┃ ◇ asking           ┃   ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  
-┃ ┆                  ┃   ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  
-┃ ◇ waiting          ┃   ┗━ ◓ 9m00s ▸ Bash go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛  
-┃                    ┃                  │                                                 
-┃ turns           12 ┃                  └───────────────┐                                 
-┃ tools           48 ┃                                  ▼                                 
-┃ tokens   1,234,567 ┃                   ┏━ code-reviewer ━━━━━━━━━━━━┓                   
-┃   in        12,345 ┃                   ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                   
-┃   out       98,765 ┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬ --          ┃                   
-┃   cache  1,123,457 ┃                   ┃      review the diff       ┃                   
-┃ agents    ◓2 ✓1 ✗1 ┃                   ┃                            ┃                   
-┃                    ┃                   ┗━ ◓ 2m00s ▸ Grep drawAgent ━┛                   
-┃ files              ┃                                  │                                 
+┃ ctx ▬▬▬▬▬▬▬▬▬  61% ┃                 ║        Agent implementer         ║   ┃ Read     ■
+┃ effort ▮▮▮▯ high   ┃                 ║         ◓ working 12m03s         ║   ┃ Bash     ■
+┃                    ┃                 ╚══════════════════════════════════╝   ┃ Agent    ■
+┃ activity     3/min ┃                                   │                    ┗━━━━━━━━━━━
+┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄    ┃                  ┌────────────────┴───────────────┐                
+┃                    ┃                  ▼                                ▼                
+┃ ◆ working          ┃   ┏━ implementer ━━━━━━━━━━━━━━┓   ┏━ triager ━━━━━━━━━━━━━━━━━━┓  
+┃ ┆                  ┃   ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃  
+┃ ◇ asking           ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  42% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   7% ┃  
+┃ ┆                  ┃   ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  
+┃ ◇ waiting          ┃   ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  
+┃                    ┃   ┗━ ◓ 9m00s ▸ Bash go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛  
+┃ turns           12 ┃                  │                                                 
+┃ tools           48 ┃                  └───────────────┐                                 
+┃ tokens   1,234,567 ┃                                  ▼                                 
+┃   in        12,345 ┃                   ┏━ code-reviewer ━━━━━━━━━━━━┓                   
+┃   out       98,765 ┃                   ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                   
+┃   cache  1,123,457 ┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   -- ┃                   
+┃ agents    ◓2 ✓1 ✗1 ┃                   ┃      review the diff       ┃                   
+┃                    ┃                   ┃                            ┃                   
+┃ files              ┃                   ┗━ ◓ 2m00s ▸ Grep drawAgent ━┛                   
 ┃ render_panels.go   ┃                                  │                                 
-┃ state.go           ┃                                  ▼                                 
-┃ layout.go          ┃                   ┏━ validator ━━━━━━━━━━━━━━━━┓                   
-┃ README.md          ┃                   ┃         sonnet 4.5         ┃                   
-┃                    ┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬ 12%         ┃                   
-┃ last:              ┃                   ┃     validate a finding     ┃                   
-┃ Slice 2 is next:   ┃                   ┃                            ┃                   
-┃ the layered layout ┃                   ┗━ ✗ failed 1m00s ━━━━━━━━━━━┛                   
-┃ and the static…    ┃                                                                    
+┃ state.go           ┃                                  │                                 
+┃ layout.go          ┃                                  ▼                                 
+┃ README.md          ┃                   ┏━ validator ━━━━━━━━━━━━━━━━┓                   
+┃                    ┃                   ┃         sonnet 4.5         ┃                   
+┃ last:              ┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  12% ┃                   
+┃ Slice 2 is next:   ┃                   ┃     validate a finding     ┃                   
+┃ the layered layout ┃                   ┃                            ┃                   
+┃ and the static…    ┃                   ┗━ ✗ failed 1m00s ━━━━━━━━━━━┛                   
 ┃                    ┃                                                                    
+┃ advisor   opus 4.1 ┃                                                                    
 ┗━━━━━━━━━━━━━━━━━━━━┛                                                                    
                                                                     diagram  cols 1-67/91 
 ╭─ session log ──────────────────────────────────────────────────────────────────── 6/6 ─╮

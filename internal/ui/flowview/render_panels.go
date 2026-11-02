@@ -84,11 +84,22 @@ func ctxPct(ctx int) string {
 // ctxFill is a context use as the fraction a bar is filled to, empty when unknown.
 func ctxFill(ctx int) float64 { return float64(max(ctx, 0)) / 100 }
 
-// ctxRow draws a context bar from x: the label, the 10 segments and the percent one space after them.
-func (c *Canvas) ctxRow(x, y, ctx int, fill, text Role) {
-	c.Text(x, y, "ctx", RoleDim)
-	c.Segments(x+4, y, segmentCount, '▬', ctxFill(ctx), fill, RoleTrack)
-	c.Text(x+4+segmentCount+1, y, ctxPct(ctx), text)
+// pctW is the width of the percent of a bar row (100%).
+const pctW = 4
+
+// barRow draws a bar row over w cells from x: the label of labelW cells at the left, the percent right-aligned
+// in pctW cells at the right, and between them, one space on each side, the bar over every cell left.
+func (c *Canvas) barRow(x, y, w, labelW int, label string, glyph rune, v float64, pct string, fill, labelRole, pctRole Role) {
+	c.textIn(x, y, labelW, label, labelRole)
+	if bar := w - labelW - pctW - 2; bar > 0 {
+		c.Segments(x+labelW+1, y, bar, glyph, v, fill, RoleTrack)
+	}
+	c.Text(x+w-min(len([]rune(pct)), pctW), y, pct, pctRole)
+}
+
+// ctxRow draws a context bar over w cells from x: the label, the bar and the percent.
+func (c *Canvas) ctxRow(x, y, w, ctx int, fill, text Role) {
+	c.barRow(x, y, w, 3, "ctx", '▬', ctxFill(ctx), ctxPct(ctx), fill, RoleDim, text)
 }
 
 // spread draws left at the start and right at the end of w cells from x.
@@ -177,7 +188,7 @@ func (s State) drawSessionFrom(c *Canvas, r Rect, off int, focused bool) {
 }
 
 // sessionRows are the session column's rows, each drawing itself on the row it is given (nil for a blank one):
-// the session's name and age, the lead's context and effort; the tool calls per minute as a sparkline; the hook
+// the session's name and age, the lead's context bar and effort; the tool calls per minute as a sparkline; the hook
 // states on a timeline; the counters; the files touched last; the lead's last text; and the advisor when there
 // is one.
 func (s State) sessionRows(c *Canvas, r Rect) []func(y int) {
@@ -189,8 +200,7 @@ func (s State) sessionRows(c *Canvas, r Rect) []func(y int) {
 	}
 	rows := []func(y int){
 		label(s.Title, since(s.Start, s.Now), RoleText),
-		label("ctx", ctxPct(lead.Ctx), RoleBold),
-		func(y int) { c.Segments(x, y, segmentCount, '▬', ctxFill(lead.Ctx), role, RoleTrack) },
+		func(y int) { c.ctxRow(x, y, w, lead.Ctx, role, RoleBold) },
 	}
 	if m := effortMeter(lead.Effort); m != "" {
 		rows = append(rows, func(y int) {
@@ -301,9 +311,7 @@ func (s State) drawTools(c *Canvas, r Rect) {
 	c.spread(x, r.Y+1, w, "tools", fmt.Sprintf("calls %d", s.Snap.Lead.Calls), RoleBold, RoleBold)
 	for i, t := range s.topTools(3) {
 		y := r.Y + 2 + i
-		c.textIn(x, y, 8, t.Name, RoleText)
-		c.Segments(x+9, y, segmentCount, '■', t.Share, role, RoleTrack)
-		c.Text(x+9+segmentCount+1, y, fmt.Sprintf("%.0f%%", t.Share*100), RoleText)
+		c.barRow(x, y, w, 8, t.Name, '■', t.Share, fmt.Sprintf("%.0f%%", t.Share*100), role, RoleText, RoleText)
 	}
 }
 

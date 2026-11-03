@@ -121,7 +121,7 @@ func (c *Canvas) spreadAll(x, y, w int, parts []string, role Role) {
 		runs = append(runs, seg{p, role})
 		if i < gaps {
 			pad := max(free/gaps, 1)
-			if i < free%gaps {
+			if free >= gaps && i < free%gaps {
 				pad++
 			}
 			runs = append(runs, seg{strings.Repeat(" ", pad), role})

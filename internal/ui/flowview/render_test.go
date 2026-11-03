@@ -653,3 +653,26 @@ func TestBorders(t *testing.T) {
 		})
 	}
 }
+
+func TestSpreadAllFitsItsWidth(t *testing.T) {
+	tests := []struct {
+		name  string
+		w     int
+		parts []string
+		want  string
+	}{
+		{"spread evenly, the remainder first", 12, []string{"a", "b", "c"}, "a     b    c"},
+		{"one space apart when only that fits", 5, []string{"a", "b", "c"}, "a b c"},
+		{"tighter than a space apart is cut, not widened", 5, []string{"ab", "b", "c"}, "ab b "},
+		{"two parts at the edges", 6, []string{"a", "b"}, "a    b"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCanvas(tt.w+2, 1, nil)
+			c.spreadAll(1, 0, tt.w, tt.parts, RoleText)
+			if got := rows(c)[0]; got != " "+tt.want+" " {
+				t.Errorf("row = %q, want %q", got, " "+tt.want+" ")
+			}
+		})
+	}
+}

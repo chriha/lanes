@@ -233,8 +233,7 @@ func (m Model) Packets() []Packet { return m.packets }
 // frame is the state as drawn now: counters and the last text as far as the animation got.
 func (m Model) frame() State {
 	f := m.st
-	lead := m.st.Snap.Lead
-	f.read = &lead
+	f.eased, f.readTokens = true, m.st.Snap.Lead.Tokens
 	f.Snap.Lead.Turns, f.Snap.Lead.Calls, f.Snap.Lead.Tokens = m.turns, m.calls, m.tokens
 	f.Snap.Lead.TokensIn, f.Snap.Lead.TokensOut, f.Snap.Lead.TokensCache = m.tokIn, m.tokOut, m.tokCache
 	text := []rune(f.Snap.Lead.LastText)

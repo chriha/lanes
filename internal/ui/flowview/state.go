@@ -26,13 +26,14 @@ type State struct {
 	Usage5h      int  // the account's 5h usage in percent, when Usage5hKnown
 	Usage5hKnown bool // the 5h usage is known and fresh
 
-	read *session.Lead // the lead as read while Snap.Lead's counters ease toward it; nil when Snap.Lead is it
+	eased      bool // Snap.Lead's counters ease toward the lead as read: its tokens are readTokens
+	readTokens int  // the lead's tokens as read, when eased
 }
 
 // leadTokens is the lead's tokens as read, not as the counters show them while easing.
 func (s State) leadTokens() int {
-	if s.read != nil {
-		return s.read.Tokens
+	if s.eased {
+		return s.readTokens
 	}
 	return s.Snap.Lead.Tokens
 }

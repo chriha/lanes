@@ -387,3 +387,20 @@ func TestAgentViewShowsThe5hShare(t *testing.T) {
 		})
 	}
 }
+
+func TestEndedAgentViewTakesALate5hUsage(t *testing.T) {
+	dead := working("fix~1")
+	dead.Dead = true
+	m := agentModel(t, dead)
+	withTranscript(t, "fix~1")
+	press(m, "A")
+	read(t, m) // the final read freezes the view before any 5h usage came in
+	m.Update(usage5hMsg{pct: 40, ok: true})
+	if v := strings.Join(strings.Fields(ansi.Strip(m.View())), " "); !strings.Contains(v, "┃ 5h 40% ┃") {
+		t.Errorf("frozen view without a 5h figure ignores the first one: %q", v)
+	}
+	m.Update(usage5hMsg{pct: 55, ok: true})
+	if v := strings.Join(strings.Fields(ansi.Strip(m.View())), " "); !strings.Contains(v, "┃ 5h 40% ┃") {
+		t.Errorf("frozen view does not keep the figure it has: %q", v)
+	}
+}

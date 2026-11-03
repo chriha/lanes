@@ -73,6 +73,12 @@ type usageMsg struct {
 	at   time.Time
 }
 
+// usage5hMsg carries the account's 5h usage in percent for the agent view; ok is false when unknown or stale.
+type usage5hMsg struct {
+	pct int
+	ok  bool
+}
+
 // usageStale is the age after which the Claude usage shows how old it is.
 const usageStale = 10 * time.Minute
 

@@ -21,6 +21,9 @@ type State struct {
 	Phase int       // animation phase: spinner frame
 	Snap  session.Snapshot
 	Log   []LogLine // oldest first
+
+	Usage5h      int  // the account's 5h usage in percent, when Usage5hKnown
+	Usage5hKnown bool // the 5h usage is known and fresh
 }
 
 // LogLine is one line of the session log.
@@ -242,4 +245,10 @@ func fmtThousands(n int) string {
 		s = s[:i] + "," + s[i:]
 	}
 	return s
+}
+
+// share5h is an actor's share of the account's 5h usage in whole percent: the 5h usage times the actor's tokens
+// over the tokens of the lead and all agents, 0 when they have none. ok is false when the 5h usage is unknown.
+func (s State) share5h(tokens int) (pct int, ok bool) {
+	return 0, false
 }

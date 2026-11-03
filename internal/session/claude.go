@@ -164,3 +164,13 @@ func Usage(dir string) (string, time.Time) {
 	}
 	return u.Text, time.Unix(u.At, 0)
 }
+
+// UsageStale is the age after which Usage5h no longer trusts the usage file.
+const UsageStale = 15 * time.Minute
+
+// Usage5h reads the account's 5h usage in percent (the `session` value) from the usage file in the Claude config
+// dir. ok is false when dir is empty, the file is missing or unreadable, has no `session` value, or was written
+// more than UsageStale before now.
+func Usage5h(dir string, now time.Time) (pct int, ok bool) {
+	return 0, false
+}

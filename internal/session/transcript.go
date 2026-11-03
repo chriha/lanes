@@ -64,6 +64,8 @@ type Agent struct {
 	ToolArg string
 	Ctx     int    // percent of the context window used by the newest assistant message, -1 when unknown
 	Effort  string // effort level of the newest assistant message that has one, "" when unknown
+	Tokens  int    // input + cache write + output tokens of all assistant messages, as the lead's
+	Calls   int    // tool calls in total
 }
 
 // Snapshot is the state of a Claude session derived from its transcripts.

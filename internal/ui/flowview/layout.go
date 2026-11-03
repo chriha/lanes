@@ -49,6 +49,7 @@ type Diagram struct {
 	W, H  int
 	Lead  Rect
 	Tools Rect // right of the lead on its top row, joined to nothing
+	Procs Rect // right of the tools box on the top row, joined to nothing; empty without processes
 	Tree  Rect // where the agent rows go
 	Box   Rect // the size (W, H) of one agent box
 	Nodes []Node
@@ -58,7 +59,7 @@ type Diagram struct {
 // columns right of it, every agent below the lead. It is as wide as the viewport, the lead or an agent box,
 // whichever is widest, and wider when the tools box ends past that; as high as the viewport or its agents,
 // whichever is higher. The agents are laid out in the width without the tools box, so it adds no columns to a line.
-func (l Layout) Diagram(agents []session.Agent) Diagram {
+func (l Layout) Diagram(agents []session.Agent, procs bool) Diagram {
 	box := l.Box
 	box.W = l.boxWidth(agents)
 	w := max(l.View.W, leadW, box.W) // the tree's width: the lead is centered over it

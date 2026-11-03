@@ -180,7 +180,7 @@ func TestDiagramDrawsEveryAgent(t *testing.T) {
 			agents := sets[name]
 			t.Run(fmt.Sprintf("%s agents at %dx%d", name, size[0], size[1]), func(t *testing.T) {
 				l := NewLayout(size[0], size[1])
-				d := l.Diagram(agents)
+				d := l.Diagram(agents, false)
 				if d.W < l.View.W || d.H < l.View.H {
 					t.Errorf("diagram %dx%d is smaller than the viewport %+v", d.W, d.H, l.View)
 				}
@@ -261,7 +261,7 @@ func TestDiagramBoxFitsTheLongestName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := NewLayout(tt.w, 46).Diagram(agentsOf(tt.agent))
+			d := NewLayout(tt.w, 46).Diagram(agentsOf(tt.agent), false)
 			if len(d.Nodes) != 1 || d.Nodes[0].Rect.W != tt.want {
 				t.Errorf("nodes %+v, want one box %d wide", d.Nodes, tt.want)
 			}
@@ -278,7 +278,7 @@ func TestDiagramHoldsEveryBoxWhole(t *testing.T) {
 			for i := range ids {
 				ids[i] = fmt.Sprintf("a%d", i)
 			}
-			d := l.Diagram(agentsOf(ids...))
+			d := l.Diagram(agentsOf(ids...), false)
 			bottom := max(d.Lead.Y+d.Lead.H, d.Tools.Y+d.Tools.H)
 			for _, node := range d.Nodes {
 				if node.Rect.H != 7 {

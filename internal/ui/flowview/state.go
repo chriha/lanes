@@ -26,6 +26,8 @@ type State struct {
 	Usage5h      int  // the account's 5h usage in percent, when Usage5hKnown
 	Usage5hKnown bool // the 5h usage is known and fresh
 
+	Procs []session.Proc // the session's process tree as last sampled; none while unknown or once ended
+
 	eased      bool // Snap.Lead's counters ease toward the lead as read: its tokens are readTokens
 	readTokens int  // the lead's tokens as read, when eased
 }

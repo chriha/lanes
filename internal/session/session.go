@@ -29,6 +29,7 @@ type Info struct {
 	Exit    int
 	Created time.Time
 	Claude  string // working | asking | waiting, empty if the command does not report status
+	PID     int    // the pane's process, 0 when unknown
 }
 
 var unsafe = regexp.MustCompile(`[^A-Za-z0-9_-]`)

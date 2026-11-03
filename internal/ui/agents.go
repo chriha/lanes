@@ -18,13 +18,15 @@ type agentView struct {
 	name   string // the tmux session
 	back   mode   // the screen A was pressed on
 	fv     flowview.Model
-	tailer *session.Tailer // read by one poll at a time
-	gen    int             // tells this view's polls from those of a view opened before
-	hook   string          // Claude's hook state as last applied
-	ended  bool            // Claude exited or the session finished: the next poll is the last
-	frozen bool            // the end is applied: no more polls
-	err    string          // the last read error said, so a failing read is said once
-	has5h  bool            // the view has a known 5h usage
+	tailer *session.Tailer              // read by one poll at a time
+	gen    int                          // tells this view's polls from those of a view opened before
+	hook   string                       // Claude's hook state as last applied
+	ended  bool                         // Claude exited or the session finished: the next poll is the last
+	frozen bool                         // the end is applied: no more polls
+	err    string                       // the last read error said, so a failing read is said once
+	has5h  bool                         // the view has a known 5h usage
+	pid    int                          // the session's pane process, the root of the sampled tree; 0 when unknown
+	sample func(pid int) []session.Proc // samples the process tree under pid; one sample in flight
 }
 
 // agentPollMsg says it is time for the agent view's next read of the transcripts.
@@ -36,6 +38,21 @@ type agentSnapMsg struct {
 	snap  session.Snapshot
 	err   error
 	final bool // the read started after the end was known: it holds the final state
+}
+
+// agentProcPollMsg says it is time for the agent view's next sample of the session's processes.
+type agentProcPollMsg struct{ gen int }
+
+// agentProcsMsg carries what a sample of the session's processes gave.
+type agentProcsMsg struct {
+	gen   int
+	procs []session.Proc
+}
+
+// sampleProcs samples the session's process tree off the UI goroutine.
+func (a *agentView) sampleProcs() tea.Cmd {
+	gen := a.gen
+	return func() tea.Msg { return agentProcsMsg{gen: gen} }
 }
 
 // poll reads what the transcripts gained since the last read, off the UI goroutine. Only one read is in flight:

@@ -1089,7 +1089,11 @@ The footer draws errors in the `bad` color and warnings (a request that was not 
 `tmux unavailable` or a skipped item) in `warn`; other messages stay plain.
 
 `mode` picks the palette: `system` (the default) follows the terminal background as detected at start, `light` and
-`dark` force that palette. Forcing a mode helps when detection is slow or wrong, for example inside tmux or over SSH.
+`dark` force that palette. Forcing a mode helps when detection is slow or wrong, for example over SSH.
+
+Inside tmux, detection asks the outer terminal through tmux's passthrough, which needs `set -g allow-passthrough on`
+in your tmux config. Without it the answer never arrives and `lanes` falls back to `COLORFGBG`, then to the dark
+palette; on a light terminal set that option or use `mode = "light"`.
 
 The flat `[theme]` keys apply to both modes. `[theme.light]` and `[theme.dark]` take the same color keys for one mode
 only. Per key, the active mode's table wins over the flat `[theme]` value, which wins over the built-in default:

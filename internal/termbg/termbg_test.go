@@ -91,7 +91,7 @@ func TestQuerySkipsWhatItMustNotTalkTo(t *testing.T) {
 		t.Run(term, func(t *testing.T) {
 			// a pipe is no terminal, so the query must not even be written to it
 			start := time.Now()
-			if reply, ok := query(w, term, time.Second); ok || reply != "" {
+			if reply, ok := query(w, term, "", time.Second); ok || reply != "" {
 				t.Errorf("query = %q, %v; want no reply", reply, ok)
 			}
 			if time.Since(start) > 500*time.Millisecond {
@@ -118,7 +118,7 @@ func TestAsk(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer sent.Close()
-		got, ok := ask(r, sent, time.Second)
+		got, ok := ask(r, sent, queryOSC11, time.Second)
 		if !ok || got != reply {
 			t.Errorf("ask = %q, %v; want %q", got, ok, reply)
 		}
@@ -135,7 +135,7 @@ func TestAsk(t *testing.T) {
 		defer r.Close()
 		defer w.Close()
 		start := time.Now()
-		got, ok := ask(r, io.Discard, 100*time.Millisecond)
+		got, ok := ask(r, io.Discard, queryOSC11, 100*time.Millisecond)
 		if ok || got != "" {
 			t.Errorf("ask = %q, %v; want no reply", got, ok)
 		}
@@ -143,4 +143,31 @@ func TestAsk(t *testing.T) {
 			t.Errorf("ask took %v, want about the 100ms wait", d)
 		}
 	})
+}
+
+func TestQueryFor(t *testing.T) {
+	tests := []struct {
+		name     string
+		term     string
+		tmux     string
+		want     string
+		wantSent bool
+	}{
+		{"plain terminal", "xterm-256color", "", "\x1b]11;?\x1b\\", true},
+		{"plain terminal ignores TMUX", "xterm-256color", "/tmp/tmux-1/default,1,0", "\x1b]11;?\x1b\\", true},
+		{"tmux term inside tmux is wrapped", "tmux-256color", "/tmp/tmux-1/default,1,0", "\x1bPtmux;\x1b\x1b]11;?\x1b\x1b\\\x1b\\", true},
+		{"screen term inside tmux is wrapped", "screen-256color", "/tmp/tmux-1/default,1,0", "\x1bPtmux;\x1b\x1b]11;?\x1b\x1b\\\x1b\\", true},
+		{"tmux term without TMUX is skipped", "tmux-256color", "", "", false},
+		{"screen term without TMUX is skipped", "screen", "", "", false},
+		{"dumb is skipped", "dumb", "/tmp/tmux-1/default,1,0", "", false},
+		{"empty TERM", "", "", "\x1b]11;?\x1b\\", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := queryFor(tt.term, tt.tmux)
+			if ok != tt.wantSent || got != tt.want {
+				t.Errorf("queryFor(%q, %q) = %q, %v; want %q, %v", tt.term, tt.tmux, got, ok, tt.want, tt.wantSent)
+			}
+		})
+	}
 }

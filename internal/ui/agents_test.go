@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -354,5 +355,49 @@ func TestAgentReadErrorIsSaidOnce(t *testing.T) {
 	read(t, m)
 	if m.notice != "" {
 		t.Errorf("the same read error is said again: %q", m.notice)
+	}
+}
+
+func TestAgentViewShowsThe5hShare(t *testing.T) {
+	tests := []struct {
+		name   string
+		before bool // the usage arrives before the view opens
+		usage  usage5hMsg
+		want   string // the lead's 5h row, spaces collapsed; "" for none
+	}{
+		{"arrives while open", false, usage5hMsg{pct: 40, ok: true}, "┃ 5h 40% ┃"},
+		{"known when the view opens", true, usage5hMsg{pct: 40, ok: true}, "┃ 5h 40% ┃"},
+		{"unknown shows no share", false, usage5hMsg{pct: 40}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := agentModel(t, working("fix~1"))
+			withTranscript(t, "fix~1")
+			if tt.before {
+				m.Update(tt.usage)
+			}
+			press(m, "A")
+			if !tt.before {
+				m.Update(tt.usage)
+			}
+			read(t, m) // the lead has all the session's tokens
+			v := strings.Join(strings.Fields(ansi.Strip(m.View())), " ")
+			if tt.want == "" && strings.Contains(v, "5h") || tt.want != "" && !strings.Contains(v, tt.want) {
+				t.Errorf("view = %q, want the 5h row %q", v, tt.want)
+			}
+		})
+	}
+}
+
+func TestPollUsage5hReadsTheClaudeDir(t *testing.T) {
+	m := agentModel(t, working("fix~1"))
+	dir := t.TempDir()
+	m.cfg.Settings.ClaudeDir = dir
+	line := fmt.Sprintf(`{"text":"5h 12%%","session":12,"at":%d}`, time.Now().Unix())
+	if err := os.WriteFile(filepath.Join(dir, session.UsageFile), []byte(line), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.pollUsage5h()(); got != (usage5hMsg{pct: 12, ok: true}) {
+		t.Errorf("poll gave %+v, want 12%% known", got)
 	}
 }

@@ -382,6 +382,8 @@ func (a *agent) snapshot(id string, failed map[string]bool) Agent {
 		ToolArg: tr.current().arg,
 		Ctx:     -1,
 		Effort:  tr.effort,
+		Tokens:  tr.tokens,
+		Calls:   tr.calls,
 	}
 	if out.Task == "" {
 		out.Task = promptTask(tr.prompt)

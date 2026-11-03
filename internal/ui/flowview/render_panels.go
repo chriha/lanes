@@ -109,6 +109,27 @@ func (c *Canvas) spread(x, y, w int, left, right string, lr, rr Role) {
 	c.Text(x+w-n, y, right, rr)
 }
 
+// spreadAll draws parts over w cells from x: the first at the start, the last at the end and the others spread
+// evenly between, at least a space apart; cut to w cells.
+func (c *Canvas) spreadAll(x, y, w int, parts []string, role Role) {
+	gaps, free := len(parts)-1, w
+	for _, p := range parts {
+		free -= runeLen(p)
+	}
+	runs := make([]seg, 0, 2*len(parts))
+	for i, p := range parts {
+		runs = append(runs, seg{p, role})
+		if i < gaps {
+			pad := max(free/gaps, 1)
+			if i < free%gaps {
+				pad++
+			}
+			runs = append(runs, seg{strings.Repeat(" ", pad), role})
+		}
+	}
+	c.segs(x, y, w, runs...)
+}
+
 // titled draws a box with title in its top border.
 func (c *Canvas) titled(r Rect, title string, role, titleRole Role) {
 	c.titledIn(r, border, title, role, titleRole)
@@ -189,8 +210,8 @@ func (s State) drawSessionFrom(c *Canvas, r Rect, off int, focused bool) {
 
 // sessionRows are the session column's rows, each drawing itself on the row it is given (nil for a blank one):
 // the session's name and age, the lead's context bar and effort; the tool calls per minute as a sparkline; the hook
-// states on a timeline; the counters; the files touched last; the lead's last text; and the advisor when there
-// is one.
+// states on a timeline; the counters and the lead's share of the 5h usage when known; the files touched last; the
+// lead's last text; and the advisor when there is one.
 func (s State) sessionRows(c *Canvas, r Rect) []func(y int) {
 	x, w := r.X+2, r.W-4
 	lead := s.Snap.Lead
@@ -250,7 +271,11 @@ func (s State) sessionRows(c *Canvas, r Rect) []func(y int) {
 		label("tokens", fmtThousands(lead.Tokens), RoleBold),
 		label("  in", fmtThousands(lead.TokensIn), RoleText),
 		label("  out", fmtThousands(lead.TokensOut), RoleText),
-		label("  cache", fmtThousands(lead.TokensCache), RoleText),
+		label("  cache", fmtThousands(lead.TokensCache), RoleText))
+	if pct, ok := s.share5h(s.leadTokens()); ok {
+		rows = append(rows, label("5h", fmt.Sprintf("%d%%", pct), RoleBold))
+	}
+	rows = append(rows,
 		func(y int) {
 			c.Text(x, y, "agents", RoleDim)
 			n := min(segsLen(agents), w-7)

@@ -89,11 +89,17 @@ an env var).
 - Jump into a session: `tmux display-popup` / `switch-client` when inside tmux, `attach` otherwise.
 - **Agent view** (`A` on an item or on the sessions screen) — a full-screen animated diagram of a Claude
   session as a dense dashboard: a full-height session column as the lead's dashboard (context bar, effort meter,
-  tool-call sparkline over 15 min, hook states on a `┆` timeline, counters incl. the token split and agent counts,
+  tool-call sparkline over 15 min, hook states on a `┆` timeline, counters incl. the token split, the lead's 5h share and agent counts,
   last 4 files touched, last text, advisor), lead box with the tools box right of it, layered agent tree, session log and a status line
   with one colored entry per model family plus totals (an ended session reports no running agents). Agent boxes
-  show full name, model, effort meter, ctx bar, task, live text and status (`▸ tool arg` while running). The box is
-  6 rows. The task (`session.Agent.Task`) is the subagent's `meta.json` description, else the first sentence of its
+  show full name, model, effort meter, ctx bar, a usage row, task, live text and status (`▸ tool arg` while running). The box is
+  7 rows (`boxH`). The usage row spreads the agent's tokens (`Agent.Tokens`: input + cache write + output, counted like the
+  lead's), tool calls (`Agent.Calls`) and 5h share over the row (`fmtCount`; the units go when it doesn't fit). The 5h
+  share (`State.share5h`) is the account's 5h % (`session.Usage5h`: `session` of `usage-line.json`, unknown when missing,
+  unreadable, without `session` or older than 15 min) x the actor's tokens / the tokens of the lead and all agents,
+  rounded; 0 when they have none; left out when unknown. It assumes this session drives the account's usage. The lead's
+  share uses its tokens as read, not the easing counter. `internal/ui/model.go` reads it on the 1 s tick and
+  `agents.go` passes it to the open view as a `flowview.UsageEvent`; a frozen view keeps its last figure. The task (`session.Agent.Task`) is the subagent's `meta.json` description, else the first sentence of its
   first prompt (a leading `Read and follow …` line skipped), ≤ 40 chars; the live text (`Agent.Text`, drawn as
   `» text`) is the first line of its newest assistant text, ≤ 60 chars, dim once the agent is done or failed. One layout at every size (no compact
   or too-small mode): a pinned header (`AGENT VIEW · <item title>`, the session name as fallback; no live/ended

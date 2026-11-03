@@ -10,7 +10,7 @@
 ┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄    ┃                   ┌┴──────────────┐  
 ┃                    ┃                   ▼               │  
 ┗━━━━━━━━━━━━━━━━━━━━┛    ┏━ implementer ━━━━━━━━━━━━━━┓ │  
-                        diagram  lines 1-9/41  cols 1-37/76 
+                        diagram  lines 1-9/45  cols 1-37/76 
 ┌─ session log ────────────────────────────────────── 6/6 ─┐
 │ 14:28:30 code-reviewer spawned validator                 │
 │ 14:29:30 validator     failed                            │

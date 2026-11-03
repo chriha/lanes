@@ -75,10 +75,12 @@ func TestTailerFixture(t *testing.T) {
 				Status: AgentError, Ctx: -1},
 			{ID: "a1", Depth: 1, Name: "implementer", Type: "general-purpose", Model: "claude-opus-5-5",
 				Task: "Implement ticket 7", Status: AgentRunning, Start: at("00:05"), Tool: "Grep", ToolArg: "func Poll", Ctx: 5,
-				Effort: "low"},
+				Effort: "low", Tokens: 1094, Calls: 5},
 			{ID: "b1", Parent: "a1", Depth: 2, Name: "reviewer", Type: "general-purpose", Model: "claude-sonnet-5-5[1m]",
-				Task: "Review the diff", Text: "none", Status: AgentDone, Start: at("00:08"), End: at("00:14"), Ctx: 25, Effort: "xhigh"},
-			{ID: "c1", Depth: 1, Name: "verifier", Model: "claude-haiku-5-5", Text: "ok", Status: AgentRunning, Start: at("00:20"), Ctx: 0},
+				Task: "Review the diff", Text: "none", Status: AgentDone, Start: at("00:08"), End: at("00:14"), Ctx: 25, Effort: "xhigh",
+				Tokens: 113, Calls: 3},
+			{ID: "c1", Depth: 1, Name: "verifier", Model: "claude-haiku-5-5", Text: "ok", Status: AgentRunning, Start: at("00:20"), Ctx: 0,
+				Tokens: 11, Calls: 1},
 		},
 		ToolTimes: []time.Time{at("00:03"), at("00:05"), at("00:05"), at("00:06"), at("00:06"), at("00:06"),
 			at("00:06.5"), at("00:07"), at("00:09"), at("00:10"), at("00:10"), at("00:11"), at("00:20")},
@@ -318,6 +320,36 @@ func TestAgentText(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := pollAgent(t, `{}`, tt.lines...); got.Text != tt.want {
 				t.Errorf("Text = %q, want %q", got.Text, tt.want)
+			}
+		})
+	}
+}
+
+func TestAgentTokensAndCalls(t *testing.T) {
+	const (
+		use1  = `{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":1,"output_tokens":2,"cache_read_input_tokens":500,"cache_creation_input_tokens":30}}}`
+		use1b = `{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":1,"output_tokens":40,"cache_read_input_tokens":500,"cache_creation_input_tokens":30}}}`
+		use2  = `{"type":"assistant","message":{"id":"m2","usage":{"input_tokens":4,"output_tokens":6,"cache_creation_input_tokens":10}}}`
+		synth = `{"type":"assistant","message":{"id":"syn","model":"<synthetic>","usage":{"input_tokens":900}}}`
+		user  = `{"type":"user","message":{"content":"go"}}`
+	)
+	tests := []struct {
+		name          string
+		lines         []string
+		tokens, calls int
+	}{
+		{"no assistant messages", []string{user}, 0, 0},
+		{"input, cache write and output count; cache reads don't", []string{use1}, 33, 0},
+		{"later usage of a message replaces the earlier", []string{use1, use1b}, 71, 0},
+		{"messages sum", []string{use1b, use2}, 91, 0},
+		{"tool calls count over lines", []string{use2, toolLine("00:01", "Read", `{}`), toolLine("00:02", "Bash", `{}`)}, 20, 2},
+		{"synthetic messages are ignored", []string{use2, synth}, 20, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := pollAgent(t, `{}`, tt.lines...)
+			if got.Tokens != tt.tokens || got.Calls != tt.calls {
+				t.Errorf("tokens, calls = %d, %d; want %d, %d", got.Tokens, got.Calls, tt.tokens, tt.calls)
 			}
 		})
 	}

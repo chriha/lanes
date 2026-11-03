@@ -91,6 +91,7 @@ func (m *Model) openAgents(s session.Info, back mode, title string) tea.Cmd {
 	a.fv.SetSession(s.Name, title, s.Created, time.Now())
 	a.fv.Apply(flowview.HookEvent{Hook: s.Claude})
 	m.agents, m.mode, m.pendingG = a, modeAgents, false
+	m.syncUsage5h()
 	return tea.Batch(a.fv.Init(), a.poll())
 }
 
@@ -172,4 +173,11 @@ func (m *Model) syncAgents() {
 		return
 	}
 	a.ended = true // the session is gone
+}
+
+// syncUsage5h passes the account's 5h usage to the open view; a frozen view keeps the figure it ended with.
+func (m *Model) syncUsage5h() {
+	if a := m.agents; a != nil && !a.frozen {
+		a.fv.Apply(flowview.UsageEvent{Pct: m.usage5h.pct, Known: m.usage5h.ok})
+	}
 }

@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/json"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -141,25 +142,35 @@ func SettingsFile() (string, error) {
 // UsageFile is what a Claude Code mod writes into a Claude config dir: the statusline's usage text and when.
 const UsageFile = "usage-line.json"
 
-// Usage reads the usage text written into the Claude config dir (a leading ~ is the home dir). It returns ""
-// when dir is empty or the file is missing or unreadable.
-func Usage(dir string) (string, time.Time) {
+// usageLine is what Usage and Usage5h read of the usage file.
+type usageLine struct {
+	Text    string          `json:"text"`
+	Session json.RawMessage `json:"session"` // the account's 5h usage in percent; raw, so a bad one spares Text
+	At      int64           `json:"at"`
+}
+
+// readUsage reads the usage file in the Claude config dir (a leading ~ is the home dir). ok is false when dir is
+// empty or the file is missing or unreadable.
+func readUsage(dir string) (u usageLine, ok bool) {
 	if dir == "" {
-		return "", time.Time{}
+		return u, false
 	}
 	if rest, ok := strings.CutPrefix(dir, "~"); ok {
 		home, _ := os.UserHomeDir()
 		dir = home + rest
 	}
 	b, err := os.ReadFile(filepath.Join(dir, UsageFile))
-	if err != nil {
-		return "", time.Time{}
+	if err != nil || json.Unmarshal(b, &u) != nil {
+		return usageLine{}, false
 	}
-	var u struct {
-		Text string `json:"text"`
-		At   int64  `json:"at"`
-	}
-	if json.Unmarshal(b, &u) != nil || u.Text == "" {
+	return u, true
+}
+
+// Usage reads the usage text written into the Claude config dir (a leading ~ is the home dir). It returns ""
+// when dir is empty or the file is missing or unreadable.
+func Usage(dir string) (string, time.Time) {
+	u, ok := readUsage(dir)
+	if !ok || u.Text == "" {
 		return "", time.Time{}
 	}
 	return u.Text, time.Unix(u.At, 0)
@@ -172,5 +183,10 @@ const UsageStale = 15 * time.Minute
 // dir. ok is false when dir is empty, the file is missing or unreadable, has no `session` value, or was written
 // more than UsageStale before now.
 func Usage5h(dir string, now time.Time) (pct int, ok bool) {
-	return 0, false
+	u, ok := readUsage(dir)
+	var p *float64
+	if !ok || json.Unmarshal(u.Session, &p) != nil || p == nil || u.At == 0 || now.Sub(time.Unix(u.At, 0)) > UsageStale {
+		return 0, false
+	}
+	return int(math.Round(*p)), true
 }

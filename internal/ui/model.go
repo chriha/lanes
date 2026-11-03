@@ -138,7 +138,8 @@ type Model struct {
 	// showSnoozed lists snoozed items too (:snoozed)
 	showSnoozed bool
 	preview_    bool
-	usage       usageMsg // Claude usage from [settings] claude_dir, shown at the left of the footer
+	usage       usageMsg   // Claude usage from [settings] claude_dir, shown at the left of the footer
+	usage5h     usage5hMsg // the account's 5h usage from the same file, for the agent view
 	// originForge detects the forge for a new .lanes.toml (:edit project); nil = provider.OriginForge
 	originForge func() (typ, repo string, err error)
 	// updates checks for a newer release at start; nil = no check (see WithUpdateCheck)
@@ -526,9 +527,12 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.wake(time.Time(msg), nil) {
 			m.rebuild()
 		}
-		return m, tea.Batch(tick(), m.onTick(), m.pollSessions(), m.pollUsage())
+		return m, tea.Batch(tick(), m.onTick(), m.pollSessions(), m.pollUsage(), m.pollUsage5h())
 	case usageMsg:
 		m.usage = msg
+	case usage5hMsg:
+		m.usage5h = msg
+		m.syncUsage5h()
 	case updateMsg:
 		m.onUpdate(msg)
 	case sessionsMsg:
@@ -1092,6 +1096,14 @@ func (m *Model) pollUsage() tea.Cmd {
 	return func() tea.Msg {
 		text, at := session.Usage(dir)
 		return usageMsg{text, at}
+	}
+}
+
+func (m *Model) pollUsage5h() tea.Cmd {
+	dir := m.cfg.Settings.ClaudeDir
+	return func() tea.Msg {
+		pct, ok := session.Usage5h(dir, time.Now())
+		return usage5hMsg{pct, ok}
 	}
 }
 

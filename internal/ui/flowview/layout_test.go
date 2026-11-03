@@ -122,8 +122,8 @@ func TestNewLayout(t *testing.T) {
 			if l.Frame != (Rect{0, 0, w, h}) {
 				t.Errorf("frame %+v, want the whole terminal", l.Frame)
 			}
-			if l.Box.H != 6 {
-				t.Errorf("box height %d, want 6: border, model, ctx, task, live text, border", l.Box.H)
+			if l.Box.H != 7 {
+				t.Errorf("box height %d, want 7: border, model, ctx, usage, task, live text, border", l.Box.H)
 			}
 			if l.Box.W < 28 || l.Box.W > 30 {
 				t.Errorf("box width %d, want 28 to 30", l.Box.W)
@@ -281,11 +281,11 @@ func TestDiagramHoldsEveryBoxWhole(t *testing.T) {
 			d := l.Diagram(agentsOf(ids...))
 			bottom := max(d.Lead.Y+d.Lead.H, d.Tools.Y+d.Tools.H)
 			for _, node := range d.Nodes {
-				if node.Rect.H != 6 {
-					t.Fatalf("%v, %d agents: box %+v is not 6 rows high", size, n, node.Rect)
+				if node.Rect.H != 7 {
+					t.Fatalf("%v, %d agents: box %+v is not 7 rows high", size, n, node.Rect)
 				}
-				if (node.Rect.Y-d.Tree.Y)%(6+rowGap) != 0 {
-					t.Errorf("%v, %d agents: box %+v is not on a line %d rows apart", size, n, node.Rect, 6+rowGap)
+				if (node.Rect.Y-d.Tree.Y)%(7+rowGap) != 0 {
+					t.Errorf("%v, %d agents: box %+v is not on a line %d rows apart", size, n, node.Rect, 7+rowGap)
 				}
 				bottom = max(bottom, node.Rect.Y+node.Rect.H)
 			}

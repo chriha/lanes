@@ -12,30 +12,30 @@
 ┃ ◇ working          ┃   ┏━ implementer ━━━━━━━━━━━━━━┓   ┏━ triager ━━━━━━━━━━━━━━━━━━┓  
 ┃ ┆                  ┃   ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃  
 ┃ ◇ asking           ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  42% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   7% ┃  
-┃ ┆                  ┃   ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  
-┃ ◇ waiting          ┃   ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  
-┃                    ┃   ┗━ ■ stopped 9m00s ━━━━━━━━━━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛  
-┃ turns           12 ┃                  │                                                 
-┃ tools           48 ┃                  └───────────────┐                                 
-┃ tokens   1,234,567 ┃                                  ▼                                 
-┃   in        12,345 ┃                   ┏━ code-reviewer ━━━━━━━━━━━━┓                   
-┃   out       98,765 ┃                   ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                   
-┃   cache  1,123,457 ┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   -- ┃                   
-┃ agents    ■0 ✓1 ✗1 ┃                   ┃      review the diff       ┃                   
-┃                    ┃                   ┃                            ┃                   
-┃ files              ┃                   ┗━ ■ stopped 2m00s ━━━━━━━━━━┛                   
-┃ render_panels.go   ┃                                  │                                 
+┃ ┆                  ┃   ┃ 412.3k tok  37 calls 5h 7% ┃   ┃ 23.5k tok   8 calls  5h 0% ┃  
+┃ ◇ waiting          ┃   ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  
+┃                    ┃   ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  
+┃ turns           12 ┃   ┗━ ■ stopped 9m00s ━━━━━━━━━━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛  
+┃ tools           48 ┃                  │                                                 
+┃ tokens   1,234,567 ┃                  └───────────────┐                                 
+┃   in        12,345 ┃                                  ▼                                 
+┃   out       98,765 ┃                   ┏━ code-reviewer ━━━━━━━━━━━━┓                   
+┃   cache  1,123,457 ┃                   ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                   
+┃ 5h             21% ┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   -- ┃                   
+┃ agents    ■0 ✓1 ✗1 ┃                   ┃ 98.8k tok  21 calls  5h 2% ┃                   
+┃                    ┃                   ┃      review the diff       ┃                   
+┃ files              ┃                   ┃                            ┃                   
+┃ render_panels.go   ┃                   ┗━ ■ stopped 2m00s ━━━━━━━━━━┛                   
 ┃ state.go           ┃                                  │                                 
-┃ layout.go          ┃                                  ▼                                 
-┃ README.md          ┃                   ┏━ validator ━━━━━━━━━━━━━━━━┓                   
-┃                    ┃                   ┃         sonnet 4.5         ┃                   
-┃ last:              ┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  12% ┃                   
-┃ Slice 2 is next:   ┃                   ┃     validate a finding     ┃                   
-┃ the layered layout ┃                   ┃                            ┃                   
-┃ and the static…    ┃                   ┗━ ✗ failed 1m00s ━━━━━━━━━━━┛                   
-┃                    ┃                                                                    
-┃ advisor   opus 4.1 ┃                                                                    
-┗━━━━━━━━━━━━━━━━━━━━┛                                                                    
+┃ layout.go          ┃                                  │                                 
+┃ README.md          ┃                                  ▼                                 
+┃                    ┃                   ┏━ validator ━━━━━━━━━━━━━━━━┓                   
+┃ last:              ┃                   ┃         sonnet 4.5         ┃                   
+┃ Slice 2 is next:   ┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  12% ┃                   
+┃ the layered layout ┃                   ┃ 5.4k tok   3 calls   5h 0% ┃                   
+┃ and the static…    ┃                   ┃     validate a finding     ┃                   
+┃                    ┃                   ┃                            ┃                   
+┗━━━━━━━━━━━━━━━━━━━━┛                   ┗━ ✗ failed 1m00s ━━━━━━━━━━━┛                   
                                                                     diagram  cols 1-67/91 
 ┌─ session log ──────────────────────────────────────────────────────────────────── 6/6 ─┐
 │ 14:28:30 code-reviewer spawned validator                                               │

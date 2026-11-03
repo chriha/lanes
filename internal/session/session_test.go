@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -511,6 +512,7 @@ func TestUsage(t *testing.T) {
 		{"missing file", "DIR", "", "", 0},
 		{"empty text", "DIR", `{"text":null,"at":100}`, "", 0},
 		{"broken json", "DIR", `{`, "", 0},
+		{"a bad session value spares the text", "DIR", `{"text":"5h 1%","session":"x","at":5}`, "5h 1%", 5},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -742,5 +744,46 @@ func TestClaudeSessionUnreadable(t *testing.T) {
 	}
 	if got := ClaudeSession("bad"); got != "" {
 		t.Errorf("corrupt sidecar = %q", got)
+	}
+}
+
+func TestUsage5h(t *testing.T) {
+	now := time.Unix(10_000, 0)
+	fresh, stale := now.Add(-UsageStale).Unix(), now.Add(-UsageStale-time.Second).Unix()
+	tests := []struct {
+		name   string
+		noDir  bool
+		file   string
+		want   int
+		wantOK bool
+	}{
+		{"reads the session percent", false, fmt.Sprintf(`{"text":"5h 23%%","session":23,"at":%d}`, fresh), 23, true},
+		{"zero is known", false, fmt.Sprintf(`{"session":0,"at":%d}`, now.Unix()), 0, true},
+		{"a fraction is rounded", false, fmt.Sprintf(`{"session":7.6,"at":%d}`, now.Unix()), 8, true},
+		{"no dir configured", true, fmt.Sprintf(`{"session":23,"at":%d}`, now.Unix()), 0, false},
+		{"missing file", false, "", 0, false},
+		{"broken json", false, `{"session":`, 0, false},
+		{"no session value", false, fmt.Sprintf(`{"text":"5h 23%%","at":%d}`, now.Unix()), 0, false},
+		{"session value not a number", false, fmt.Sprintf(`{"session":"23","at":%d}`, now.Unix()), 0, false},
+		{"null session value", false, fmt.Sprintf(`{"session":null,"at":%d}`, now.Unix()), 0, false},
+		{"older than UsageStale", false, fmt.Sprintf(`{"session":23,"at":%d}`, stale), 0, false},
+		{"no time", false, `{"session":23}`, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tt.file != "" {
+				if err := os.WriteFile(filepath.Join(dir, UsageFile), []byte(tt.file), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tt.noDir {
+				dir = ""
+			}
+			got, ok := Usage5h(dir, now)
+			if got != tt.want || ok != tt.wantOK {
+				t.Errorf("Usage5h = %d, %v; want %d, %v", got, ok, tt.want, tt.wantOK)
+			}
+		})
 	}
 }

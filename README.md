@@ -678,13 +678,14 @@ place while shown). lanes reads it from `<claude_dir>/usage-line.json`, which a 
 Code mod writes whenever Claude measures usage:
 
 ```json
-{ "text": "5h 23% · wk 30% · budget +4% · reset 15:00", "at": 1761561600 }
+{ "text": "5h 23% · wk 30% · budget +4% · reset 15:00", "session": 23, "at": 1761561600 }
 ```
 
 lanes shows `text` as is, so it matches your Claude statusline. The file only changes while a Claude
 session of that profile runs; after 10 minutes the text shows its age. Each profile has its own
 dir (e.g. `~/.claude` and `~/.claude-personal` for `CLAUDE_CONFIG_DIR=~/.claude-personal claude`), and a
 project's `.lanes.toml` can point at a different one than the global config. Unset, or no file: nothing is shown.
+The [agent view](#agent-view) splits `session` (the account's 5h usage in %) over the lead and its agents.
 
 ### Agent view
 
@@ -706,7 +707,8 @@ anything because the terminal is small. It shows, top to bottom:
     (`▁▂▃▄▅▆▇█`, one cell per minute);
   - the hook state on a dashed `┆` timeline (`◆ working`, `◇ asking`, `◇ waiting`; the active one highlighted);
   - counters for `turns`, `tools` (tool calls), `tokens` (input + cache write + output), split into `in`, `out`
-    and `cache` (read + write), and `agents` running `◓`, done `✓` and failed `✗`;
+    and `cache` (read + write), the lead's `5h` share (see **5h share** below; left out when unknown),
+    and `agents` running `◓`, done `✓` and failed `✗`;
   - `files` — the last 4 files that Edit, Write or NotebookEdit touched, newest first;
   - `last:` — the lead's newest text, typed out;
   - `advisor` — the advisor model and its `calls`, when the session uses one.
@@ -717,13 +719,15 @@ anything because the terminal is small. It shows, top to bottom:
   scrolls with the diagram, which is wide enough for both: on a narrow terminal reach it with `h`/`l`.
 - **agents** — the subagents as a layered tree, one row per spawn depth, each connected to the agent that
   spawned it (or to the lead). Each box has the agent's full name in its top border, then its model and `effort`
-  meter, a `ctx` bar stretched over the row, with its % at the right edge, its task and a live text row; the bottom border shows the status: a spinner with elapsed time and
+  meter, a `ctx` bar stretched over the row, with its % at the right edge, a usage row (`41.2k tok  37 calls  5h 3%`:
+  its tokens, tool calls and 5h share, spread over the row), its task and a live text row; the bottom border shows the status: a spinner with elapsed time and
   `▸ <tool> <argument>` while running, `✓ done` with its duration, `✗` when it failed. The border takes the
   model family's color; finished agents are dimmed.
   The **task** is the subagent's description, else the first sentence of its first prompt (a leading
   `Read and follow …` line skipped), at most 40 characters. The **live text** `» …` is the first line of the
   agent's newest text, at most 60 characters, cut to the box; it changes while the agent runs, and a done or
-  failed agent keeps its last text, dimmed. Every agent is drawn: as many boxes as fit go side by side,
+  failed agent keeps its last text and its usage figures, dimmed. Tokens are input + cache write + output, like
+  the lead's; where the row is too narrow for the units, it shows only the numbers (`412.3k  12.3k  5h 7%`). Every agent is drawn: as many boxes as fit go side by side,
   and a depth that doesn't fit one line wraps into as many lines as it needs.
 - **session log** — a closed box of 4 lines, newest at the bottom, of everything the lead and the agents do:
   their tool calls (`Read file.go`, `Bash go test ./…`; failed calls in red), the first line of each of their
@@ -771,6 +775,13 @@ An agent's name is the meta's `name`, else the brief its prompt says to follow (
 **Context %.** An agent's `ctx` is the input + cache read + cache write tokens of its newest reply, divided by the
 model's context window: 1,000,000 for model ids ending in `[1m]`, otherwise 200,000 (more tokens than that mean a
 1M window).
+
+**5h share.** With [`claude_dir`](#usage-in-the-footer) set, each agent box and the session column show the
+actor's share of the account's 5h usage window: the `session` % of `usage-line.json` times the actor's tokens over
+the tokens of the lead and all agents of this session, rounded to a whole %; 0 while the session has no tokens.
+It assumes this session drives the usage: other Claude sessions of the account are not split out. The share is
+left out (tokens and calls stay) when the file is missing or unreadable, has no `session` value, or was written
+more than 15 minutes ago. An ended session keeps the share it ended with.
 
 **Ended sessions.** When Claude exits or the session finishes, the view reads the transcripts once more and
 freezes on that final state; the status line says `■ ended` instead of `● live`. Nothing moves, no packets run, and no

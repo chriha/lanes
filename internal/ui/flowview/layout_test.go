@@ -185,14 +185,19 @@ func TestDiagramDrawsEveryAgent(t *testing.T) {
 					if !procs && d.Procs != (Rect{}) {
 						t.Errorf("processes box %+v without processes, want none", d.Procs)
 					}
-					if procs && (d.Procs.X != d.Tools.X+d.Tools.W+wideGap || d.Procs.Y != d.Lead.Y || d.Procs.X+d.Procs.W > d.W || d.Procs.H != 7) {
-						t.Errorf("processes box %+v is not 7 rows high, %d right of the tools box %+v on the top row of the %d wide diagram", d.Procs, wideGap, d.Tools, d.W)
+					if procs && (d.Procs.X != d.Lead.X+d.Lead.W+wideGap || d.Procs.Y != d.Lead.Y || d.Procs.X+d.Procs.W > d.W || d.Procs.H != 7) {
+						t.Errorf("processes box %+v is not 7 rows high, %d right of the lead %+v on the top row of the %d wide diagram", d.Procs, wideGap, d.Lead, d.W)
 					}
 					if d.W < l.View.W || d.H < l.View.H {
 						t.Errorf("diagram %dx%d is smaller than the viewport %+v", d.W, d.H, l.View)
 					}
-					if d.Lead.X < 0 || d.Tools.X != d.Lead.X+d.Lead.W+wideGap || d.Tools.X+d.Tools.W > d.W || d.Tools.Y != d.Lead.Y {
-						t.Errorf("lead %+v and tools %+v are not side by side %d apart on the top row of the %d wide diagram", d.Lead, d.Tools, wideGap, d.W)
+					if d.Tools.X < 0 || d.Tools.X+d.Tools.W+wideGap != d.Lead.X || d.Lead.X+d.Lead.W > d.W || d.Tools.Y != d.Lead.Y {
+						t.Errorf("lead %+v and tools %+v are not side by side, tools left, %d apart on the top row of the %d wide diagram", d.Lead, d.Tools, wideGap, d.W)
+					}
+					if centered := (max(l.View.W, leadW, d.Box.W) - leadW + 1) / 2; centered >= leadW+wideGap && d.Lead.X != centered {
+						t.Errorf("lead at %d is not centered over the tree (%d) though tools fits left of it", d.Lead.X, centered)
+					} else if centered < leadW+wideGap && d.Tools.X != 0 {
+						t.Errorf("tools at %d, want 0 when the lead is shifted right to fit it", d.Tools.X)
 					}
 					if d.W < 2*leadW+wideGap {
 						t.Errorf("diagram is %d wide, want at least lead + gap + tools box = %d", d.W, 2*leadW+wideGap)

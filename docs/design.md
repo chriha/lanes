@@ -90,7 +90,7 @@ an env var).
 - **Agent view** (`A` on an item or on the sessions screen) — a full-screen animated diagram of a Claude
   session as a dense dashboard: a full-height session column as the lead's dashboard (context bar, effort meter,
   tool-call sparkline over 15 min, hook states on a `┆` timeline, counters incl. the token split, the lead's 5h share and agent counts,
-  last 4 files touched, last text, advisor), lead box with the tools box right of it, layered agent tree, session log and a status line
+  last 4 files touched, last text, advisor), lead box with the tools box left of it and the processes box right of it, layered agent tree, session log and a status line
   with one colored entry per model family plus totals (an ended session reports no running agents). Agent boxes
   show full name, model, effort meter, ctx bar, a usage row, task, live text and status (`▸ tool arg` while running). The box is
   7 rows (`boxH`). The usage row spreads the agent's tokens (`Agent.Tokens`: input + cache write + output, counted like the
@@ -106,7 +106,7 @@ an env var).
   `» text`) is the first line of its newest assistant text, ≤ 60 chars, dim once the agent is done or failed. One layout at every size (no compact
   or too-small mode): a pinned header (`AGENT VIEW · <item title>`, the session name as fallback; no live/ended
   state, the status line has it) with the family legend under its rule, session column, session log and status
-  line, and between them a viewport onto the diagram (lead with its effort and the tools box right of it, agent tree). The diagram is
+  line, and between them a viewport onto the diagram (lead with its effort and the tools box left of it, the processes box right of it, agent tree). The diagram is
   drawn whole on its own canvas and the visible window is blitted in; `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G` and
   `h`/`l` move the window, clamped at the edges, kept across snapshots, shown as `lines a-b/n  cols a-b/n` above
   the log. `tab` / `shift+tab` cycle the focus session column → diagram → session log (the diagram on open); the
@@ -145,7 +145,7 @@ an env var).
   holds as a whole word (the longest such command; its descendants go with it); the rest, and a command several
   agents run at once, go to the lead. It is best-effort: subagents share the claude process, and a command that
   forks away from its shell lands on the lead. The view draws the top 5 by CPU in the processes box right of the
-  tools box, each agent's summed share in its usage row and the tree's total in the status line.
+  lead, each agent's summed share in its usage row and the tree's total in the status line.
 
 ## Config (`~/.config/lanes/config.toml`, hot reloaded)
 

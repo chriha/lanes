@@ -269,7 +269,7 @@ func TestScrollKeys(t *testing.T) {
 		{"g goes to the top", 90, 24, []string{"G", "g"}, 0, 0},
 		{"l does nothing when the diagram fits the width", 200, 50, []string{"l"}, 0, 0},
 		{"h does nothing when the diagram fits the width", 200, 50, []string{"h"}, 0, 0},
-		{"l reaches the tools box at 90x24", 90, 24, strings.Split(strings.Repeat("l", 30), ""), 24, 0},
+		{"l stops at the right end at 90x24", 90, 24, strings.Split(strings.Repeat("l", 30), ""), 8, 0},
 		{"l moves a column right", 52, 15, []string{"l"}, 1, 0},
 		{"l stops at the right end", 52, 15, strings.Split(strings.Repeat("l", 70), ""), 46, 0},
 		{"h moves a column left", 52, 15, []string{"l", "l", "h"}, 1, 0},
@@ -407,9 +407,9 @@ func TestScrollIndicator(t *testing.T) {
 	}{
 		{"nothing to scroll, only the focus", 200, 50, fixtureState().Snap.Agents, nil, "diagram ", []string{"lines ", "cols "}},
 		{"nothing to scroll, not focused: nothing", 200, 50, fixtureState().Snap.Agents, []string{"tab"}, "", []string{"diagram", "lines ", "cols "}},
-		{"lines shown of the diagram's", 90, 24, deep(), []string{"j"}, "diagram  lines 2-14/75  cols 1-67/91", nil},
+		{"lines shown of the diagram's", 90, 24, deep(), []string{"j"}, "diagram  lines 2-14/75  cols 1-67/75", nil},
 		{"columns too on a narrow terminal", 52, 15, deep(), []string{"l"}, "diagram  lines 1-4/125  cols 2-30/75", nil},
-		{"not focused: the position without the name", 90, 24, deep(), []string{"tab"}, "lines 1-13/75  cols 1-67/91", []string{"diagram"}},
+		{"not focused: the position without the name", 90, 24, deep(), []string{"tab"}, "lines 1-13/75  cols 1-67/75", []string{"diagram"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

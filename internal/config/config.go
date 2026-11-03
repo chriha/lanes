@@ -416,10 +416,42 @@ func Load() (*Config, error) {
 	}
 	for key, name := range c.Keymap {
 		if _, ok := c.Action[name]; !ok {
-			return nil, fmt.Errorf("%s: keymap %q -> unknown action %q", p, key, name)
+			return nil, fmt.Errorf("%s: keymap %q -> unknown action %q%s", p, key, name, misplacedKeyHint(key))
 		}
 	}
 	return &c, nil
+}
+
+// misplacedKeyHint names the likely cause when a [keymap] key is a [theme] or [settings] key, which happens when
+// that table's header is commented out and its keys fall under the table above. "" for any other key.
+func misplacedKeyHint(key string) string {
+	for _, t := range []struct {
+		table string
+		v     any
+	}{{"theme", Theme{}}, {"settings", Settings{}}} {
+		if hasTomlKey(reflect.TypeOf(t.v), key) {
+			return fmt.Sprintf("; %q looks like a [%s] key, is its table header commented out?", key, t.table)
+		}
+	}
+	return ""
+}
+
+// hasTomlKey reports whether the struct has a scalar field with that toml name, looking into embedded structs.
+func hasTomlKey(rt reflect.Type, key string) bool {
+	for i := 0; i < rt.NumField(); i++ {
+		f := rt.Field(i)
+		switch {
+		case f.Anonymous && f.Type.Kind() == reflect.Struct:
+			if hasTomlKey(f.Type, key) {
+				return true
+			}
+		case f.Type.Kind() == reflect.Struct || f.Type.Kind() == reflect.Map:
+			// a sub-table such as [theme.light] or labels, not a key
+		case f.Tag.Get("toml") == key:
+			return true
+		}
+	}
+	return false
 }
 
 const Default = `# lanes — global config. A ".lanes.toml" in a project overlays this file (see README).

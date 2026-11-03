@@ -948,3 +948,49 @@ accent = "#cccccc"
 		}
 	}
 }
+
+func TestKeymapUnknownActionHint(t *testing.T) {
+	tests := []struct {
+		name    string
+		keymap  string
+		want    []string // substrings of the error
+		notWant string
+	}{
+		{"theme key", `mode = "system"`, []string{`keymap "mode"`, `"mode" looks like a [theme] key`, "commented out"}, ""},
+		{"theme color key", `accent = "#ffffff"`, []string{`"accent" looks like a [theme] key`}, ""},
+		{"settings key", `poll_interval = "30s"`, []string{`"poll_interval" looks like a [settings] key`}, ""},
+		{"other unknown action", `x = "nope"`, []string{`keymap "x" -> unknown action "nope"`}, "looks like"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+			t.Setenv("HOME", tmp)
+			old, _ := os.Getwd()
+			defer os.Chdir(old)
+			if err := os.Chdir(tmp); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[keymap]
+`+tt.keymap+"\n")
+			_, err := Load()
+			if err == nil {
+				t.Fatal("want an error")
+			}
+			for _, w := range tt.want {
+				if !strings.Contains(err.Error(), w) {
+					t.Errorf("err = %q, want it to contain %q", err, w)
+				}
+			}
+			if tt.notWant != "" && strings.Contains(err.Error(), tt.notWant) {
+				t.Errorf("err = %q, must not contain %q", err, tt.notWant)
+			}
+		})
+	}
+}

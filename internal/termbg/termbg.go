@@ -22,11 +22,29 @@ const queryOSC11 = "\x1b]11;?\x1b\\"
 
 var once sync.Once
 
+// queryFor returns the bytes that ask the terminal for its background given TERM and $TMUX; ok is false when the
+// terminal must not be asked. Inside tmux the query is wrapped in tmux's passthrough.
+func queryFor(termName, tmuxEnv string) (q string, ok bool) {
+	if strings.HasPrefix(termName, "dumb") {
+		return "", false
+	}
+	if strings.HasPrefix(termName, "screen") || strings.HasPrefix(termName, "tmux") {
+		// screen and tmux front several terminals, so they cannot answer for one, unless tmux relays the query
+		// to the outer terminal: its passthrough takes the sequence with every ESC doubled. It needs the tmux
+		// option allow-passthrough; without it the query is dropped and we fall back as for a silent terminal.
+		if tmuxEnv == "" {
+			return "", false
+		}
+		return "\x1bPtmux;" + strings.ReplaceAll(queryOSC11, "\x1b", "\x1b\x1b") + "\x1b\\", true
+	}
+	return queryOSC11, true
+}
+
 // Settle pins lipgloss's background to what the terminal on stdout reports, the first time it is called. Call it
 // after quietterm.Restore and before anything renders an adaptive color. It waits at most timeout.
 func Settle() {
 	once.Do(func() {
-		reply, ok := query(os.Stdout, os.Getenv("TERM"), timeout)
+		reply, ok := query(os.Stdout, os.Getenv("TERM"), os.Getenv("TMUX"), timeout)
 		lipgloss.SetHasDarkBackground(pick(reply, ok, os.Getenv("COLORFGBG")))
 	})
 }
@@ -84,12 +102,10 @@ func fromEnv(colorFGBG string) (dark, ok bool) {
 }
 
 // query asks the terminal on f for its background; ok is false when f is no terminal we may talk to, or it stays silent.
-func query(f *os.File, termName string, wait time.Duration) (reply string, ok bool) {
-	// screen and tmux front several terminals, so they cannot answer for one; termenv skips them too.
-	for _, p := range []string{"screen", "tmux", "dumb"} {
-		if strings.HasPrefix(termName, p) {
-			return "", false
-		}
+func query(f *os.File, termName, tmuxEnv string, wait time.Duration) (reply string, ok bool) {
+	q, ok := queryFor(termName, tmuxEnv)
+	if !ok {
+		return "", false
 	}
 	fd := f.Fd()
 	if !term.IsTerminal(fd) || !foreground(fd) {
@@ -104,12 +120,12 @@ func query(f *os.File, termName string, wait time.Duration) (reply string, ok bo
 			reply, ok = "", false // a terminal we cannot put back is not one to trust
 		}
 	}()
-	return ask(f, f, wait)
+	return ask(f, f, q, wait)
 }
 
-// ask writes the OSC 11 query to w and returns the reply read from f, or ok=false when none arrives within wait.
-func ask(f *os.File, w io.Writer, wait time.Duration) (reply string, ok bool) {
-	if _, err := io.WriteString(w, queryOSC11); err != nil {
+// ask writes the query q to w and returns the reply read from f, or ok=false when none arrives within wait.
+func ask(f *os.File, w io.Writer, q string, wait time.Duration) (reply string, ok bool) {
+	if _, err := io.WriteString(w, q); err != nil {
 		return "", false
 	}
 	deadline := time.Now().Add(wait)

@@ -15,6 +15,7 @@ import (
 // the fetches. off sets settings.no_update_check, check=false leaves WithUpdateCheck out.
 func newUpdateModel(t *testing.T, current string, fetch func() (string, error), off, check bool) (*Model, *int) {
 	t.Helper()
+	fakeTmux(t) // New needs a tmux on PATH; macOS CI runners have none
 	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "HOME"} {
 		t.Setenv(k, t.TempDir())
 	}

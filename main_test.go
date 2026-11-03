@@ -293,7 +293,11 @@ func TestRunGateWalksOnlyHashTrustedRoots(t *testing.T) {
 			if err := os.Mkdir(locked, 0o000); err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { os.Chmod(locked, 0o755) }) // let TempDir remove it
+			t.Cleanup(func() { // let TempDir remove it
+				if err := os.Chmod(locked, 0o755); err != nil {
+					t.Errorf("restoring %s: %v", locked, err)
+				}
+			})
 			var calls []string
 			e, _, stderr := fakeEnv(dir, true, true, &calls)
 			if code := run(tt.args, e); code != tt.wantCode {

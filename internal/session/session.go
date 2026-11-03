@@ -29,6 +29,7 @@ type Info struct {
 	Exit    int
 	Created time.Time
 	Claude  string // working | asking | waiting, empty if the command does not report status
+	PID     int    // the pane's process, 0 when unknown
 }
 
 var unsafe = regexp.MustCompile(`[^A-Za-z0-9_-]`)
@@ -88,14 +89,14 @@ func (m *Manager) tmux(args ...string) *exec.Cmd {
 func (m *Manager) List() ([]Info, error) {
 	const sep = "\t"
 	out, err := m.run("list-panes", "-a", "-F",
-		strings.Join([]string{"#{session_name}", "#{pane_dead}", deadStatus, "#{session_created}", "#{pane_current_command}"}, sep))
+		strings.Join([]string{"#{session_name}", "#{pane_dead}", deadStatus, "#{session_created}", "#{pane_current_command}", "#{pane_pid}"}, sep))
 	if err != nil {
 		return nil, nil // no server running = no sessions
 	}
 	var infos []Info
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		f := strings.Split(line, sep)
-		if len(f) != 5 {
+		if len(f) != 6 {
 			continue
 		}
 		action, key, ok := strings.Cut(f[0], "~")
@@ -105,6 +106,9 @@ func (m *Manager) List() ([]Info, error) {
 		created, _ := strconv.ParseInt(f[3], 10, 64)
 		exit := exitCode(f[2])
 		in := Info{Name: f[0], Action: action, ItemKey: key, Dead: f[1] == "1", Exit: exit, Created: time.Unix(created, 0)}
+		if pid, err := strconv.Atoi(f[5]); err == nil && pid > 0 {
+			in.PID = pid
+		}
 		if !in.Dead && !isShell(f[4]) {
 			in.Claude = readState(in.Name)
 		}

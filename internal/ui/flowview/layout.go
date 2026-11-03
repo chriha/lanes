@@ -15,6 +15,9 @@ const (
 	leadW            = 36
 	boxH             = 7 // agent box height: border, model, ctx, usage, task, live text, border
 	logLines         = 4 // the lines the session log shows
+	procsW           = 50
+	procsRows        = 5             // the processes the processes box lists
+	procsH           = procsRows + 2 // the processes box height: border, the processes, border
 )
 
 // Layout holds the pinned panels' rectangles for one terminal size and the viewport the diagram scrolls in. There
@@ -49,16 +52,19 @@ type Diagram struct {
 	W, H  int
 	Lead  Rect
 	Tools Rect // right of the lead on its top row, joined to nothing
+	Procs Rect // right of the tools box on the top row, joined to nothing; empty without processes
 	Tree  Rect // where the agent rows go
 	Box   Rect // the size (W, H) of one agent box
 	Nodes []Node
 }
 
 // Diagram lays out the scrolling part for the agents: the lead centered at the top with the tools box wideGap
-// columns right of it, every agent below the lead. It is as wide as the viewport, the lead or an agent box,
-// whichever is widest, and wider when the tools box ends past that; as high as the viewport or its agents,
-// whichever is higher. The agents are laid out in the width without the tools box, so it adds no columns to a line.
-func (l Layout) Diagram(agents []session.Agent) Diagram {
+// columns right of it and, with procs, the processes box wideGap columns right of that; every agent below the lead.
+// It is as wide as the viewport, the lead or an agent box, whichever is widest, and wider when the side boxes end
+// past that; as high as the viewport or its agents, whichever is higher. The agents are laid out in the width
+// without the side boxes, so they add no columns to a line. The processes box is higher than the tools box: the
+// agents go a row lower with it, so the connectors' bus runs below it.
+func (l Layout) Diagram(agents []session.Agent, procs bool) Diagram {
 	box := l.Box
 	box.W = l.boxWidth(agents)
 	w := max(l.View.W, leadW, box.W) // the tree's width: the lead is centered over it
@@ -66,8 +72,14 @@ func (l Layout) Diagram(agents []session.Agent) Diagram {
 	d.Tools = Rect{d.Lead.X + leadW + wideGap, d.Lead.Y, leadW, 6}
 	d.W = max(w, d.Tools.X+d.Tools.W)
 	d.Tree = Rect{0, d.Lead.Y + d.Lead.H + rowGap, w, 0}
-	d.Nodes = layoutTree(agents, d.Tree, box, l.Gap)
 	bottom := max(d.Lead.Y+d.Lead.H, d.Tools.Y+d.Tools.H)
+	if procs {
+		d.Procs = Rect{d.Tools.X + d.Tools.W + wideGap, d.Lead.Y, procsW, procsH}
+		d.W = max(d.W, d.Procs.X+d.Procs.W)
+		d.Tree.Y = max(d.Tree.Y, d.Procs.Y+d.Procs.H+rowGap-1) // the bus runs two rows above the agents
+		bottom = max(bottom, d.Procs.Y+d.Procs.H)
+	}
+	d.Nodes = layoutTree(agents, d.Tree, box, l.Gap)
 	for _, n := range d.Nodes {
 		bottom = max(bottom, n.Rect.Y+n.Rect.H)
 	}

@@ -71,6 +71,21 @@ func fixtureState() State {
 	}
 }
 
+// withProcs adds a sampled process tree to st: the pane's shell, claude, the implementer's go test (run by a shell
+// that evals it) with its compiler, an MCP server of the lead and gopls on its first sample.
+func withProcs(st State) State {
+	st.Procs = []session.Proc{
+		{PID: 100, PPID: 1, HasCPU: true, RSS: 4 << 20, Command: "-zsh"},
+		{PID: 101, PPID: 100, CPU: 35.2, HasCPU: true, RSS: 420 << 20, Command: "/Users/me/.local/bin/claude --model opus"},
+		{PID: 200, PPID: 101, CPU: 0.4, HasCPU: true, RSS: 3 << 20, Command: "/bin/zsh -c -l eval 'go test ./...'"},
+		{PID: 201, PPID: 200, CPU: 180, HasCPU: true, RSS: 1536 << 20, Command: "go test ./..."},
+		{PID: 202, PPID: 201, CPU: 95.6, HasCPU: true, RSS: 210 << 20, Command: "/usr/local/go/pkg/tool/darwin_arm64/compile -o x.a"},
+		{PID: 300, PPID: 101, CPU: 2, HasCPU: true, RSS: 80 << 20, Command: "node mcp-server.js"},
+		{PID: 301, PPID: 101, RSS: 900 << 10, Command: "gopls"},
+	}
+	return st
+}
+
 // toolTimes returns tool call times before now: perMinute maps minutes ago to the calls in that minute.
 func toolTimes(now time.Time, perMinute map[int]int) []time.Time {
 	var out []time.Time
@@ -99,22 +114,28 @@ func TestViewGolden(t *testing.T) {
 		})
 	}
 	tests := []struct {
-		name string
-		w, h int
-		st   State
+		name  string
+		w, h  int
+		st    State
+		right bool // scrolled to the diagram's right edge
 	}{
-		{"full", 90, 46, fixtureState()},
-		{"full_ended", 90, 46, ended},
-		{"full_wide", 200, 50, wide},
-		{"short", 90, 24, fixtureState()},
-		{"narrow", 60, 20, fixtureState()},
-		{"narrowest", 52, 15, fixtureState()},
+		{"full", 90, 46, fixtureState(), false},
+		{"full_ended", 90, 46, ended, false},
+		{"full_wide", 200, 50, wide, false},
+		{"short", 90, 24, fixtureState(), false},
+		{"narrow", 60, 20, fixtureState(), false},
+		{"narrowest", 52, 15, fixtureState(), false},
+		{"procs", 90, 24, withProcs(fixtureState()), true},
+		{"procs_wide", 200, 50, withProcs(wide), true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := New(theme)
 			m.SetSize(tt.w, tt.h)
 			m.SetState(tt.st)
+			if tt.right {
+				m.offX = far
+			}
 			got := ansi.Strip(m.View())
 			path := filepath.Join("testdata", tt.name+".golden")
 			if *update {
@@ -671,4 +692,98 @@ func TestLogPositionLeftOutWhenItDoesNotFit(t *testing.T) {
 			t.Errorf("width %d: top border %q, want the title and the position shown %v", tt.w, top, tt.want)
 		}
 	}
+}
+
+// procsBox returns the rows of the processes box in frame v, its title row first, cut at the box's left border; nil
+// when the frame has no processes box.
+func procsBox(v string) []string {
+	lines := strings.Split(v, "\n")
+	for i, ln := range lines {
+		r := []rune(ln)
+		for x := range r {
+			if strings.HasPrefix(string(r[x:]), "┏━ processes ") {
+				var rows []string
+				for _, l := range lines[i:min(i+7, len(lines))] { // border, five processes, border
+					rows = append(rows, string([]rune(l)[x:]))
+				}
+				return rows
+			}
+		}
+	}
+	return nil
+}
+
+func TestProcessesBox(t *testing.T) {
+	first := fixtureState()
+	first.Procs = []session.Proc{ // a first sample: no CPU share yet
+		{PID: 10, PPID: 1, RSS: 2 << 20, Command: "-zsh"},
+		{PID: 11, PPID: 10, RSS: 300 << 20, Command: "claude"},
+	}
+	tests := []struct {
+		name string
+		st   State
+		want [][]string // each row's fields, in order: agent, cpu, memory, command
+	}{
+		{"top five by cpu, each under the agent running it", withProcs(fixtureState()), [][]string{
+			{"implementer", "180%", "1.5G", "go test ./..."},
+			{"implementer", "96%", "210M", "compile -o x.a"},
+			{"lead", "35%", "420M", "claude --model opus"},
+			{"lead", "2%", "80M", "node mcp-server.js"},
+			{"implementer", "0%", "3M", "zsh -c -l eval"},
+		}},
+		{"first sample has no cpu share", first, [][]string{
+			{"lead", "n/a", "2M", "-zsh"},
+			{"lead", "n/a", "300M", "claude"},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New(nil)
+			m.SetSize(90, 46)
+			m.SetState(tt.st)
+			m.offX = far
+			box := procsBox(m.View())
+			if box == nil {
+				t.Fatalf("no processes box:\n%s", m.View())
+			}
+			for i, fields := range tt.want {
+				row := box[1+i]
+				at := 0
+				for _, f := range fields {
+					k := strings.Index(row[at:], f)
+					if k < 0 {
+						t.Fatalf("row %d %q lacks %q after column %d; want fields %q", i, row, f, at, fields)
+					}
+					at += k + len(f)
+				}
+			}
+			if rest := box[1+len(tt.want)]; len(tt.want) < 5 && strings.TrimSpace(strings.Trim(rest, "┃ ")) != "" {
+				t.Errorf("row after the processes is %q, want it empty", rest)
+			}
+		})
+	}
+}
+
+func TestProcessesBoxIsLeftOutWithoutData(t *testing.T) {
+	m := New(nil)
+	m.SetSize(200, 50)
+	m.SetState(withProcs(fixtureState()))
+	if procsBox(scrolledRight(m)) == nil {
+		t.Fatal("no processes box with processes")
+	}
+	m.Apply(ProcsEvent{})
+	if v := scrolledRight(m); procsBox(v) != nil {
+		t.Errorf("an empty sample still shows the processes box:\n%s", v)
+	}
+	m.Apply(ProcsEvent{Procs: withProcs(State{}).Procs})
+	m.Apply(EndEvent{})
+	if v := scrolledRight(m); procsBox(v) != nil {
+		t.Errorf("an ended session still shows the processes box:\n%s", v)
+	}
+}
+
+// scrolledRight is m's frame scrolled to the diagram's right edge.
+func scrolledRight(m Model) string {
+	m.offX = far
+	return m.View()
 }

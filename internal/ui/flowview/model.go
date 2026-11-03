@@ -166,7 +166,7 @@ func (m *Model) scroll(key string) {
 	if !ok {
 		return
 	}
-	d := m.layout.Diagram(m.st.Snap.Agents)
+	d := m.layoutDiagram()
 	x, y := m.clamp(d, m.offX, m.offY)
 	m.offX, m.offY = m.clamp(d, x+dx, y+dy)
 }
@@ -251,20 +251,28 @@ func (m *Model) SetState(st State) {
 // Offset returns the diagram's scroll offset: the column and line of the diagram at the viewport's top left. It
 // is kept across snapshots and resizes and clamped to the diagram as it is now.
 func (m Model) Offset() (x, y int) {
-	return m.clamp(m.layout.Diagram(m.st.Snap.Agents), m.offX, m.offY)
+	return m.clamp(m.layoutDiagram(), m.offX, m.offY)
+}
+
+// layoutDiagram lays out the diagram for the state as it is now.
+func (m Model) layoutDiagram() Diagram {
+	return m.layout.Diagram(m.st.Snap.Agents, len(m.st.Procs) > 0)
 }
 
 // View draws the frame. The header, legend, session column, log and status line are pinned; the diagram (lead,
-// tools box and every agent) is drawn whole on a canvas of its own and the scrolled-to part of it copied into the
+// tools box, processes box and every agent) is drawn whole on a canvas of its own and the scrolled-to part of it copied into the
 // viewport, with the position shown above the log when it does not fit. The focused area is highlighted.
 func (m Model) View() string {
 	c, l, s := m.canvas, m.layout, m.frame()
 	c.Clear()
-	d := l.Diagram(s.Snap.Agents)
+	d := l.Diagram(s.Snap.Agents, len(s.Procs) > 0)
 	dc := m.diagram
 	dc.Resize(d.W, d.H)
 	s.drawLead(dc, d.Lead)
 	s.drawTools(dc, d.Tools)
+	if d.Procs.W > 0 {
+		s.drawProcs(dc, d.Procs)
+	}
 	paths := s.drawTree(dc, d)
 	s.drawPackets(dc, m.packets, d.Nodes, paths)
 	x, y := m.clamp(d, m.offX, m.offY)

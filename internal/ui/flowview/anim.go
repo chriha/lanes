@@ -154,8 +154,13 @@ func (m *Model) Apply(ev Event) {
 		m.st.Hook = ev.Hook
 	case UsageEvent:
 		m.st.Usage5h, m.st.Usage5hKnown = ev.Pct, ev.Known
+	case ProcsEvent:
+		if !m.st.Ended {
+			m.st.Procs = ev.Procs
+		}
 	case EndEvent:
 		m.st.Ended = true
+		m.st.Procs = nil // Claude and its processes are gone
 	}
 	if m.st.Ended {
 		m.settle()

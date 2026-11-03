@@ -18,6 +18,9 @@ type UsageEvent struct {
 	Known bool
 }
 
+// ProcsEvent carries a sample of the session's process tree: the pane's process and all its descendants.
+type ProcsEvent struct{ Procs []session.Proc }
+
 // EndEvent says Claude exited or the session finished: the view freezes on its final state.
 type EndEvent struct{}
 
@@ -25,3 +28,4 @@ func (SnapshotEvent) isEvent() {}
 func (HookEvent) isEvent()     {}
 func (EndEvent) isEvent()      {}
 func (UsageEvent) isEvent()    {}
+func (ProcsEvent) isEvent()    {}

@@ -10,21 +10,27 @@ import (
 	"github.com/chriha/lanes/internal/ui/flowview"
 )
 
-// agentPollEvery is how often the open agent view reads what the transcripts gained.
-const agentPollEvery = 500 * time.Millisecond
+// agentPollEvery is how often the open agent view reads what the transcripts gained; agentProcsEvery how often it
+// samples the session's processes.
+const (
+	agentPollEvery  = 500 * time.Millisecond
+	agentProcsEvery = 3 * time.Second
+)
 
 // agentView is the open agent view: the flow view of one Claude session and the tailer that feeds it.
 type agentView struct {
 	name   string // the tmux session
 	back   mode   // the screen A was pressed on
 	fv     flowview.Model
-	tailer *session.Tailer // read by one poll at a time
-	gen    int             // tells this view's polls from those of a view opened before
-	hook   string          // Claude's hook state as last applied
-	ended  bool            // Claude exited or the session finished: the next poll is the last
-	frozen bool            // the end is applied: no more polls
-	err    string          // the last read error said, so a failing read is said once
-	has5h  bool            // the view has a known 5h usage
+	tailer *session.Tailer              // read by one poll at a time
+	gen    int                          // tells this view's polls from those of a view opened before
+	hook   string                       // Claude's hook state as last applied
+	ended  bool                         // Claude exited or the session finished: the next poll is the last
+	frozen bool                         // the end is applied: no more polls
+	err    string                       // the last read error said, so a failing read is said once
+	has5h  bool                         // the view has a known 5h usage
+	pid    int                          // the session's pane process, the root of the sampled tree; 0 when unknown
+	sample func(pid int) []session.Proc // samples the process tree under pid; one sample in flight
 }
 
 // agentPollMsg says it is time for the agent view's next read of the transcripts.
@@ -37,6 +43,25 @@ type agentSnapMsg struct {
 	err   error
 	final bool // the read started after the end was known: it holds the final state
 }
+
+// agentProcPollMsg says it is time for the agent view's next sample of the session's processes.
+type agentProcPollMsg struct{ gen int }
+
+// agentProcsMsg carries what a sample of the session's processes gave.
+type agentProcsMsg struct {
+	gen   int
+	procs []session.Proc
+}
+
+// sampleProcs samples the session's process tree off the UI goroutine. Only one sample is in flight: the next is
+// scheduled when this one has landed.
+func (a *agentView) sampleProcs() tea.Cmd {
+	sample, pid, gen := a.sample, a.pid, a.gen
+	return func() tea.Msg { return agentProcsMsg{gen: gen, procs: sample(pid)} }
+}
+
+// sampling tells whether the view samples the session's processes: while Claude runs in a pane of known pid.
+func (a *agentView) sampling() bool { return a.pid > 0 && !a.ended && !a.frozen }
 
 // poll reads what the transcripts gained since the last read, off the UI goroutine. Only one read is in flight:
 // the next is scheduled when this one has landed.
@@ -87,13 +112,27 @@ func (m *Model) openAgents(s session.Info, back mode, title string) tea.Cmd {
 		gen:    m.agentGen,
 		hook:   s.Claude,
 		ended:  claudeEnded(s),
+		pid:    s.PID,
+		sample: m.newSampler(),
 	}
 	a.fv.SetSize(m.width, m.height)
 	a.fv.SetSession(s.Name, title, s.Created, time.Now())
 	a.fv.Apply(flowview.HookEvent{Hook: s.Claude})
 	m.agents, m.mode, m.pendingG = a, modeAgents, false
 	m.syncUsage5h()
-	return tea.Batch(a.fv.Init(), a.poll())
+	cmds := []tea.Cmd{a.fv.Init(), a.poll()}
+	if a.sampling() {
+		cmds = append(cmds, a.sampleProcs())
+	}
+	return tea.Batch(cmds...)
+}
+
+// newSampler returns the process sampler of a new agent view: one per view, as a sampler follows one tree.
+func (m *Model) newSampler() func(pid int) []session.Proc {
+	if m.sampler != nil {
+		return m.sampler()
+	}
+	return session.NewSampler().Sample
 }
 
 func (m *Model) closeAgents() {
@@ -152,6 +191,27 @@ func (m *Model) onAgentSnap(msg agentSnapMsg) tea.Cmd {
 	}
 	gen := a.gen
 	return tea.Tick(agentPollEvery, func(time.Time) tea.Msg { return agentPollMsg{gen: gen} })
+}
+
+// onAgentProcPoll starts the next sample of the open view's processes; a tick of a closed or ended view starts none.
+func (m *Model) onAgentProcPoll(msg agentProcPollMsg) tea.Cmd {
+	a := m.agents
+	if a == nil || msg.gen != a.gen || !a.sampling() {
+		return nil
+	}
+	return a.sampleProcs()
+}
+
+// onAgentProcs hands a sample to the view and schedules the next one. A sample of a closed view, or one landing
+// after Claude or the session ended, is dropped and ends the sampling.
+func (m *Model) onAgentProcs(msg agentProcsMsg) tea.Cmd {
+	a := m.agents
+	if a == nil || msg.gen != a.gen || !a.sampling() {
+		return nil
+	}
+	a.fv.Apply(flowview.ProcsEvent{Procs: msg.procs})
+	gen := a.gen
+	return tea.Tick(agentProcsEvery, func(time.Time) tea.Msg { return agentProcPollMsg{gen: gen} })
 }
 
 // syncAgents passes the open view's session state from the newest tmux poll: a new hook state, or the end of

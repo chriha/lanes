@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -402,5 +403,108 @@ func TestEndedAgentViewTakesALate5hUsage(t *testing.T) {
 	m.Update(usage5hMsg{pct: 55, ok: true})
 	if v := strings.Join(strings.Fields(ansi.Strip(m.View())), " "); !strings.Contains(v, "┃ 5h 40% ┃") {
 		t.Errorf("frozen view does not keep the figure it has: %q", v)
+	}
+}
+
+// fakeSampler makes m's agent views sample with a fake that records the pids it samples and returns procs.
+func fakeSampler(m *Model, procs []session.Proc) *[]int {
+	var pids []int
+	m.sampler = func() func(int) []session.Proc {
+		return func(pid int) []session.Proc {
+			pids = append(pids, pid)
+			return procs
+		}
+	}
+	return &pids
+}
+
+// sampleOnce runs the open view's sample and hands its result to the model; next tells whether the model
+// scheduled another.
+func sampleOnce(t *testing.T, m *Model) (msg agentProcsMsg, next func() bool) {
+	t.Helper()
+	if m.agents == nil {
+		t.Fatal("no agent view open")
+	}
+	msg, ok := m.agents.sampleProcs()().(agentProcsMsg)
+	if !ok {
+		t.Fatalf("the sample returned %T, want agentProcsMsg", msg)
+	}
+	_, cmd := m.Update(msg)
+	return msg, func() bool { return cmd != nil }
+}
+
+func TestAgentViewSamplesTheProcesses(t *testing.T) {
+	procs := []session.Proc{
+		{PID: 4242, PPID: 1, Command: "-zsh"},
+		{PID: 4243, PPID: 4242, CPU: 12, HasCPU: true, RSS: 300 << 20, Command: "claude"},
+	}
+	open := working("fix~1")
+	open.PID = 4242
+	m := agentModel(t, open)
+	m.width = 300 // the processes box is on screen without scrolling
+	pids := fakeSampler(m, procs)
+	withTranscript(t, "fix~1")
+	press(m, "A")
+	if m.agents == nil {
+		t.Fatal("A did not open the view")
+	}
+	msg, next := sampleOnce(t, m)
+	if fmt.Sprint(*pids) != "[4242]" || len(msg.procs) != 2 {
+		t.Errorf("sampled pids %v giving %d processes, want the pane's pid 4242 once giving 2", *pids, len(msg.procs))
+	}
+	if !next() {
+		t.Error("a sample of a live session schedules no next one")
+	}
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "processes") || !strings.Contains(v, "300M") {
+		t.Errorf("view lacks the processes box with claude's memory:\n%s", v)
+	}
+	if _, cmd := m.Update(agentProcPollMsg{gen: m.agents.gen}); cmd == nil {
+		t.Error("the open view's sample tick starts no sample")
+	}
+	if _, cmd := m.Update(agentProcPollMsg{gen: m.agents.gen - 1}); cmd != nil {
+		t.Error("a sample tick of an older view starts a sample")
+	}
+}
+
+func TestAgentViewStopsSampling(t *testing.T) {
+	procs := []session.Proc{{PID: 4242, PPID: 1, Command: "claude"}}
+	live := working("fix~1")
+	live.PID = 4242
+	dead := live
+	dead.Dead = true
+	tests := []struct {
+		name string
+		open session.Info
+		stop func(m *Model) // nil: the view never samples
+	}{
+		{"closed", live, func(m *Model) { press(m, "esc") }},
+		{"session finished", live, func(m *Model) { m.Update(sessionsMsg{infos: []session.Info{dead}}) }},
+		{"session gone", live, func(m *Model) { m.Update(sessionsMsg{infos: nil}) }},
+		{"pane pid unknown", working("fix~1"), nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := agentModel(t, tt.open)
+			fakeSampler(m, procs)
+			withTranscript(t, "fix~1")
+			press(m, "A")
+			if m.agents == nil {
+				t.Fatal("A did not open the view")
+			}
+			gen := m.agents.gen
+			if tt.stop != nil {
+				if _, next := sampleOnce(t, m); !next() {
+					t.Fatal("a live session's sample schedules no next one")
+				}
+				landing := m.agents.sampleProcs()
+				tt.stop(m)
+				if _, cmd := m.Update(landing()); cmd != nil {
+					t.Error("a sample landing after the stop schedules another")
+				}
+			}
+			if _, cmd := m.Update(agentProcPollMsg{gen: gen}); cmd != nil {
+				t.Error("a sample tick after the stop starts a sample")
+			}
+		})
 	}
 }

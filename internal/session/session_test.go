@@ -132,19 +132,25 @@ func TestList(t *testing.T) {
 	}{
 		{"no server", "", errors.New("exit status 1"), nil},
 		{"empty output", "", nil, nil},
-		{"malformed lines skipped", "garbage\nfix~1\t0\t0\n\nnotab\t0\t0\t5\nfix~2\t0\t0\t5\tclaude\n", nil,
+		{"malformed lines skipped", "garbage\nfix~1\t0\t0\n\nnotab\t0\t0\t5\nfix~2\t0\t0\t5\tclaude\t0\n", nil,
 			[]Info{{Name: "fix~2", Action: "fix", ItemKey: "2", Created: time.Unix(5, 0)}}},
 		{"dead with exit status, newest first",
-			"fix~1\t1\t3\t100\tzsh\nreview~2\t0\t0\t200\tclaude\n", nil,
+			"fix~1\t1\t3\t100\tzsh\t0\nreview~2\t0\t0\t200\tclaude\t0\n", nil,
 			[]Info{{Name: "review~2", Action: "review", ItemKey: "2", Created: time.Unix(200, 0)},
 				{Name: "fix~1", Action: "fix", ItemKey: "1", Dead: true, Exit: 3, Created: time.Unix(100, 0)}}},
 		{"killed by a signal fails with 128+n",
-			"fix~1\t1\tsigterm\t1\tzsh\nfix~2\t1\tsig9\t2\tzsh\nfix~3\t1\tsigusr1\t3\tzsh\n", nil,
+			"fix~1\t1\tsigterm\t1\tzsh\t0\nfix~2\t1\tsig9\t2\tzsh\t0\nfix~3\t1\tsigusr1\t3\tzsh\t0\n", nil,
 			[]Info{{Name: "fix~3", Action: "fix", ItemKey: "3", Dead: true, Exit: 128, Created: time.Unix(3, 0)},
 				{Name: "fix~2", Action: "fix", ItemKey: "2", Dead: true, Exit: 137, Created: time.Unix(2, 0)},
 				{Name: "fix~1", Action: "fix", ItemKey: "1", Dead: true, Exit: 143, Created: time.Unix(1, 0)}}},
-		{"item key keeps later tildes", "fix~a~b\t0\t0\t1\tclaude\n", nil,
+		{"item key keeps later tildes", "fix~a~b\t0\t0\t1\tclaude\t0\n", nil,
 			[]Info{{Name: "fix~a~b", Action: "fix", ItemKey: "a~b", Created: time.Unix(1, 0)}}},
+		{"pane pid", "fix~1\t0\t0\t1\tclaude\t4242\n", nil,
+			[]Info{{Name: "fix~1", Action: "fix", ItemKey: "1", Created: time.Unix(1, 0), PID: 4242}}},
+		{"unreadable pane pid is unknown", "fix~1\t0\t0\t1\tclaude\tx\nfix~2\t0\t0\t2\tclaude\t-3\n", nil,
+			[]Info{{Name: "fix~2", Action: "fix", ItemKey: "2", Created: time.Unix(2, 0)},
+				{Name: "fix~1", Action: "fix", ItemKey: "1", Created: time.Unix(1, 0)}}},
+		{"line without the pane pid skipped", "fix~1\t0\t0\t1\tclaude\n", nil, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -241,7 +247,7 @@ func TestHookRoundTrip(t *testing.T) {
 			RunHook(tt.event)
 
 			m := fakeRun(nil, func([]string) ([]byte, error) {
-				return []byte("fix~1\t0\t0\t10\tclaude\n"), nil
+				return []byte("fix~1\t0\t0\t10\tclaude\t0\n"), nil
 			})
 			got, err := m.List()
 			if err != nil || len(got) != 1 {
@@ -273,7 +279,7 @@ func TestListIgnoresStateOfDeadSession(t *testing.T) {
 	t.Setenv("LANES_SESSION", "fix~1")
 	feedStdin(t, "{}")
 	RunHook("Stop")
-	m := fakeRun(nil, func([]string) ([]byte, error) { return []byte("fix~1\t1\t0\t10\tzsh\n"), nil })
+	m := fakeRun(nil, func([]string) ([]byte, error) { return []byte("fix~1\t1\t0\t10\tzsh\t0\n"), nil })
 	got, _ := m.List()
 	if len(got) != 1 || got[0].Claude != "" {
 		t.Errorf("got %+v", got)
@@ -300,7 +306,7 @@ func TestListIgnoresStateWhileShell(t *testing.T) {
 			t.Setenv("LANES_SESSION", "fix~1")
 			feedStdin(t, `{"notification_type":"permission_prompt"}`)
 			RunHook("Notification")
-			m := fakeRun(nil, func([]string) ([]byte, error) { return []byte("fix~1\t0\t0\t10\t" + tt.command + "\n"), nil })
+			m := fakeRun(nil, func([]string) ([]byte, error) { return []byte("fix~1\t0\t0\t10\t" + tt.command + "\t0\n"), nil })
 			got, err := m.List()
 			if err != nil || len(got) != 1 {
 				t.Fatalf("List = %+v, %v", got, err)
@@ -425,11 +431,11 @@ func TestStatusLine(t *testing.T) {
 		want   string
 	}{
 		{"no server", "", errors.New("no server running"), nil, ""},
-		{"only running", "fix~1\t0\t0\t1\tclaude\n", nil, map[string]string{"fix~1": "working"}, ""},
-		{"dead asking ignored", "fix~1\t1\t0\t1\tclaude\n", nil, map[string]string{"fix~1": "asking"}, ""},
-		{"asking only", "fix~1\t0\t0\t1\tclaude\n", nil, map[string]string{"fix~1": "asking"}, "? 1"},
-		{"waiting only", "fix~1\t0\t0\t1\tclaude\n", nil, map[string]string{"fix~1": "waiting"}, "● 1"},
-		{"both", "fix~1\t0\t0\t1\tclaude\nfix~2\t0\t0\t2\tclaude\nfix~3\t0\t0\t3\tclaude\nfix~4\t0\t0\t4\tclaude\n", nil,
+		{"only running", "fix~1\t0\t0\t1\tclaude\t0\n", nil, map[string]string{"fix~1": "working"}, ""},
+		{"dead asking ignored", "fix~1\t1\t0\t1\tclaude\t0\n", nil, map[string]string{"fix~1": "asking"}, ""},
+		{"asking only", "fix~1\t0\t0\t1\tclaude\t0\n", nil, map[string]string{"fix~1": "asking"}, "? 1"},
+		{"waiting only", "fix~1\t0\t0\t1\tclaude\t0\n", nil, map[string]string{"fix~1": "waiting"}, "● 1"},
+		{"both", "fix~1\t0\t0\t1\tclaude\t0\nfix~2\t0\t0\t2\tclaude\t0\nfix~3\t0\t0\t3\tclaude\t0\nfix~4\t0\t0\t4\tclaude\t0\n", nil,
 			map[string]string{"fix~1": "asking", "fix~2": "waiting", "fix~3": "waiting", "fix~4": "working"}, "? 1 ● 2"},
 	}
 	for _, tt := range tests {
@@ -454,7 +460,7 @@ func TestStatusLine(t *testing.T) {
 
 func TestPrune(t *testing.T) {
 	// fix~1 running, fix~2 dead ok, fix~3 dead failed, review~4 dead failed.
-	const panes = "fix~1\t0\t0\t1\tclaude\nfix~2\t1\t0\t2\tclaude\nfix~3\t1\t2\t3\tclaude\nreview~4\t1\t1\t4\tclaude\n"
+	const panes = "fix~1\t0\t0\t1\tclaude\t0\nfix~2\t1\t0\t2\tclaude\t0\nfix~3\t1\t2\t3\tclaude\t0\nreview~4\t1\t1\t4\tclaude\t0\n"
 	tests := []struct {
 		name       string
 		out        string
@@ -468,7 +474,7 @@ func TestPrune(t *testing.T) {
 		{"all dead, no running", panes, nil, false, "", []string{"review~4", "fix~3", "fix~2"}, 3, false},
 		{"failed only", panes, nil, true, "", []string{"review~4", "fix~3"}, 2, false},
 		{"failing kill does not stop the others", panes, nil, false, "fix~3", []string{"review~4", "fix~3", "fix~2"}, 2, true},
-		{"only running", "fix~1\t0\t0\t1\tclaude\n", nil, false, "", nil, 0, false},
+		{"only running", "fix~1\t0\t0\t1\tclaude\t0\n", nil, false, "", nil, 0, false},
 		{"no server", "", errors.New("no server running"), false, "", nil, 0, false},
 	}
 	for _, tt := range tests {

@@ -177,72 +177,82 @@ func TestDiagramDrawsEveryAgent(t *testing.T) {
 	sets := map[string][]session.Agent{"1": many(1), "5": many(5), "7": many(7), "12": many(12), "depth3": depth3}
 	for _, size := range sizes {
 		for _, name := range []string{"1", "5", "7", "12", "depth3"} {
-			agents := sets[name]
-			t.Run(fmt.Sprintf("%s agents at %dx%d", name, size[0], size[1]), func(t *testing.T) {
-				l := NewLayout(size[0], size[1])
-				d := l.Diagram(agents)
-				if d.W < l.View.W || d.H < l.View.H {
-					t.Errorf("diagram %dx%d is smaller than the viewport %+v", d.W, d.H, l.View)
-				}
-				if d.Lead.X < 0 || d.Tools.X != d.Lead.X+d.Lead.W+wideGap || d.Tools.X+d.Tools.W > d.W || d.Tools.Y != d.Lead.Y {
-					t.Errorf("lead %+v and tools %+v are not side by side %d apart on the top row of the %d wide diagram", d.Lead, d.Tools, wideGap, d.W)
-				}
-				if d.W < 2*leadW+wideGap {
-					t.Errorf("diagram is %d wide, want at least lead + gap + tools box = %d", d.W, 2*leadW+wideGap)
-				}
-				seen := map[int]bool{}
-				var counts []int
-				lastY := -1
-				for _, n := range d.Nodes {
-					seen[n.Agent] = true
-					if n.Rect.W < 28 {
-						t.Errorf("box %+v is narrower than 28", n.Rect)
+			for _, procs := range []bool{false, true} {
+				agents := sets[name]
+				t.Run(fmt.Sprintf("%s agents at %dx%d, processes %v", name, size[0], size[1], procs), func(t *testing.T) {
+					l := NewLayout(size[0], size[1])
+					d := l.Diagram(agents, procs)
+					if !procs && d.Procs != (Rect{}) {
+						t.Errorf("processes box %+v without processes, want none", d.Procs)
 					}
-					if n.Rect.X < 0 || n.Rect.X+n.Rect.W > d.W || n.Rect.Y < d.Lead.Y+d.Lead.H+rowGap || n.Rect.Y+n.Rect.H > d.H {
-						t.Errorf("box %+v leaves the %dx%d diagram or is not rowGap below the lead %+v", n.Rect, d.W, d.H, d.Lead)
+					if procs && (d.Procs.X != d.Tools.X+d.Tools.W+wideGap || d.Procs.Y != d.Lead.Y || d.Procs.X+d.Procs.W > d.W || d.Procs.H != 7) {
+						t.Errorf("processes box %+v is not 7 rows high, %d right of the tools box %+v on the top row of the %d wide diagram", d.Procs, wideGap, d.Tools, d.W)
 					}
-					if n.Rect.Y != lastY {
-						counts = append(counts, 0)
-						lastY = n.Rect.Y
+					if d.W < l.View.W || d.H < l.View.H {
+						t.Errorf("diagram %dx%d is smaller than the viewport %+v", d.W, d.H, l.View)
 					}
-					counts[len(counts)-1]++
-				}
-				if len(d.Nodes) != len(agents) || len(seen) != len(agents) {
-					t.Errorf("%d boxes of %d distinct agents, want one box per agent of %d", len(d.Nodes), len(seen), len(agents))
-				}
-				if got, want := fmt.Sprint(counts), lines[size][name]; got != want {
-					t.Errorf("boxes per line %s, want %s", got, want)
-				}
-				for i, p := range treePaths(d.Nodes, d.Lead, d.Tree) {
-					n := d.Nodes[i]
-					from := Point{d.Lead.X + d.Lead.W/2, d.Lead.Y + d.Lead.H}
-					if n.Parent >= 0 {
-						pr := d.Nodes[n.Parent].Rect
-						from = Point{pr.X + pr.W/2, pr.Y + pr.H}
+					if d.Lead.X < 0 || d.Tools.X != d.Lead.X+d.Lead.W+wideGap || d.Tools.X+d.Tools.W > d.W || d.Tools.Y != d.Lead.Y {
+						t.Errorf("lead %+v and tools %+v are not side by side %d apart on the top row of the %d wide diagram", d.Lead, d.Tools, wideGap, d.W)
 					}
-					if to := (Point{n.Rect.X + n.Rect.W/2, n.Rect.Y - 1}); p[0] != from || p[len(p)-1] != to {
-						t.Fatalf("connector of node %d runs %v to %v, want %v to %v", i, p[0], p[len(p)-1], from, to)
+					if d.W < 2*leadW+wideGap {
+						t.Errorf("diagram is %d wide, want at least lead + gap + tools box = %d", d.W, 2*leadW+wideGap)
 					}
-					for k, pt := range p {
-						if r := d.Tools; pt.X >= r.X-1 && pt.X <= r.X+r.W && pt.Y >= r.Y && pt.Y < r.Y+r.H {
-							t.Fatalf("connector of node %d touches the tools box %+v at %v", i, r, pt)
+					seen := map[int]bool{}
+					var counts []int
+					lastY := -1
+					for _, n := range d.Nodes {
+						seen[n.Agent] = true
+						if n.Rect.W < 28 {
+							t.Errorf("box %+v is narrower than 28", n.Rect)
 						}
-						if k > 0 {
-							if dx, dy := pt.X-p[k-1].X, pt.Y-p[k-1].Y; dx*dx+dy*dy != 1 {
-								t.Fatalf("connector of node %d jumps from %v to %v", i, p[k-1], pt)
+						if n.Rect.X < 0 || n.Rect.X+n.Rect.W > d.W || n.Rect.Y < d.Lead.Y+d.Lead.H+rowGap || n.Rect.Y+n.Rect.H > d.H {
+							t.Errorf("box %+v leaves the %dx%d diagram or is not rowGap below the lead %+v", n.Rect, d.W, d.H, d.Lead)
+						}
+						if n.Rect.Y != lastY {
+							counts = append(counts, 0)
+							lastY = n.Rect.Y
+						}
+						counts[len(counts)-1]++
+					}
+					if len(d.Nodes) != len(agents) || len(seen) != len(agents) {
+						t.Errorf("%d boxes of %d distinct agents, want one box per agent of %d", len(d.Nodes), len(seen), len(agents))
+					}
+					if got, want := fmt.Sprint(counts), lines[size][name]; got != want {
+						t.Errorf("boxes per line %s, want %s", got, want)
+					}
+					for i, p := range treePaths(d.Nodes, d.Lead, d.Tree) {
+						n := d.Nodes[i]
+						from := Point{d.Lead.X + d.Lead.W/2, d.Lead.Y + d.Lead.H}
+						if n.Parent >= 0 {
+							pr := d.Nodes[n.Parent].Rect
+							from = Point{pr.X + pr.W/2, pr.Y + pr.H}
+						}
+						if to := (Point{n.Rect.X + n.Rect.W/2, n.Rect.Y - 1}); p[0] != from || p[len(p)-1] != to {
+							t.Fatalf("connector of node %d runs %v to %v, want %v to %v", i, p[0], p[len(p)-1], from, to)
+						}
+						for k, pt := range p {
+							for _, r := range []Rect{d.Tools, d.Procs} {
+								if r.W > 0 && pt.X >= r.X-1 && pt.X <= r.X+r.W && pt.Y >= r.Y && pt.Y < r.Y+r.H {
+									t.Fatalf("connector of node %d touches the side box %+v at %v", i, r, pt)
+								}
+							}
+							if k > 0 {
+								if dx, dy := pt.X-p[k-1].X, pt.Y-p[k-1].Y; dx*dx+dy*dy != 1 {
+									t.Fatalf("connector of node %d jumps from %v to %v", i, p[k-1], pt)
+								}
+							}
+							if pt.X < 0 || pt.X >= d.W {
+								t.Fatalf("connector of node %d leaves the diagram at %v", i, pt)
+							}
+							for _, o := range d.Nodes {
+								if r := o.Rect; pt.X >= r.X && pt.X < r.X+r.W && pt.Y >= r.Y && pt.Y < r.Y+r.H {
+									t.Fatalf("connector of node %d crosses box %+v at %v", i, r, pt)
+								}
 							}
 						}
-						if pt.X < 0 || pt.X >= d.W {
-							t.Fatalf("connector of node %d leaves the diagram at %v", i, pt)
-						}
-						for _, o := range d.Nodes {
-							if r := o.Rect; pt.X >= r.X && pt.X < r.X+r.W && pt.Y >= r.Y && pt.Y < r.Y+r.H {
-								t.Fatalf("connector of node %d crosses box %+v at %v", i, r, pt)
-							}
-						}
 					}
-				}
-			})
+				})
+			}
 		}
 	}
 }
@@ -261,7 +271,7 @@ func TestDiagramBoxFitsTheLongestName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := NewLayout(tt.w, 46).Diagram(agentsOf(tt.agent))
+			d := NewLayout(tt.w, 46).Diagram(agentsOf(tt.agent), false)
 			if len(d.Nodes) != 1 || d.Nodes[0].Rect.W != tt.want {
 				t.Errorf("nodes %+v, want one box %d wide", d.Nodes, tt.want)
 			}
@@ -278,7 +288,7 @@ func TestDiagramHoldsEveryBoxWhole(t *testing.T) {
 			for i := range ids {
 				ids[i] = fmt.Sprintf("a%d", i)
 			}
-			d := l.Diagram(agentsOf(ids...))
+			d := l.Diagram(agentsOf(ids...), false)
 			bottom := max(d.Lead.Y+d.Lead.H, d.Tools.Y+d.Tools.H)
 			for _, node := range d.Nodes {
 				if node.Rect.H != 7 {

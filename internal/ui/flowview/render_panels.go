@@ -340,6 +340,36 @@ func (s State) drawTools(c *Canvas, r Rect) {
 	}
 }
 
+// Columns of a processes box row: the agent, the CPU share and the memory right-aligned, then the command.
+const procActorW, procCPUW, procMemW = 12, 5, 5
+
+// drawProcs draws the processes box: the session's processes using the most CPU, one a row, each with the agent
+// running it in its family color, its CPU share (n/a before a second sample), its memory and its command.
+func (s State) drawProcs(c *Canvas, r Rect) {
+	c.titled(r, "processes", RoleDim, RoleBold)
+	x, w := r.X+2, r.W-4
+	for i, p := range s.topProcs(r.H - 2) {
+		y := r.Y + 1 + i
+		cpu := "n/a"
+		if p.Proc.HasCPU {
+			cpu = fmt.Sprintf("%.0f%%", p.Proc.CPU)
+		}
+		c.textIn(x, y, procActorW, p.Actor, ModelRole(p.Model))
+		at := x + procActorW + 1
+		c.rightIn(at, y, procCPUW, cpu, RoleBold)
+		at += procCPUW + 1
+		c.rightIn(at, y, procMemW, fmtBytes(p.Proc.RSS), RoleText)
+		at += procMemW + 1
+		c.textIn(at, y, x+w-at, shortCommand(p.Proc.Command), RoleText)
+	}
+}
+
+// rightIn draws s right-aligned in w cells from x, cut to fit.
+func (c *Canvas) rightIn(x, y, w int, s string, role Role) {
+	t := fit(s, w)
+	c.Text(x+w-len(t), y, string(t), role)
+}
+
 // drawLog draws the session log at its newest lines, without the focus.
 func (s State) drawLog(c *Canvas, r Rect) { s.drawLogFrom(c, r, len(s.Log)-max(r.H-2, 0), false) }
 

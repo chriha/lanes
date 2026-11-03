@@ -113,9 +113,10 @@ type Model struct {
 	cmdline  textinput.Model
 	pendingG bool
 	notice   string
-	level    level              // how the footer draws notice
-	clip     func(string) error // nil: the system clipboard (tests fake it)
-	open     func(string) error // nil: the system opener (tests fake it)
+	level    level                               // how the footer draws notice
+	clip     func(string) error                  // nil: the system clipboard (tests fake it)
+	open     func(string) error                  // nil: the system opener (tests fake it)
+	sampler  func() func(pid int) []session.Proc // nil: a ps sampler per agent view (tests fake it)
 
 	sess       *session.Manager
 	settings   string
@@ -544,6 +545,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.onAgentPoll(msg)
 	case agentSnapMsg:
 		return m, m.onAgentSnap(msg)
+	case agentProcPollMsg:
+		return m, m.onAgentProcPoll(msg)
+	case agentProcsMsg:
+		return m, m.onAgentProcs(msg)
 	case interruptedMsg:
 		if m.interrupted == nil {
 			m.interrupted = map[string]bool{}

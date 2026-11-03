@@ -875,8 +875,8 @@ team = "ENG"                    # required: the team key (the prefix of its issu
 # token_env = "LINEAR_API_KEY"  # env var holding your Linear API key (default LINEAR_API_KEY)
 ```
 
-Lists the team's **open issues** (state not completed or canceled) via the Linear GraphQL API, the 100 most
-recently updated. The API key is read from the environment on every fetch and never written anywhere;
+Lists the team's **open issues** (state not completed or canceled) via the Linear GraphQL API, fetched
+100 per request until all pages are read. The API key is read from the environment on every fetch and never written anywhere;
 `lanes doctor` reports whether the variable is set. The ID is the identifier (`ENG-12`), `author` is the
 creator, and badges show `blocked` and the workflow state.
 

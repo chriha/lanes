@@ -26,10 +26,13 @@ type Linear struct {
 	Client   *http.Client // nil = http.DefaultClient
 }
 
-// ponytail: the 100 most recently updated open issues (and 50 relations and 50 inverse relations each); paginate if a team needs more.
-const linearQuery = `query($team:String!){
+// linearQuery fetches one page of 100 open issues, most recently updated first, each with up to 50 relations and 50
+// inverse relations; Fetch follows pageInfo until the last page.
+const linearQuery = `query($team:String!,$after:String){
   viewer{displayName}
-  issues(filter:{team:{key:{eq:$team}},state:{type:{nin:["completed","canceled"]}}},first:100,orderBy:updatedAt){ nodes{
+  issues(filter:{team:{key:{eq:$team}},state:{type:{nin:["completed","canceled"]}}},first:100,after:$after,orderBy:updatedAt){
+    pageInfo{hasNextPage endCursor}
+    nodes{
     identifier title url priority
     creator{displayName}
     assignee{displayName}
@@ -72,7 +75,13 @@ type linearRef struct {
 type linearResp struct {
 	Data struct {
 		Viewer linearUser
-		Issues nodes[linearIssue]
+		Issues struct {
+			PageInfo struct {
+				HasNextPage bool
+				EndCursor   string
+			}
+			Nodes []linearIssue
+		}
 	}
 	Errors []struct{ Message string }
 }
@@ -94,9 +103,39 @@ func (l *Linear) Fetch(ctx context.Context) ([]item.Item, error) {
 	if token == "" {
 		return nil, fmt.Errorf("linear: %s is not set (a Linear API key)", env)
 	}
-	body, err := json.Marshal(map[string]any{"query": linearQuery, "variables": map[string]string{"team": l.Team}})
+	var items []item.Item
+	me := ""
+	after := ""
+	for {
+		r, err := l.fetchPage(ctx, token, env, after)
+		if err != nil {
+			return nil, err
+		}
+		me = r.Data.Viewer.DisplayName
+		for _, is := range r.Data.Issues.Nodes {
+			items = append(items, linearToItem(is, me))
+		}
+		pi := r.Data.Issues.PageInfo
+		if !pi.HasNextPage || pi.EndCursor == "" || pi.EndCursor == after {
+			break
+		}
+		after = pi.EndCursor
+	}
+	if items == nil {
+		items = []item.Item{}
+	}
+	return items, nil
+}
+
+// fetchPage requests one page of issues, starting after the cursor (empty = first page).
+func (l *Linear) fetchPage(ctx context.Context, token, env, after string) (linearResp, error) {
+	vars := map[string]any{"team": l.Team}
+	if after != "" {
+		vars["after"] = after
+	}
+	body, err := json.Marshal(map[string]any{"query": linearQuery, "variables": vars})
 	if err != nil {
-		return nil, fmt.Errorf("linear: %w", err)
+		return linearResp{}, fmt.Errorf("linear: %w", err)
 	}
 	endpoint := l.Endpoint
 	if endpoint == "" {
@@ -104,7 +143,7 @@ func (l *Linear) Fetch(ctx context.Context) ([]item.Item, error) {
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("linear: %w", err)
+		return linearResp{}, fmt.Errorf("linear: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", token)
@@ -114,33 +153,28 @@ func (l *Linear) Fetch(ctx context.Context) ([]item.Item, error) {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("linear: %w", err)
+		return linearResp{}, fmt.Errorf("linear: %w", err)
 	}
 	defer resp.Body.Close()
 	out, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("linear: read response: %w", err)
+		return linearResp{}, fmt.Errorf("linear: read response: %w", err)
 	}
 	var r linearResp
 	jsonErr := json.Unmarshal(out, &r)
 	// Linear reports GraphQL errors with HTTP 400 too; prefer their message over the status.
 	if len(r.Errors) > 0 && resp.StatusCode != http.StatusUnauthorized {
-		return nil, fmt.Errorf("linear: %s", r.Errors[0].Message)
+		return linearResp{}, fmt.Errorf("linear: %s", r.Errors[0].Message)
 	}
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
-		return nil, fmt.Errorf("linear: unauthorized (HTTP 401), check %s", env)
+		return linearResp{}, fmt.Errorf("linear: unauthorized (HTTP 401), check %s", env)
 	case resp.StatusCode != http.StatusOK:
-		return nil, fmt.Errorf("linear: HTTP %d", resp.StatusCode)
+		return linearResp{}, fmt.Errorf("linear: HTTP %d", resp.StatusCode)
 	case jsonErr != nil:
-		return nil, fmt.Errorf("linear: bad response: %w", jsonErr)
+		return linearResp{}, fmt.Errorf("linear: bad response: %w", jsonErr)
 	}
-	me := r.Data.Viewer.DisplayName
-	items := make([]item.Item, 0, len(r.Data.Issues.Nodes))
-	for _, is := range r.Data.Issues.Nodes {
-		items = append(items, linearToItem(is, me))
-	}
-	return items, nil
+	return r, nil
 }
 
 // linearToItem maps an issue onto the ticket field set (kind "ticket"); only blockers that are not done block it.

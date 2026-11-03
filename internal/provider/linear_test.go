@@ -106,6 +106,59 @@ func TestLinearFetch(t *testing.T) {
 	}
 }
 
+func TestLinearFetchPaginates(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_api_secret")
+	page := func(id string, next string) string {
+		info := `{"hasNextPage":false,"endCursor":null}`
+		if next != "" {
+			info = `{"hasNextPage":true,"endCursor":"` + next + `"}`
+		}
+		return `{"data":{"viewer":{"displayName":"me"},"issues":{"pageInfo":` + info + `,"nodes":[{"identifier":"` + id +
+			`","title":"t","state":{"name":"Todo"}}]}}}`
+	}
+	pages := map[string]string{"": page("ENG-1", "c1"), "c1": page("ENG-2", "c2"), "c2": page("ENG-3", "")}
+	var afters []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Query     string
+			Variables map[string]any
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("request body is not JSON: %v", err)
+		}
+		after, _ := req.Variables["after"].(string)
+		afters = append(afters, after)
+		if !strings.Contains(req.Query, "pageInfo") {
+			t.Errorf("query does not ask for pageInfo:\n%s", req.Query)
+		}
+		body, ok := pages[after]
+		if !ok || len(afters) > len(pages) {
+			t.Errorf("unexpected cursor %q", after)
+			http.Error(w, "unexpected cursor", http.StatusBadRequest)
+			return
+		}
+		if _, err := io.WriteString(w, body); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	items, err := (&Linear{Team: "ENG", Endpoint: srv.URL, Client: srv.Client()}).Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	if want := []string{"ENG-1", "ENG-2", "ENG-3"}; !reflect.DeepEqual(ids, want) {
+		t.Errorf("ids = %v, want %v", ids, want)
+	}
+	if want := []string{"", "c1", "c2"}; !reflect.DeepEqual(afters, want) {
+		t.Errorf("cursors = %v, want %v", afters, want)
+	}
+}
+
 func TestLinearFetchTokenEnv(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "")
 	t.Setenv("MY_LINEAR_KEY", "lin_api_other")

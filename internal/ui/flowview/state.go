@@ -3,6 +3,7 @@ package flowview
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -81,6 +82,37 @@ func (s State) topTools(n int) []toolShare {
 		out = append(out, toolShare{name, float64(lead.ToolCalls[name]) / float64(max(total, 1))})
 	}
 	return out
+}
+
+// procRow is a row of the processes box: a process and the agent running it.
+type procRow struct {
+	Proc  session.Proc
+	Actor string // the agent's name, lead for the lead
+	Model string // the actor's model, for its color
+}
+
+// topProcs returns the n processes using the most CPU, ties (and those without a CPU share yet) by pid, each with
+// the agent running it as session.Attribute tells it.
+func (s State) topProcs(n int) []procRow {
+	owner := session.Attribute(s.Procs, s.Snap)
+	procs := slices.Clone(s.Procs)
+	sort.Slice(procs, func(i, j int) bool {
+		a, b := procs[i], procs[j]
+		return a.CPU > b.CPU || a.CPU == b.CPU && a.PID < b.PID
+	})
+	agents := make(map[string]session.Agent, len(s.Snap.Agents))
+	for _, a := range s.Snap.Agents {
+		agents[a.ID] = a
+	}
+	rows := make([]procRow, 0, min(n, len(procs)))
+	for _, p := range procs[:min(n, len(procs))] {
+		row := procRow{Proc: p, Actor: "lead", Model: s.Snap.Lead.Model}
+		if a, ok := agents[owner[p.PID]]; ok && owner[p.PID] != "" {
+			row.Actor, row.Model = a.Name, a.Model
+		}
+		rows = append(rows, row)
+	}
+	return rows
 }
 
 // sparkMinutes is how many minutes the activity sparkline covers, one cell per minute.
@@ -250,6 +282,26 @@ func fmtCount(n int) string {
 		return fmt.Sprintf("%.1fk", float64(n)/1e3)
 	}
 	return fmt.Sprintf("%.1fM", float64(n)/1e6)
+}
+
+// fmtBytes is a compact memory size: 900K, 210M, 1.5G.
+func fmtBytes(n int64) string {
+	switch {
+	case n < 1<<20:
+		return fmt.Sprintf("%dK", n>>10)
+	case n < 1<<30:
+		return fmt.Sprintf("%dM", n>>20)
+	}
+	return fmt.Sprintf("%.1fG", float64(n)/(1<<30))
+}
+
+// shortCommand is a command line without the directory of its program: /usr/bin/git status → git status.
+func shortCommand(cmd string) string {
+	prog, args, _ := strings.Cut(strings.TrimSpace(cmd), " ")
+	if i := strings.LastIndexByte(prog, '/'); i >= 0 {
+		prog = prog[i+1:]
+	}
+	return strings.TrimSpace(prog + " " + args)
 }
 
 // fmtThousands is n with thousands separators: 1,234,567.

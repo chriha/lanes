@@ -1,0 +1,24 @@
+ AGENT VIEW · issue-196                                                                   
+══════════════════════════════════════════════════════════════════════════════════════════
+                               ■ opus   ■ sonnet   ■ haiku                                
+┏━ session ━━━━━━━━━━┓ ━━━━━━━━━━━━━┓   ┏━ processes ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ issue-196   12m03s ┃     calls 48 ┃   ┃ implementer   180%  1.5G go test ./...         ┃
+┃ ctx ▬▬▬▬▬▬▬▬▬  61% ┃ ■■■■■■■  42% ┃   ┃ implementer    96%  210M compile -o x.a        ┃
+┃ effort ▮▮▮▯ high   ┃ ■■■■■■■  29% ┃   ┃ lead           35%  420M claude --model opus   ┃
+┃                    ┃ ■■■■■■■  19% ┃   ┃ lead            2%   80M node mcp-server.js    ┃
+┃ activity     3/min ┃ ━━━━━━━━━━━━━┛   ┃ implementer     0%    3M zsh -c -l eval 'go t… ┃
+┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄    ┃                  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┃                    ┃                                                                    
+┃ ◆ working          ┃                                                                    
+┃ ┆                  ┃                                                                    
+┃ ◇ asking           ┃                                                                    
+┃ ┆                  ┃                                                                    
+┗━━━━━━━━━━━━━━━━━━━━┛                                                                    
+                                                  diagram  lines 1-13/36  cols 78-144/144 
+┌─ session log ──────────────────────────────────────────────────────────────────── 6/6 ─┐
+│ 14:28:30 code-reviewer spawned validator                                               │
+│ 14:29:30 validator     failed                                                          │
+│ 14:29:40 code-reviewer Bash go test ./internal/...                                     │
+│ 14:29:50 lead          Slice 2 is next: the layered layout                             │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+ opus [1 running]  sonnet [1 running]  haiku [done]  agents [2/4]  tools [48]      ● live 

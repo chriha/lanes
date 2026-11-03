@@ -260,7 +260,7 @@ func (m Model) layoutDiagram() Diagram {
 }
 
 // View draws the frame. The header, legend, session column, log and status line are pinned; the diagram (lead,
-// tools box and every agent) is drawn whole on a canvas of its own and the scrolled-to part of it copied into the
+// tools box, processes box and every agent) is drawn whole on a canvas of its own and the scrolled-to part of it copied into the
 // viewport, with the position shown above the log when it does not fit. The focused area is highlighted.
 func (m Model) View() string {
 	c, l, s := m.canvas, m.layout, m.frame()
@@ -270,6 +270,9 @@ func (m Model) View() string {
 	dc.Resize(d.W, d.H)
 	s.drawLead(dc, d.Lead)
 	s.drawTools(dc, d.Tools)
+	if d.Procs.W > 0 {
+		s.drawProcs(dc, d.Procs)
+	}
 	paths := s.drawTree(dc, d)
 	s.drawPackets(dc, m.packets, d.Nodes, paths)
 	x, y := m.clamp(d, m.offX, m.offY)

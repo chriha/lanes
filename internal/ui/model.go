@@ -545,6 +545,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.onAgentPoll(msg)
 	case agentSnapMsg:
 		return m, m.onAgentSnap(msg)
+	case agentProcPollMsg:
+		return m, m.onAgentProcPoll(msg)
+	case agentProcsMsg:
+		return m, m.onAgentProcs(msg)
 	case interruptedMsg:
 		if m.interrupted == nil {
 			m.interrupted = map[string]bool{}

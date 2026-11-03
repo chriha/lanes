@@ -173,3 +173,98 @@ func pow10(n int) int {
 	}
 	return p
 }
+
+// Attribute tells which agent runs each process of tree, a Sample of the session's pane pid: the result maps
+// every pid to an Agent.ID, "" for the lead. A process goes to the agent whose running Bash call it runs, and
+// its descendants with it; the rest, and a command several agents run at once, go to the lead.
+func Attribute(tree []Proc, snap Snapshot) map[int]string {
+	running := map[string][]string{} // Bash command → the ids of the agents running it
+	if snap.Lead.Tool == "Bash" && snap.Lead.ToolArg != "" {
+		running[snap.Lead.ToolArg] = append(running[snap.Lead.ToolArg], "")
+	}
+	for _, a := range snap.Agents {
+		if a.Status == AgentRunning && a.Tool == "Bash" && a.ToolArg != "" {
+			running[a.ToolArg] = append(running[a.ToolArg], a.ID)
+		}
+	}
+	byPID := map[int]Proc{}
+	children := map[int][]int{}
+	for _, p := range tree {
+		byPID[p.PID] = p
+		children[p.PPID] = append(children[p.PPID], p.PID)
+	}
+	var queue []int
+	for _, p := range tree {
+		if _, ok := byPID[p.PPID]; !ok || p.PPID == p.PID {
+			queue = append(queue, p.PID) // a root: the lead's
+		}
+	}
+	owner := make(map[int]string, len(tree))
+	claimed := map[int]bool{} // runs a Bash call (or descends from one): its children go with it
+	roots := len(queue)
+	for i := 0; i < len(queue); i++ {
+		pid := queue[i]
+		if _, seen := owner[pid]; seen {
+			continue
+		}
+		p := byPID[pid]
+		switch {
+		case i < roots:
+			owner[pid] = ""
+		case claimed[p.PPID]:
+			owner[pid], claimed[pid] = owner[p.PPID], true
+		default:
+			owner[pid], claimed[pid] = runner(p.Command, running)
+		}
+		queue = append(queue, children[pid]...)
+	}
+	return owner
+}
+
+// runner is the id of the agent whose running Bash command the process command runs: of the commands it
+// contains as a whole word, the longest. A command several agents run, or two such commands of the same length,
+// give the lead (""). ok is false when the process runs none of them.
+func runner(command string, running map[string][]string) (id string, ok bool) {
+	// Claude Code runs a Bash call in a shell that evals it in single quotes, escaping its own single quotes.
+	unquoted := strings.NewReplacer(`'"'"'`, "'", `'\''`, "'").Replace(command)
+	best, tie := 0, false
+	for cmd, ids := range running {
+		if len(cmd) < best || !containsWord(command, cmd) && !containsWord(unquoted, cmd) {
+			continue
+		}
+		owner := ""
+		if len(ids) == 1 {
+			owner = ids[0]
+		}
+		if len(cmd) == best {
+			tie = tie || owner != id
+			continue
+		}
+		best, id, tie = len(cmd), owner, false
+	}
+	if tie {
+		return "", true
+	}
+	return id, best > 0
+}
+
+// containsWord reports whether s contains sub with no word character (letter, digit, _ - . /) right before or
+// after it, so that "ls" is not found in "false" or "lsof".
+func containsWord(s, sub string) bool {
+	for from := 0; ; {
+		i := strings.Index(s[from:], sub)
+		if i < 0 {
+			return false
+		}
+		i += from
+		end := i + len(sub)
+		if (i == 0 || !isWordByte(s[i-1])) && (end == len(s) || !isWordByte(s[end])) {
+			return true
+		}
+		from = i + 1
+	}
+}
+
+func isWordByte(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || strings.IndexByte("_-./", b) >= 0
+}

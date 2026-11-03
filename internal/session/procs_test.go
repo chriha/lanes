@@ -3,6 +3,7 @@ package session
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -156,5 +157,95 @@ func TestSamplerKeepsHistoryOverAFailedSample(t *testing.T) {
 	got := s.Sample(100)
 	if len(got) != 1 || !got[0].HasCPU || got[0].CPU != 50 {
 		t.Errorf("sample after a failed one = %+v, want 50%% over the 2s since the last good sample", got)
+	}
+}
+
+func TestAttribute(t *testing.T) {
+	// The Bash shells Claude Code spawns: the command in an eval, single quotes escaped.
+	shell := func(cmd string) string {
+		return "/bin/zsh -c source ~/.claude/shell-snapshots/snapshot-zsh.sh 2>/dev/null || true && eval '" +
+			strings.ReplaceAll(cmd, "'", `'"'"'`) + "' < /dev/null && pwd -P >| /tmp/claude-1-cwd"
+	}
+	bash := func(id, cmd string) Agent { return Agent{ID: id, Status: AgentRunning, Tool: "Bash", ToolArg: cmd} }
+	tree := func(cmds ...string) []Proc {
+		procs := []Proc{{PID: 100, PPID: 1, Command: "claude"}}
+		for i, c := range cmds {
+			procs = append(procs, Proc{PID: 200 + i, PPID: 100, Command: c})
+		}
+		return procs
+	}
+	tests := []struct {
+		name   string
+		tree   []Proc
+		lead   Lead
+		agents []Agent
+		want   map[int]string
+	}{
+		{"no running Bash call: all to the lead",
+			tree(shell("go test ./..."), "node mcp-server.js"), Lead{}, nil,
+			map[int]string{100: "", 200: "", 201: ""}},
+		{"the shell of an agent's Bash call and its children",
+			append(tree(shell("go test ./..."), "node mcp-server.js"),
+				Proc{PID: 300, PPID: 200, Command: "go test ./..."}, Proc{PID: 301, PPID: 300, Command: "/tmp/go-build1/session.test"}),
+			Lead{}, []Agent{bash("a1", "go test ./...")},
+			map[int]string{100: "", 200: "a1", 201: "", 300: "a1", 301: "a1"}},
+		{"the lead's own Bash call",
+			tree(shell("make build")), Lead{Tool: "Bash", ToolArg: "make build"}, []Agent{bash("a1", "go vet ./...")},
+			map[int]string{100: "", 200: ""}},
+		{"the children of the lead's Bash call stay with the lead",
+			append(tree(shell("make test")), Proc{PID: 300, PPID: 200, Command: "go test ./..."}),
+			Lead{Tool: "Bash", ToolArg: "make test"}, []Agent{bash("a1", "go test ./...")},
+			map[int]string{100: "", 200: "", 300: ""}},
+		{"the children of an ambiguous Bash call stay with the lead",
+			append(tree(shell("make test"), shell("make test")), Proc{PID: 300, PPID: 200, Command: "go vet"}),
+			Lead{}, []Agent{bash("a1", "make test"), bash("a2", "make test"), bash("a3", "go vet")},
+			map[int]string{100: "", 200: "", 201: "", 300: ""}},
+		{"a process of the lead's MCP server can match an agent",
+			append(tree("node mcp-server.js"), Proc{PID: 300, PPID: 200, Command: shell("go vet")}),
+			Lead{}, []Agent{bash("a1", "go vet")},
+			map[int]string{100: "", 200: "", 300: "a1"}},
+		{"each agent its own command",
+			tree(shell("go vet ./..."), shell("make lint")), Lead{},
+			[]Agent{bash("a1", "make lint"), bash("a2", "go vet ./...")},
+			map[int]string{100: "", 200: "a2", 201: "a1"}},
+		{"single quotes in the command",
+			tree(shell("grep -n 'func main' main.go")), Lead{}, []Agent{bash("a1", "grep -n 'func main' main.go")},
+			map[int]string{100: "", 200: "a1"}},
+		{"a multi-line command matches by its first line",
+			tree(shell("cd internal\ngo test ./...")), Lead{}, []Agent{bash("a1", "cd internal")},
+			map[int]string{100: "", 200: "a1"}},
+		{"the same command in two agents is ambiguous",
+			tree(shell("make test"), shell("make test")), Lead{},
+			[]Agent{bash("a1", "make test"), bash("a2", "make test")},
+			map[int]string{100: "", 200: "", 201: ""}},
+		{"the same command in the lead and an agent is ambiguous",
+			tree(shell("make test")), Lead{Tool: "Bash", ToolArg: "make test"}, []Agent{bash("a1", "make test")},
+			map[int]string{100: "", 200: ""}},
+		{"the longest matching command wins",
+			tree(shell("go test ./internal/session"), shell("go test")), Lead{},
+			[]Agent{bash("a1", "go test"), bash("a2", "go test ./internal/session")},
+			map[int]string{100: "", 200: "a2", 201: "a1"}},
+		{"a command inside another word does not match",
+			tree("/bin/false", "lsof -p 1"), Lead{}, []Agent{bash("a1", "ls")},
+			map[int]string{100: "", 200: "", 201: ""}},
+		{"only running Bash calls count",
+			tree(shell("make test"), shell("make lint"), shell("make build")), Lead{Tool: "Read", ToolArg: "make build"},
+			[]Agent{
+				{ID: "a1", Status: AgentDone, Tool: "Bash", ToolArg: "make test"},
+				{ID: "a2", Status: AgentRunning, Tool: "Grep", ToolArg: "make lint"},
+			},
+			map[int]string{100: "", 200: "", 201: "", 202: ""}},
+		{"the root is the lead's even if it matches",
+			tree(), Lead{}, []Agent{bash("a1", "claude")},
+			map[int]string{100: ""}},
+		{"empty tree", nil, Lead{}, []Agent{bash("a1", "make")}, map[int]string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Attribute(tt.tree, Snapshot{Lead: tt.lead, Agents: tt.agents})
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Attribute() = %v\nwant %v", got, tt.want)
+			}
+		})
 	}
 }

@@ -392,6 +392,41 @@ func TestHookEventMovesTheCheckpoint(t *testing.T) {
 	}
 }
 
+func TestUsageEventSetsThe5hUsage(t *testing.T) {
+	tests := []struct {
+		name string
+		ev   UsageEvent
+		want string // in the session column, spaces collapsed; "" for no 5h row
+	}{
+		{"known", UsageEvent{Pct: 12, Known: true}, "┃ 5h 9% ┃"}, // the lead's three quarters of 12%
+		{"unknown", UsageEvent{Pct: 12}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := liveModel()
+			snap := m.st.Snap
+			snap.Lead.Tokens = 300
+			snap.Agents = []session.Agent{{ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Start: t0, Ctx: -1, Tokens: 100}}
+			m.Apply(SnapshotEvent{Snap: snap})
+			m.Apply(UsageEvent{Pct: 40, Known: true})
+			m.Apply(tt.ev) // no step: the lead's tokens counter still shows 0, the share is of the tokens as read
+			frame := ansi.Strip(m.View())
+			if tt.want == "" {
+				if strings.Contains(frame, "5h") {
+					t.Errorf("frame shows a 5h share:\n%s", frame)
+				}
+				return
+			}
+			if !strings.Contains(strings.Join(strings.Fields(frame), " "), tt.want) {
+				t.Errorf("frame lacks %q:\n%s", tt.want, frame)
+			}
+			if !strings.Contains(frame, "5h 3%") { // the agent's quarter of 12%
+				t.Errorf("agent box lacks its share 5h 3%%:\n%s", frame)
+			}
+		})
+	}
+}
+
 func TestSpinnerAndShimmerAdvance(t *testing.T) {
 	m := liveModel()
 	steps := []struct {

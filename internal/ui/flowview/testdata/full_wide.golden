@@ -12,35 +12,35 @@
 ┃ ◆ working          ┃        ┏━ implementer ━━━━━━━━━━━━━━┓   ┏━ triager ━━━━━━━━━━━━━━━━━━┓   ┏━ worker-0 ━━━━━━━━━━━━━━━━━┓ │ ┏━ worker-1 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-2 ━━━━━━━━━━━━━━━━━┓        
 ┃ ┆                  ┃        ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃   ┃         haiku 4.5          ┃ │ ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃        
 ┃ ◇ asking           ┃        ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  42% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   7% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  10% ┃ │ ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  11% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  12% ┃        
-┃ ┆                  ┃        ┃      slice 2 of #196       ┃   ┃        triage #201         ┃   ┃       scan a package       ┃ │ ┃       scan a package       ┃   ┃       scan a package       ┃        
-┃ ◇ waiting          ┃        ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃   ┃                            ┃ │ ┃                            ┃   ┃                            ┃        
-┃                    ┃        ┗━ ◓ 9m00s ▸ Bash go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛ │ ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛        
-┃ turns           12 ┃                       │                                                                                 │                                                                        
-┃ tools           48 ┃                       ├───────────────┬────────────────┬────────────────────────────────┬───────────────┴────────────────┬────────────────────────────────┐                      
-┃ tokens   1,234,567 ┃                       ▼               │                ▼                                ▼                                ▼                                ▼                      
-┃   in        12,345 ┃        ┏━ worker-3 ━━━━━━━━━━━━━━━━━┓ │ ┏━ worker-4 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-5 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-6 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-7 ━━━━━━━━━━━━━━━━━┓        
-┃   out       98,765 ┃        ┃         haiku 4.5          ┃ │ ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃        
-┃   cache  1,123,457 ┃        ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  13% ┃ │ ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  14% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  15% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  16% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  17% ┃        
-┃ agents   ◓10 ✓1 ✗1 ┃        ┃       scan a package       ┃ │ ┃       scan a package       ┃   ┃       scan a package       ┃   ┃       scan a package       ┃   ┃       scan a package       ┃        
-┃                    ┃        ┃                            ┃ │ ┃                            ┃   ┃                            ┃   ┃                            ┃   ┃                            ┃        
-┃ files              ┃        ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛ │ ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛        
-┃ render_panels.go   ┃                                       │                                                                                                                                          
-┃ state.go           ┃                                       └─────────────────────────────────────────────────┐                                                                                        
-┃ layout.go          ┃                                                                                         ▼                                                                                        
-┃ README.md          ┃                                                                          ┏━ code-reviewer ━━━━━━━━━━━━┓                                                                          
-┃                    ┃                                                                          ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                                                                          
-┃ last:              ┃                                                                          ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   -- ┃                                                                          
-┃ Slice 2 is next:   ┃                                                                          ┃      review the diff       ┃                                                                          
-┃ the layered layout ┃                                                                          ┃                            ┃                                                                          
-┃ and the static…    ┃                                                                          ┗━ ◓ 2m00s ▸ Grep drawAgent ━┛                                                                          
+┃ ┆                  ┃        ┃ 412.3k tok  37 calls 5h 7% ┃   ┃ 23.5k tok   8 calls  5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃ │ ┃ 0 tok     0 calls    5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃        
+┃ ◇ waiting          ┃        ┃      slice 2 of #196       ┃   ┃        triage #201         ┃   ┃       scan a package       ┃ │ ┃       scan a package       ┃   ┃       scan a package       ┃        
+┃                    ┃        ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃   ┃                            ┃ │ ┃                            ┃   ┃                            ┃        
+┃ turns           12 ┃        ┗━ ◓ 9m00s ▸ Bash go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛ │ ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛        
+┃ tools           48 ┃                       │                                                                                 │                                                                        
+┃ tokens   1,234,567 ┃                       ├───────────────┬────────────────┬────────────────────────────────┬───────────────┴────────────────┬────────────────────────────────┐                      
+┃   in        12,345 ┃                       ▼               │                ▼                                ▼                                ▼                                ▼                      
+┃   out       98,765 ┃        ┏━ worker-3 ━━━━━━━━━━━━━━━━━┓ │ ┏━ worker-4 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-5 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-6 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-7 ━━━━━━━━━━━━━━━━━┓        
+┃   cache  1,123,457 ┃        ┃         haiku 4.5          ┃ │ ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃        
+┃ 5h             21% ┃        ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  13% ┃ │ ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  14% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  15% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  16% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  17% ┃        
+┃ agents   ◓10 ✓1 ✗1 ┃        ┃ 0 tok     0 calls    5h 0% ┃ │ ┃ 0 tok     0 calls    5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃        
+┃                    ┃        ┃       scan a package       ┃ │ ┃       scan a package       ┃   ┃       scan a package       ┃   ┃       scan a package       ┃   ┃       scan a package       ┃        
+┃ files              ┃        ┃                            ┃ │ ┃                            ┃   ┃                            ┃   ┃                            ┃   ┃                            ┃        
+┃ render_panels.go   ┃        ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛ │ ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛        
+┃ state.go           ┃                                       │                                                                                                                                          
+┃ layout.go          ┃                                       └─────────────────────────────────────────────────┐                                                                                        
+┃ README.md          ┃                                                                                         ▼                                                                                        
+┃                    ┃                                                                          ┏━ code-reviewer ━━━━━━━━━━━━┓                                                                          
+┃ last:              ┃                                                                          ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                                                                          
+┃ Slice 2 is next:   ┃                                                                          ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   -- ┃                                                                          
+┃ the layered layout ┃                                                                          ┃ 98.8k tok  21 calls  5h 2% ┃                                                                          
+┃ and the static…    ┃                                                                          ┃      review the diff       ┃                                                                          
+┃                    ┃                                                                          ┃                            ┃                                                                          
+┃ advisor   opus 4.1 ┃                                                                          ┗━ ◓ 2m00s ▸ Grep drawAgent ━┛                                                                          
+┃   calls          3 ┃                                                                                         │                                                                                        
 ┃                    ┃                                                                                         │                                                                                        
-┃ advisor   opus 4.1 ┃                                                                                         │                                                                                        
-┃   calls          3 ┃                                                                                         ▼                                                                                        
-┃                    ┃                                                                          ┏━ validator ━━━━━━━━━━━━━━━━┓                                                                          
-┃                    ┃                                                                          ┃         sonnet 4.5         ┃                                                                          
-┃                    ┃                                                                          ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  12% ┃                                                                          
-┗━━━━━━━━━━━━━━━━━━━━┛                                                                          ┃     validate a finding     ┃                                                                          
-                                                                                                                                                                                 diagram  lines 1-39/41 
+┃                    ┃                                                                                         ▼                                                                                        
+┗━━━━━━━━━━━━━━━━━━━━┛                                                                          ┏━ validator ━━━━━━━━━━━━━━━━┓                                                                          
+                                                                                                                                                                                 diagram  lines 1-39/45 
 ┌─ session log ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 6/6 ─┐
 │ 14:28:30 code-reviewer spawned validator                                                                                                                                                             │
 │ 14:29:30 validator     failed                                                                                                                                                                        │

@@ -2,6 +2,7 @@ package flowview
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -21,6 +22,20 @@ type State struct {
 	Phase int       // animation phase: spinner frame
 	Snap  session.Snapshot
 	Log   []LogLine // oldest first
+
+	Usage5h      int  // the account's 5h usage in percent, when Usage5hKnown
+	Usage5hKnown bool // the 5h usage is known and fresh
+
+	eased      bool // Snap.Lead's counters ease toward the lead as read: its tokens are readTokens
+	readTokens int  // the lead's tokens as read, when eased
+}
+
+// leadTokens is the lead's tokens as read, not as the counters show them while easing.
+func (s State) leadTokens() int {
+	if s.eased {
+		return s.readTokens
+	}
+	return s.Snap.Lead.Tokens
 }
 
 // LogLine is one line of the session log.
@@ -242,4 +257,21 @@ func fmtThousands(n int) string {
 		s = s[:i] + "," + s[i:]
 	}
 	return s
+}
+
+// share5h is an actor's share of the account's 5h usage in whole percent: the 5h usage times the actor's tokens
+// over the tokens of the lead (as read) and all agents, 0 when they have none. ok is false when the 5h usage is
+// unknown.
+func (s State) share5h(tokens int) (pct int, ok bool) {
+	if !s.Usage5hKnown {
+		return 0, false
+	}
+	total := s.leadTokens()
+	for _, a := range s.Snap.Agents {
+		total += a.Tokens
+	}
+	if total <= 0 {
+		return 0, true
+	}
+	return int(math.Round(float64(s.Usage5h) * float64(tokens) / float64(total))), true
 }

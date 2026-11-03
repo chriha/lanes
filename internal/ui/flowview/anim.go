@@ -152,6 +152,8 @@ func (m *Model) Apply(ev Event) {
 			m.appendLog(LogLine{At: m.st.Now, Actor: "lead", Model: m.st.Snap.Lead.Model, Text: ev.Hook})
 		}
 		m.st.Hook = ev.Hook
+	case UsageEvent:
+		m.st.Usage5h, m.st.Usage5hKnown = ev.Pct, ev.Known
 	case EndEvent:
 		m.st.Ended = true
 	}
@@ -231,6 +233,7 @@ func (m Model) Packets() []Packet { return m.packets }
 // frame is the state as drawn now: counters and the last text as far as the animation got.
 func (m Model) frame() State {
 	f := m.st
+	f.eased, f.readTokens = true, m.st.Snap.Lead.Tokens
 	f.Snap.Lead.Turns, f.Snap.Lead.Calls, f.Snap.Lead.Tokens = m.turns, m.calls, m.tokens
 	f.Snap.Lead.TokensIn, f.Snap.Lead.TokensOut, f.Snap.Lead.TokensCache = m.tokIn, m.tokOut, m.tokCache
 	text := []rune(f.Snap.Lead.LastText)

@@ -12,9 +12,16 @@ type SnapshotEvent struct{ Snap session.Snapshot }
 // HookEvent carries Claude's newest hook state: working, asking or waiting.
 type HookEvent struct{ Hook string }
 
+// UsageEvent carries the account's 5h usage in percent; Known is false when it is unknown or stale.
+type UsageEvent struct {
+	Pct   int
+	Known bool
+}
+
 // EndEvent says Claude exited or the session finished: the view freezes on its final state.
 type EndEvent struct{}
 
 func (SnapshotEvent) isEvent() {}
 func (HookEvent) isEvent()     {}
 func (EndEvent) isEvent()      {}
+func (UsageEvent) isEvent()    {}

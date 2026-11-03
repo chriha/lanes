@@ -13,7 +13,7 @@ const (
 	boxMinW, boxMaxW = 28, 30 // agent box width
 	sessionW         = 22     // the session column
 	leadW            = 36
-	boxH             = 6 // agent box height: border, model, ctx, task, live text, border
+	boxH             = 7 // agent box height: border, model, ctx, usage, task, live text, border
 	logLines         = 4 // the lines the session log shows
 )
 

@@ -1,6 +1,7 @@
 package flowview
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/chriha/lanes/internal/session"
@@ -35,9 +36,9 @@ func (s State) drawTree(c *Canvas, d Diagram) [][]Point {
 	return paths
 }
 
-// drawAgent draws an agent box: the name in the top border; the model and effort, the context bar, the task and
-// `» ` with the newest text of the agent inside; the status and, while running, the current activity in the bottom border. A finished agent's box is dim
-// and still.
+// drawAgent draws an agent box: the name in the top border; the model and effort, the context bar, the usage row,
+// the task and `» ` with the newest text of the agent inside; the status and, while running, the current activity
+// in the bottom border. A finished agent's box is dim and still.
 func (s State) drawAgent(c *Canvas, r Rect, a session.Agent) {
 	running := a.Status == session.AgentRunning && !s.Ended // an ended session's agents are stopped
 	role, title, text := ModelRole(a.Model), RoleBold, RoleText
@@ -51,14 +52,32 @@ func (s State) drawAgent(c *Canvas, r Rect, a session.Agent) {
 	}
 	c.centerSegs(r, r.Y+1, row...)
 	c.ctxRow(r.X+2, r.Y+2, r.W-4, a.Ctx, role, text)
-	c.center(r, r.Y+3, a.Task, text)
+	c.spreadAll(r.X+2, r.Y+3, r.W-4, s.agentUsage(a, r.W-4), text)
+	c.center(r, r.Y+4, a.Task, text)
 	if a.Text != "" {
-		c.center(r, r.Y+4, "» "+a.Text, text)
+		c.center(r, r.Y+5, "» "+a.Text, text)
 	}
 	y := r.Y + r.H - 1
 	x := c.Text(r.X+2, y, " ", role)
 	x = c.segs(x, y, r.W-6, s.agentStatus(a, role)...)
 	c.Text(x, y, " ", role)
+}
+
+// agentUsage is an agent's usage row of at most w cells: its tokens, tool calls and share of the account's 5h usage
+// (left out when unknown), `41.2k tok`, `37 calls`, `5h 3%`. Where they don't fit with a space between, the units go.
+func (s State) agentUsage(a session.Agent, w int) []string {
+	parts := []string{fmtCount(a.Tokens) + " tok", fmtCount(a.Calls) + " calls"}
+	if pct, ok := s.share5h(a.Tokens); ok {
+		parts = append(parts, fmt.Sprintf("5h %d%%", pct))
+	}
+	n := len(parts) - 1
+	for _, p := range parts {
+		n += runeLen(p)
+	}
+	if n > w {
+		parts[0], parts[1] = fmtCount(a.Tokens), fmtCount(a.Calls)
+	}
+	return parts
 }
 
 // agentStatus is an agent's status line: spinner, elapsed time and current activity while running; stopped once the

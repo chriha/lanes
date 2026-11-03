@@ -24,6 +24,7 @@ type agentView struct {
 	ended  bool            // Claude exited or the session finished: the next poll is the last
 	frozen bool            // the end is applied: no more polls
 	err    string          // the last read error said, so a failing read is said once
+	has5h  bool            // the view has a known 5h usage
 }
 
 // agentPollMsg says it is time for the agent view's next read of the transcripts.
@@ -91,6 +92,7 @@ func (m *Model) openAgents(s session.Info, back mode, title string) tea.Cmd {
 	a.fv.SetSession(s.Name, title, s.Created, time.Now())
 	a.fv.Apply(flowview.HookEvent{Hook: s.Claude})
 	m.agents, m.mode, m.pendingG = a, modeAgents, false
+	m.syncUsage5h()
 	return tea.Batch(a.fv.Init(), a.poll())
 }
 
@@ -172,4 +174,13 @@ func (m *Model) syncAgents() {
 		return
 	}
 	a.ended = true // the session is gone
+}
+
+// syncUsage5h passes the account's 5h usage to the open view; a frozen view keeps the figure it ended with, once
+// it has one.
+func (m *Model) syncUsage5h() {
+	if a := m.agents; a != nil && (!a.frozen || !a.has5h) {
+		a.fv.Apply(flowview.UsageEvent{Pct: m.usage5h.pct, Known: m.usage5h.ok})
+		a.has5h = m.usage5h.ok
+	}
 }

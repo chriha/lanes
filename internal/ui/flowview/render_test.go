@@ -38,42 +38,55 @@ func TestAgentBox(t *testing.T) {
 	now := time.Date(2026, 11, 1, 14, 30, 0, 0, time.UTC)
 	base := session.Agent{
 		ID: "a1", Name: "implementer", Model: "claude-opus-4-1", Effort: "high", Ctx: 42, Task: "slice 2 of #196", Text: "Reading the diff",
-		Start: now.Add(-9 * time.Minute), Tool: "Bash", ToolArg: "go test",
+		Start: now.Add(-9 * time.Minute), Tool: "Bash", ToolArg: "go test", Tokens: 41_234, Calls: 37,
 	}
 	with := func(f func(a *session.Agent)) session.Agent {
 		a := base
 		f(&a)
 		return a
 	}
+	// The lead has the rest of the session's 100,000 tokens: the agent's 41,234 are 41% of it, 3% of a 7% window.
+	lead := session.Lead{Tokens: 100_000 - base.Tokens}
 	tests := []struct {
 		name    string
 		agent   session.Agent
 		ended   bool
+		known   bool     // the 5h usage is known
 		want    []string // what each row holds, spaces collapsed; "" skips the row
 		without string   // must not appear anywhere in the box
 	}{
-		{"running", base, false,
-			[]string{"┏━ implementer ━", "┃ opus 4.1 ▮▮▮▯ high ┃", "┃ ctx", "┃ slice 2 of #196 ┃", "┃ » Reading the diff ┃", "┗━ ◓ 9m00s ▸ Bash go test ━"}, ""},
-		{"no text leaves the row empty", with(func(a *session.Agent) { a.Text = "" }), false,
-			[]string{"", "", "", "┃ slice 2 of #196 ┃", "┃ ┃"}, "»"},
-		{"long text is cut to the box", with(func(a *session.Agent) { a.Text = strings.Repeat("word ", 12) }), false,
-			[]string{"", "", "", "", "┃» word word word word word …┃"}, ""},
-		{"unknown effort omits the meter", with(func(a *session.Agent) { a.Effort = "" }), false,
+		{"running", base, false, true,
+			[]string{"┏━ implementer ━", "┃ opus 4.1 ▮▮▮▯ high ┃", "┃ ctx", "┃ 41.2k tok 37 calls 5h 3% ┃", "┃ slice 2 of #196 ┃",
+				"┃ » Reading the diff ┃", "┗━ ◓ 9m00s ▸ Bash go test ━"}, ""},
+		{"unknown 5h usage leaves the share out", base, false, false,
+			[]string{"", "", "", "┃ 41.2k tok 37 calls ┃"}, "5h"},
+		{"no tokens yet", with(func(a *session.Agent) { a.Tokens, a.Calls = 0, 0 }), false, true,
+			[]string{"", "", "", "┃ 0 tok 0 calls 5h 0% ┃"}, ""},
+		{"the widest that fits keeps the units", with(func(a *session.Agent) { a.Tokens, a.Calls = 123_456, 999 }), false, true,
+			[]string{"", "", "", "┃ 123.5k tok 999 calls 5h 5% ┃"}, ""},
+		{"the widest drops the units", with(func(a *session.Agent) { a.Tokens, a.Calls = 912_345, 12_345 }), false, true,
+			[]string{"", "", "", "┃ 912.3k 12.3k 5h 7% ┃"}, "tok"},
+		{"no text leaves the row empty", with(func(a *session.Agent) { a.Text = "" }), false, true,
+			[]string{"", "", "", "", "┃ slice 2 of #196 ┃", "┃ ┃"}, "»"},
+		{"long text is cut to the box", with(func(a *session.Agent) { a.Text = strings.Repeat("word ", 12) }), false, true,
+			[]string{"", "", "", "", "", "┃» word word word word word …┃"}, ""},
+		{"unknown effort omits the meter", with(func(a *session.Agent) { a.Effort = "" }), false, true,
 			[]string{"", "┃ opus 4.1 ┃"}, "▮"},
-		{"running without a tool", with(func(a *session.Agent) { a.Tool, a.ToolArg = "", "" }), false,
-			[]string{"", "", "", "", "", "┗━ ◓ running 9m00s ━"}, "▸"},
-		{"done", with(func(a *session.Agent) { a.Status, a.End = session.AgentDone, a.Start.Add(time.Minute) }), false,
-			[]string{"", "", "", "", "", "┗━ ✓ done 1m00s ━"}, "▸"},
-		{"failed", with(func(a *session.Agent) { a.Status, a.End = session.AgentError, a.Start.Add(time.Minute) }), false,
-			[]string{"", "", "", "", "", "┗━ ✗ failed 1m00s ━"}, "▸"},
-		{"running in an ended session is stopped", base, true,
-			[]string{"", "", "", "", "", "┗━ ■ stopped 9m00s ━"}, "◓"},
+		{"running without a tool", with(func(a *session.Agent) { a.Tool, a.ToolArg = "", "" }), false, true,
+			[]string{"", "", "", "", "", "", "┗━ ◓ running 9m00s ━"}, "▸"},
+		{"done keeps its figures", with(func(a *session.Agent) { a.Status, a.End = session.AgentDone, a.Start.Add(time.Minute) }), false, true,
+			[]string{"", "", "", "┃ 41.2k tok 37 calls 5h 3% ┃", "", "", "┗━ ✓ done 1m00s ━"}, "▸"},
+		{"failed keeps its figures", with(func(a *session.Agent) { a.Status, a.End = session.AgentError, a.Start.Add(time.Minute) }), false, true,
+			[]string{"", "", "", "┃ 41.2k tok 37 calls 5h 3% ┃", "", "", "┗━ ✗ failed 1m00s ━"}, "▸"},
+		{"running in an ended session is stopped", base, true, true,
+			[]string{"", "", "", "", "", "", "┗━ ■ stopped 9m00s ━"}, "◓"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := NewCanvas(30, 6, nil)
-			s := State{Now: now, Phase: 1, Ended: tt.ended}
-			s.drawAgent(c, Rect{0, 0, 30, 6}, tt.agent)
+			c := NewCanvas(30, 7, nil)
+			s := State{Now: now, Phase: 1, Ended: tt.ended, Usage5h: 7, Usage5hKnown: tt.known,
+				Snap: session.Snapshot{Lead: lead, Agents: []session.Agent{tt.agent}}}
+			s.drawAgent(c, Rect{0, 0, 30, 7}, tt.agent)
 			got := rows(c)
 			for i, w := range tt.want {
 				if w == "" {
@@ -102,15 +115,20 @@ func TestAgentBoxTextIsDimOnceFinished(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := NewCanvas(28, 6, nil)
-			a := session.Agent{Name: "a", Model: "claude-opus-4-1", Text: "hello", Status: tt.status, Start: time.Now()}
-			State{Phase: 1}.drawAgent(c, Rect{0, 0, 28, 6}, a)
-			x := strings.Index(rows(c)[4], "»")
-			if x < 0 {
-				t.Fatalf("no text row:\n%s", c.String())
-			}
-			if got := c.At(len([]rune(rows(c)[4][:x])), 4).Role; got != tt.want {
-				t.Errorf("text role %d, want %d", got, tt.want)
+			c := NewCanvas(28, 7, nil)
+			a := session.Agent{Name: "a", Model: "claude-opus-4-1", Text: "hello", Status: tt.status, Start: time.Now(), Tokens: 10, Calls: 2}
+			State{Phase: 1}.drawAgent(c, Rect{0, 0, 28, 7}, a)
+			for _, mark := range []struct {
+				row  int
+				text string
+			}{{3, "tok"}, {5, "»"}} { // the usage row and the text row
+				x := strings.Index(rows(c)[mark.row], mark.text)
+				if x < 0 {
+					t.Fatalf("no %q on row %d:\n%s", mark.text, mark.row, c.String())
+				}
+				if got := c.At(len([]rune(rows(c)[mark.row][:x])), mark.row).Role; got != tt.want {
+					t.Errorf("row %d role %d, want %d", mark.row, got, tt.want)
+				}
 			}
 		})
 	}
@@ -477,6 +495,8 @@ func TestSessionColumn(t *testing.T) {
 	noAdvisor.Snap.Lead.AdvisorModel = ""
 	ended.Ended = true
 	noFiles.Snap.Files = nil
+	no5h := fixtureState()
+	no5h.Usage5hKnown = false
 	tenAgents := fixtureState()
 	for i := 0; i < 8; i++ {
 		tenAgents.Snap.Agents = append(tenAgents.Snap.Agents, session.Agent{ID: fmt.Sprint(i)})
@@ -506,22 +526,24 @@ func TestSessionColumn(t *testing.T) {
 			17: "┃ in 12,345 ┃",
 			18: "┃ out 98,765 ┃",
 			19: "┃ cache 1,123,457 ┃",
-			20: "┃ agents ◓2 ✓1 ✗1 ┃",
-			22: "┃ files ┃",
-			23: "┃ render_panels.go ┃",
-			26: "┃ README.md ┃",
-			28: "┃ last: ┃",
-			29: "┃ Slice 2 is next: ┃",
-			33: "┃ advisor opus 4.1 ┃",
-			34: "┃ calls 3 ┃",
+			20: "┃ 5h 21% ┃",
+			21: "┃ agents ◓2 ✓1 ✗1 ┃",
+			23: "┃ files ┃",
+			24: "┃ render_panels.go ┃",
+			27: "┃ README.md ┃",
+			29: "┃ last: ┃",
+			30: "┃ Slice 2 is next: ┃",
+			34: "┃ advisor opus 4.1 ┃",
+			35: "┃ calls 3 ┃",
 			36: "┗━━",
 		}, nil},
 		{"unknown effort omits its row", noEffort, 37, map[int]string{3: "", 4: "┃ activity 3/min ┃"}, []string{"effort", "▮"}},
 		{"unknown context", noCtx, 37, map[int]string{2: "┃ ctx ▬▬▬▬▬▬▬▬▬ -- ┃"}, nil},
-		{"no advisor, no advisor rows", noAdvisor, 37, map[int]string{33: "", 34: ""}, []string{"advisor"}},
-		{"no files, no files rows", noFiles, 37, map[int]string{22: "┃ last: ┃"}, []string{"files"}},
-		{"ended: no checkpoint is active and no agent runs", ended, 37, map[int]string{8: "┃ ◇ working ┃", 20: "┃ agents ■0 ✓1 ✗1 ┃"}, []string{"◆", "◓"}},
-		{"double-digit agent counts fit", tenAgents, 37, map[int]string{20: "┃ agents ◓10 ✓1 ✗1 ┃"}, nil},
+		{"no advisor, no advisor rows", noAdvisor, 37, map[int]string{34: "", 35: ""}, []string{"advisor"}},
+		{"no files, no files rows", noFiles, 37, map[int]string{23: "┃ last: ┃"}, []string{"files"}},
+		{"ended: no checkpoint is active and no agent runs", ended, 37, map[int]string{8: "┃ ◇ working ┃", 21: "┃ agents ■0 ✓1 ✗1 ┃"}, []string{"◆", "◓"}},
+		{"double-digit agent counts fit", tenAgents, 37, map[int]string{21: "┃ agents ◓10 ✓1 ✗1 ┃"}, nil},
+		{"unknown 5h usage omits its row", no5h, 37, map[int]string{20: "┃ agents ◓2 ✓1 ✗1 ┃"}, []string{"5h"}},
 		{"rows past the bottom are left out", fixtureState(), 10, map[int]string{8: "┃ ◆ working ┃", 9: "┗━━"}, []string{"asking", "last:"}},
 	}
 	for _, tt := range tests {
@@ -627,6 +649,29 @@ func TestBorders(t *testing.T) {
 			got := string([]rune{c.At(0, 0).R, c.At(c.W-1, 0).R, c.At(0, c.H-1).R, c.At(c.W-1, c.H-1).R})
 			if got != tt.corners {
 				t.Errorf("corners = %q, want %q", got, tt.corners)
+			}
+		})
+	}
+}
+
+func TestSpreadAllFitsItsWidth(t *testing.T) {
+	tests := []struct {
+		name  string
+		w     int
+		parts []string
+		want  string
+	}{
+		{"spread evenly, the remainder first", 12, []string{"a", "b", "c"}, "a     b    c"},
+		{"one space apart when only that fits", 5, []string{"a", "b", "c"}, "a b c"},
+		{"tighter than a space apart is cut, not widened", 5, []string{"ab", "b", "c"}, "ab b "},
+		{"two parts at the edges", 6, []string{"a", "b"}, "a    b"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCanvas(tt.w+2, 1, nil)
+			c.spreadAll(1, 0, tt.w, tt.parts, RoleText)
+			if got := rows(c)[0]; got != " "+tt.want+" " {
+				t.Errorf("row = %q, want %q", got, " "+tt.want+" ")
 			}
 		})
 	}

@@ -12,9 +12,9 @@
 ┃ ◆ working          ┃   ┏━ implementer ━━━━━━━━━━━━━━┓   ┏━ triager ━━━━━━━━━━━━━━━━━━┓  
 ┃ ┆                  ┃   ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃  
 ┃ ◇ asking           ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  42% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   7% ┃  
-┃ ┆                  ┃   ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  
-┗━━━━━━━━━━━━━━━━━━━━┛   ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  
-                                                     diagram  lines 1-13/32  cols 1-67/91 
+┃ ┆                  ┃   ┃ 412.3k tok  37 calls 5h 7% ┃   ┃ 23.5k tok   8 calls  5h 0% ┃  
+┗━━━━━━━━━━━━━━━━━━━━┛   ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  
+                                                     diagram  lines 1-13/35  cols 1-67/91 
 ┌─ session log ──────────────────────────────────────────────────────────────────── 6/6 ─┐
 │ 14:28:30 code-reviewer spawned validator                                               │
 │ 14:29:30 validator     failed                                                          │

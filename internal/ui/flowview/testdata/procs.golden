@@ -21,4 +21,4 @@
 │ 14:29:40 code-reviewer Bash go test ./internal/...                                     │
 │ 14:29:50 lead          Slice 2 is next: the layered layout                             │
 └────────────────────────────────────────────────────────────────────────────────────────┘
- opus [1 running]  sonnet [1 running]  haiku [done]  agents [2/4]  tools [48]      ● live 
+ opus [1 running]  sonnet [1 running]  haiku [done]  cpu [313%]  agents [2/4]      ● live 

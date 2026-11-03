@@ -115,6 +115,20 @@ func (s State) topProcs(n int) []procRow {
 	return rows
 }
 
+// cpu sums the CPU share of the sampled processes per agent running them (by Agent.ID, "" for the lead) and over
+// the whole tree; processes without a CPU share yet count for nothing. ok is false while no process has one.
+func (s State) cpu() (byAgent map[string]float64, total float64, ok bool) {
+	owner := session.Attribute(s.Procs, s.Snap)
+	byAgent = map[string]float64{}
+	for _, p := range s.Procs {
+		if p.HasCPU {
+			byAgent[owner[p.PID]] += p.CPU
+			total, ok = total+p.CPU, true
+		}
+	}
+	return byAgent, total, ok
+}
+
 // sparkMinutes is how many minutes the activity sparkline covers, one cell per minute.
 const sparkMinutes = int(session.ToolWindow / time.Minute)
 

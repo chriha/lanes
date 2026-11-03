@@ -94,7 +94,9 @@ an env var).
   with one colored entry per model family plus totals (an ended session reports no running agents). Agent boxes
   show full name, model, effort meter, ctx bar, a usage row, task, live text and status (`▸ tool arg` while running). The box is
   7 rows (`boxH`). The usage row spreads the agent's tokens (`Agent.Tokens`: input + cache write + output, counted like the
-  lead's), tool calls (`Agent.Calls`) and 5h share over the row (`fmtCount`; the units go when it doesn't fit). The 5h
+  lead's), tool calls (`Agent.Calls`), 5h share and, while it runs processes, their CPU share (`cpu N%`, `State.cpu`) over the row
+  (`fmtCount`; the units go when it doesn't fit, then the 5h share). The status line adds `cpu [N%]` for the whole tree
+  once a process has a CPU share. The 5h
   share (`State.share5h`) is the account's 5h % (`session.Usage5h`: `session` of `usage-line.json`, unknown when missing,
   unreadable, without `session` or older than 15 min) x the actor's tokens / the tokens of the lead and all agents,
   rounded; 0 when they have none; left out when unknown. It assumes this session drives the account's usage. The lead's
@@ -133,6 +135,17 @@ an env var).
   state changes on `HookEvent`. Context % uses one model-id table (`session.ContextWindow`, 200k default, 1M for
   `[1m]`). Effort is the newest `effort` field per transcript (absent → the meter is omitted). An ended session is
   read once more and frozen.
+  **Processes:** `session.Sampler` (`internal/session/procs.go`) runs `ps -A -o pid=,ppid=,time=,rss=,command=` and
+  keeps the tree under the session's pane pid (`#{pane_pid}`); it parses both `time` formats (Linux `[dd-]hh:mm:ss`,
+  macOS `mm:ss.ss`) and turns the CPU-time delta of two samples over the wall-time delta into a CPU % (`ps`'s
+  `%cpu` is a lifetime average on Linux, a decaying one on macOS). A pid's first sample, or a reused pid, has no
+  share; a vanished root, empty output or a `ps` error give an empty tree. `agents.go` samples every 3 s in a
+  `tea.Cmd`, one sample in flight, only while the view is open and Claude runs, and hands it over as a
+  `flowview.ProcsEvent`. `session.Attribute` maps each process to the agent whose running `Bash` call's command it
+  holds as a whole word (the longest such command; its descendants go with it); the rest, and a command several
+  agents run at once, go to the lead. It is best-effort: subagents share the claude process, and a command that
+  forks away from its shell lands on the lead. The view draws the top 5 by CPU in the processes box right of the
+  tools box, each agent's summed share in its usage row and the tree's total in the status line.
 
 ## Config (`~/.config/lanes/config.toml`, hot reloaded)
 

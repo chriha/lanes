@@ -717,17 +717,21 @@ anything because the terminal is small. It shows, top to bottom:
 - **tools** — the lead's three most used tools, with their share of all its calls, each as a `■` bar stretched over the row between the name and the %, which sits at the right edge (one cell is one step). The box sits right of the lead
   on its top row, `3` columns apart and joined to nothing; the agent tree starts directly below the lead. It
   scrolls with the diagram, which is wide enough for both: on a narrow terminal reach it with `h`/`l`.
+- **processes** — right of the tools box, the 5 processes of the session using the most CPU: the agent running
+  each (in its family color), its CPU share, memory and command (see **Processes** below). Left out until the
+  first sample, and once the session ended.
 - **agents** — the subagents as a layered tree, one row per spawn depth, each connected to the agent that
   spawned it (or to the lead). Each box has the agent's full name in its top border, then its model and `effort`
-  meter, a `ctx` bar stretched over the row, with its % at the right edge, a usage row (`41.2k tok  37 calls  5h 3%`:
-  its tokens, tool calls and 5h share, spread over the row), its task and a live text row; the bottom border shows the status: a spinner with elapsed time and
+  meter, a `ctx` bar stretched over the row, with its % at the right edge, a usage row (`41.2k tok  37 calls  5h 3%  cpu 180%`:
+  its tokens, tool calls, 5h share and the CPU share of the processes it runs, left out while it runs none, spread
+  over the row), its task and a live text row; the bottom border shows the status: a spinner with elapsed time and
   `▸ <tool> <argument>` while running, `✓ done` with its duration, `✗` when it failed. The border takes the
   model family's color; finished agents are dimmed.
   The **task** is the subagent's description, else the first sentence of its first prompt (a leading
   `Read and follow …` line skipped), at most 40 characters. The **live text** `» …` is the first line of the
   agent's newest text, at most 60 characters, cut to the box; it changes while the agent runs, and a done or
   failed agent keeps its last text and its usage figures, dimmed. Tokens are input + cache write + output, like
-  the lead's; where the row is too narrow for the units, it shows only the numbers (`412.3k  12.3k  5h 7%`). Every agent is drawn: as many boxes as fit go side by side,
+  the lead's; where the row is too narrow for the units, it shows only the numbers (`412.3k  12.3k  5h 7%`), and where that doesn't fit either, the 5h share goes. Every agent is drawn: as many boxes as fit go side by side,
   and a depth that doesn't fit one line wraps into as many lines as it needs.
 - **session log** — a closed box of 4 lines, newest at the bottom, of everything the lead and the agents do:
   their tool calls (`Read file.go`, `Bash go test ./…`; failed calls in red), the first line of each of their
@@ -735,7 +739,8 @@ anything because the terminal is small. It shows, top to bottom:
   line is `time actor message`, the actor in its model family's color; the name column fits names of up to 20
   characters. It keeps the newest 200 lines; an ended session keeps its log.
 - **status line** — one entry per model family in its color, e.g. `opus [2 running]`, `sonnet [1 failed]`,
-  `haiku [done]`; then `agents [running/total]`, `tools [n]`, `tokens [n]` and `● live` or `■ ended`.
+  `haiku [done]`; then `cpu [n%]` (the CPU share of the whole process tree, left out until there is one),
+  `agents [running/total]`, `tools [n]`, `tokens [n]` and `● live` or `■ ended`.
 
 **Focus.** `tab` and `shift+tab` move the focus between the session column, the diagram and the session log (and
 around); the diagram has it when the view opens. The focused area is highlighted in the accent color (the
@@ -782,6 +787,17 @@ the tokens of the lead and all agents of this session, rounded to a whole %; 0 w
 It assumes this session drives the usage: other Claude sessions of the account are not split out. The share is
 left out (tokens and calls stay) when the file is missing or unreadable, has no `session` value, or was written
 more than 15 minutes ago. An ended session keeps the share it ended with.
+
+**Processes.** While the view is open and Claude runs, `lanes` samples the session's process tree (the pane's
+process and everything under it: Claude, the commands its Bash calls run, MCP servers) with `ps` every 3 seconds,
+and nothing while the view is closed. The CPU share is the CPU time a process used between two samples over the
+time between them, in % of one core (above 100% for several threads); `ps`'s own `%cpu` is not used, as it is a
+lifetime average on Linux and a decaying one on macOS. A process's first sample, or a pid reused in between,
+shows `n/a`. Both `ps` time formats are read: Linux's `[dd-]hh:mm:ss` and macOS's `mm:ss.ss`. Which agent runs
+a process is a best guess: a process whose command holds the command of an agent's running Bash call goes to
+that agent, with everything it starts; the rest, and a command several agents run at once, go to the lead.
+Subagents run inside the one Claude process, so their own CPU can't be split, and a command that forks away
+from its shell may land on the lead.
 
 **Ended sessions.** When Claude exits or the session finishes, the view reads the transcripts once more and
 freezes on that final state; the status line says `■ ended` instead of `● live`. Nothing moves, no packets run, and no

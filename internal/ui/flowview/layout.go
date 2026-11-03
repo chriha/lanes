@@ -47,7 +47,7 @@ func NewLayout(w, h int) Layout {
 }
 
 // Diagram is the scrolling part of the view laid out on a canvas of its own, in its own coordinates: the lead with
-// the tools box right of it, and the agent tree below the lead. It is at least the viewport's size.
+// the tools box left of it and the processes box right of it, and the agent tree below the lead. It is at least the viewport's size.
 type Diagram struct {
 	W, H  int
 	Lead  Rect

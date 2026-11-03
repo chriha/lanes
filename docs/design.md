@@ -99,7 +99,7 @@ an env var).
   unreadable, without `session` or older than 15 min) x the actor's tokens / the tokens of the lead and all agents,
   rounded; 0 when they have none; left out when unknown. It assumes this session drives the account's usage. The lead's
   share uses its tokens as read, not the easing counter. `internal/ui/model.go` reads it on the 1 s tick and
-  `agents.go` passes it to the open view as a `flowview.UsageEvent`; a frozen view keeps its last figure. The task (`session.Agent.Task`) is the subagent's `meta.json` description, else the first sentence of its
+  `agents.go` passes it to the open view as a `flowview.UsageEvent`; a frozen view keeps its last figure once it has one. The task (`session.Agent.Task`) is the subagent's `meta.json` description, else the first sentence of its
   first prompt (a leading `Read and follow …` line skipped), ≤ 40 chars; the live text (`Agent.Text`, drawn as
   `» text`) is the first line of its newest assistant text, ≤ 60 chars, dim once the agent is done or failed. One layout at every size (no compact
   or too-small mode): a pinned header (`AGENT VIEW · <item title>`, the session name as fallback; no live/ended

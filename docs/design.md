@@ -103,7 +103,7 @@ an env var).
   `h`/`l` move the window, clamped at the edges, kept across snapshots, shown as `lines a-b/n  cols a-b/n` above
   the log. `tab` / `shift+tab` cycle the focus session column → diagram → session log (the diagram on open); the
   focused area has its border / title in the accent and takes the scroll keys, so the others stay put. The session
-  log is a closed rounded box of 4 lines (`time actor message`, the actor in its family color, failed calls in the
+  log is a closed square box of 4 lines (`time actor message`, the actor in its family color, failed calls in the
   bad color) holding the newest 200 lines: it follows the newest line until scrolled up, then holds its place
   while lines append and shows `n/total` in its top border; `G` follows again. Boxes are 28–30 cols (widened for long names, never narrower), as many per row as fit, every agent drawn
   (a depth wraps into as many lines as it needs); a viewport narrower than a box scrolls sideways. Every bar row (the ctx row of agent

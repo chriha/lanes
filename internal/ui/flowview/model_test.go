@@ -440,8 +440,8 @@ func TestLogBox(t *testing.T) {
 		t.Fatalf("log box is %d rows high, want 6: 4 lines in a border", l.H)
 	}
 	corners := string([]rune{rows[l.Y][0], rows[l.Y][l.W-1], rows[l.Y+l.H-1][0], rows[l.Y+l.H-1][l.W-1]})
-	if corners != "╭╮╰╯" || !strings.HasPrefix(string(rows[l.Y]), "╭─ session log ─") {
-		t.Errorf("log box top %q, corners %q; want a rounded box titled session log", string(rows[l.Y]), corners)
+	if corners != "┌┐└┘" || !strings.HasPrefix(string(rows[l.Y]), "┌─ session log ─") {
+		t.Errorf("log box top %q, corners %q; want a square box titled session log", string(rows[l.Y]), corners)
 	}
 	if got := logFrame(m); strings.Contains(got[0], "/") || !strings.HasSuffix(got[1], "line 1") ||
 		!strings.HasSuffix(got[2], "line 2") || got[3] != "" || got[4] != "" {

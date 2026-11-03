@@ -103,6 +103,56 @@ func TestAgentBox(t *testing.T) {
 	}
 }
 
+func TestAgentUsageCPU(t *testing.T) {
+	agent := session.Agent{ID: "a1", Status: session.AgentRunning, Tool: "Bash", ToolArg: "go test ./...", Tokens: 41_234, Calls: 37}
+	lead := session.Lead{Tokens: 100_000 - agent.Tokens}
+	// The pane's shell runs claude; claude runs the agent's go test, which runs a compiler, and an MCP server.
+	tree := []session.Proc{
+		{PID: 100, PPID: 1, HasCPU: true, Command: "-zsh"},
+		{PID: 101, PPID: 100, CPU: 35, HasCPU: true, Command: "claude"},
+		{PID: 201, PPID: 101, CPU: 120.4, HasCPU: true, Command: "go test ./..."},
+		{PID: 202, PPID: 201, CPU: 60, HasCPU: true, Command: "compile"},
+		{PID: 300, PPID: 101, CPU: 2, HasCPU: true, Command: "node mcp-server.js"},
+	}
+	firstSample := make([]session.Proc, len(tree))
+	for i, p := range tree {
+		p.CPU, p.HasCPU = 0, false
+		firstSample[i] = p
+	}
+	with := func(f func(a *session.Agent)) session.Agent {
+		a := agent
+		f(&a)
+		return a
+	}
+	tests := []struct {
+		name  string
+		agent session.Agent
+		procs []session.Proc
+		known bool // the 5h usage is known
+		w     int
+		want  []string
+	}{
+		{"its processes' CPU share is summed", agent, tree, false, 30, []string{"41.2k tok", "37 calls", "cpu 180%"}},
+		{"the units go where it doesn't fit", agent, tree, true, 26, []string{"41.2k", "37", "5h 3%", "cpu 180%"}},
+		{"the 5h share goes where that doesn't fit either", with(func(a *session.Agent) { a.Tokens, a.Calls = 912_345, 12_345 }),
+			tree, true, 24, []string{"912.3k", "12.3k", "cpu 180%"}},
+		{"without processes of its own it is left out", with(func(a *session.Agent) { a.ToolArg = "go vet" }), tree, false, 26,
+			[]string{"41.2k tok", "37 calls"}},
+		{"without a CPU share yet it is left out", agent, firstSample, false, 26, []string{"41.2k tok", "37 calls"}},
+		{"without a sample it is left out", agent, nil, false, 26, []string{"41.2k tok", "37 calls"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := State{Usage5h: 7, Usage5hKnown: tt.known, Procs: tt.procs,
+				Snap: session.Snapshot{Lead: lead, Agents: []session.Agent{tt.agent}}}
+			got := s.agentUsage(tt.agent, tt.w)
+			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+				t.Errorf("agentUsage = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestAgentBoxTextIsDimOnceFinished(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -436,6 +486,11 @@ func TestStatusLine(t *testing.T) {
 	ended.Ended = true
 	none := fixtureState()
 	none.Snap.Agents = nil
+	sampled := withProcs(fixtureState())
+	firstSample := withProcs(fixtureState())
+	for i := range firstSample.Procs {
+		firstSample.Procs[i].CPU, firstSample.Procs[i].HasCPU = 0, false
+	}
 	tests := []struct {
 		name    string
 		w       int
@@ -449,6 +504,9 @@ func TestStatusLine(t *testing.T) {
 			[]string{"opus [stopped]", "sonnet [1 failed]", "haiku [done]", "agents [0/4]", "■ ended"}, []string{"running"}},
 		{"no agents, no families", 200, none, []string{"agents [0/0]  tools [48]"}, []string{"opus ["}},
 		{"entries that don't fit are left out whole", 90, live, []string{"agents [2/4]", "● live"}, []string{"…", "tokens"}},
+		{"a sample adds the CPU share of all processes", 200, sampled, []string{"haiku [done]  cpu [313%]  agents [2/4]"}, nil},
+		{"no CPU share without a sample", 200, live, nil, []string{"cpu"}},
+		{"no CPU share before a second sample", 200, firstSample, nil, []string{"cpu"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

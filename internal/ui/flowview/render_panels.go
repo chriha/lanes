@@ -424,11 +424,16 @@ func (s State) drawStatus(c *Canvas, l Layout) {
 		entries = append(entries, []seg{{f.Family + " [" + f.Status + "]", ModelRole(f.Model)}})
 	}
 	lead := s.Snap.Lead
-	for _, kv := range [][2]string{
-		{"agents", fmt.Sprintf("%d/%d", s.running(), len(s.Snap.Agents))},
-		{"tools", fmtThousands(lead.Calls)},
-		{"tokens", fmtThousands(lead.Tokens)},
-	} {
+	var totals [][2]string
+	if _, cpu, ok := s.cpu(); ok {
+		totals = append(totals, [2]string{"cpu", fmt.Sprintf("%.0f%%", cpu)})
+	}
+	totals = append(totals,
+		[2]string{"agents", fmt.Sprintf("%d/%d", s.running(), len(s.Snap.Agents))},
+		[2]string{"tools", fmtThousands(lead.Calls)},
+		[2]string{"tokens", fmtThousands(lead.Tokens)},
+	)
+	for _, kv := range totals {
 		entries = append(entries, []seg{{kv[0] + " ", RoleDim}, {"[" + kv[1] + "]", RoleBold}})
 	}
 	state := seg{"● live", RoleOK}

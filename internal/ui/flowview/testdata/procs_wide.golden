@@ -13,7 +13,7 @@
 ┃ ┆                  ┃ ━━━━━━━━━━━━━━┓   ┏━ triager ━━━━━━━━━━━━━━━━━━┓   ┏━ worker-0 ━━━━━━━━━━━━━━━━━┓ │ ┏━ worker-1 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-2 ━━━━━━━━━━━━━━━━━┓                              
 ┃ ◇ asking           ┃ ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃   ┃         haiku 4.5          ┃ │ ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃                              
 ┃ ┆                  ┃ ▬▬▬▬▬▬▬▬  42% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   7% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  10% ┃ │ ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  11% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  12% ┃                              
-┃ ◇ waiting          ┃ 7 calls 5h 7% ┃   ┃ 23.5k tok   8 calls  5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃ │ ┃ 0 tok     0 calls    5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃                              
+┃ ◇ waiting          ┃ h 7% cpu 276% ┃   ┃ 23.5k tok   8 calls  5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃ │ ┃ 0 tok     0 calls    5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃                              
 ┃                    ┃ of #196       ┃   ┃        triage #201         ┃   ┃       scan a package       ┃ │ ┃       scan a package       ┃   ┃       scan a package       ┃                              
 ┃ turns           12 ┃ whole test su…┃   ┃   » Labelled it as a bug   ┃   ┃                            ┃ │ ┃                            ┃   ┃                            ┃                              
 ┃ tools           48 ┃ sh go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛ │ ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛                              
@@ -47,4 +47,4 @@
 │ 14:29:40 code-reviewer Bash go test ./internal/...                                                                                                                                                   │
 │ 14:29:50 lead          Slice 2 is next: the layered layout                                                                                                                                           │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- opus [1 running]  sonnet [1 running]  haiku [8 running]  agents [10/12]  tools [48]  tokens [1,234,567]                                                                                         ● live 
+ opus [1 running]  sonnet [1 running]  haiku [8 running]  cpu [313%]  agents [10/12]  tools [48]  tokens [1,234,567]                                                                             ● live 

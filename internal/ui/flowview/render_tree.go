@@ -2,6 +2,7 @@ package flowview
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/chriha/lanes/internal/session"
@@ -64,18 +65,31 @@ func (s State) drawAgent(c *Canvas, r Rect, a session.Agent) {
 }
 
 // agentUsage is an agent's usage row of at most w cells: its tokens, tool calls and share of the account's 5h usage
-// (left out when unknown), `41.2k tok`, `37 calls`, `5h 3%`. Where they don't fit with a space between, the units go.
+// (left out when unknown) and the CPU share of the processes it runs (left out without any), `41.2k tok`, `37 calls`,
+// `5h 3%`, `cpu 180%`. Where they don't fit with a space between, the units go, then the 5h share.
 func (s State) agentUsage(a session.Agent, w int) []string {
 	parts := []string{fmtCount(a.Tokens) + " tok", fmtCount(a.Calls) + " calls"}
+	share := -1 // the index of the 5h share
 	if pct, ok := s.share5h(a.Tokens); ok {
+		share = len(parts)
 		parts = append(parts, fmt.Sprintf("5h %d%%", pct))
 	}
-	n := len(parts) - 1
-	for _, p := range parts {
-		n += runeLen(p)
+	byAgent, _, _ := s.cpu()
+	if cpu, ok := byAgent[a.ID]; ok && a.ID != "" { // "" is the lead's
+		parts = append(parts, fmt.Sprintf("cpu %.0f%%", cpu))
 	}
-	if n > w {
+	width := func() int {
+		n := len(parts) - 1
+		for _, p := range parts {
+			n += runeLen(p)
+		}
+		return n
+	}
+	if width() > w {
 		parts[0], parts[1] = fmtCount(a.Tokens), fmtCount(a.Calls)
+	}
+	if width() > w && share >= 0 && len(parts) > 3 {
+		parts = slices.Delete(parts, share, share+1)
 	}
 	return parts
 }

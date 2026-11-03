@@ -714,10 +714,10 @@ anything because the terminal is small. It shows, top to bottom:
   - `advisor` — the advisor model and its `calls`, when the session uses one.
 - **lead** — the main Claude, in a double border: its model and `effort` meter with its level (left out when
   unknown), current tool and argument, state and elapsed time.
-- **tools** — the lead's three most used tools, with their share of all its calls, each as a `■` bar stretched over the row between the name and the %, which sits at the right edge (one cell is one step). The box sits right of the lead
+- **tools** — the lead's three most used tools, with their share of all its calls, each as a `■` bar stretched over the row between the name and the %, which sits at the right edge (one cell is one step). The box sits left of the lead
   on its top row, `3` columns apart and joined to nothing; the agent tree starts directly below the lead. It
   scrolls with the diagram, which is wide enough for both: on a narrow terminal reach it with `h`/`l`.
-- **processes** — right of the tools box, the 5 processes of the session using the most CPU: the agent running
+- **processes** — right of the lead on its top row, like the tools box `3` columns apart, the 5 processes of the session using the most CPU: the agent running
   each (in its family color), its CPU share, memory and command (see **Processes** below). Left out until the
   first sample, and once the session ended.
 - **agents** — the subagents as a layered tree, one row per spawn depth, each connected to the agent that

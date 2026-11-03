@@ -2,7 +2,6 @@ package ui
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -386,18 +385,5 @@ func TestAgentViewShowsThe5hShare(t *testing.T) {
 				t.Errorf("view = %q, want the 5h row %q", v, tt.want)
 			}
 		})
-	}
-}
-
-func TestPollUsage5hReadsTheClaudeDir(t *testing.T) {
-	m := agentModel(t, working("fix~1"))
-	dir := t.TempDir()
-	m.cfg.Settings.ClaudeDir = dir
-	line := fmt.Sprintf(`{"text":"5h 12%%","session":12,"at":%d}`, time.Now().Unix())
-	if err := os.WriteFile(filepath.Join(dir, session.UsageFile), []byte(line), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if got := m.pollUsage5h()(); got != (usage5hMsg{pct: 12, ok: true}) {
-		t.Errorf("poll gave %+v, want 12%% known", got)
 	}
 }

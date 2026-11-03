@@ -11,7 +11,7 @@ import (
 )
 
 // border frames the panels and agent boxes; leadBorder sets the lead apart; logBorder closes the session log.
-var border, leadBorder, logBorder = lipgloss.ThickBorder(), lipgloss.DoubleBorder(), lipgloss.RoundedBorder()
+var border, leadBorder, logBorder = lipgloss.ThickBorder(), lipgloss.DoubleBorder(), lipgloss.NormalBorder()
 
 // fit strips escape sequences from s (transcript text is untrusted) and cuts it to w runes, ending in … when cut.
 // Runes, not display width: the canvas draws every rune in one cell.

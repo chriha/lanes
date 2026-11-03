@@ -6,10 +6,10 @@
 ┃ ctx ▬▬▬▬▬▬▬▬▬  61% ┃ ║        Agent implementer   
 ┗━━━━━━━━━━━━━━━━━━━━┛ ║         ◓ working 12m03s   
                 diagram  lines 1-4/41  cols 1-29/75 
-╭─ session log ────────────────────────────── 6/6 ─╮
+┌─ session log ────────────────────────────── 6/6 ─┐
 │ 14:28:30 code-reviewer spawned validator         │
 │ 14:29:30 validator     failed                    │
 │ 14:29:40 code-reviewer Bash go test ./internal/… │
 │ 14:29:50 lead          Slice 2 is next: the lay… │
-╰──────────────────────────────────────────────────╯
+└──────────────────────────────────────────────────┘
  opus [1 running]  sonnet [1 running]        ● live 

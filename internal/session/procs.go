@@ -22,7 +22,8 @@ type Proc struct {
 
 // Sampler samples the process tree under a pid with ps and turns the accumulated CPU time of two samples into
 // a CPU share. ps's own %cpu is no use for spotting a spike: a lifetime average on Linux, a decaying one on
-// macOS. A Sampler is safe for one caller at a time from any goroutine.
+// macOS. A Sampler follows one root: it remembers only the last sampled tree, so use one Sampler per session.
+// It is safe for one caller at a time from any goroutine.
 type Sampler struct {
 	// ps lists every process as "pid ppid time rss command" lines; now is the clock. Tests replace both.
 	ps  func() ([]byte, error)
@@ -50,7 +51,7 @@ func NewSampler() *Sampler {
 }
 
 // Sample returns root and all its descendants, ordered by pid. A vanished root, empty ps output or a ps
-// error give an empty tree.
+// error give an empty tree. Sampling another root than last time starts its CPU history afresh.
 func (s *Sampler) Sample(root int) []Proc {
 	s.mu.Lock()
 	defer s.mu.Unlock()

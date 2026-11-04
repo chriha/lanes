@@ -337,6 +337,58 @@ run = '`+tt.run+`'
 	}
 }
 
+func TestActionChainValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		actions string // TOML for the actions besides [action.work]'s run line, which comes first
+		wantErr string // substring of the error; "" = loads
+	}{
+		{"none", "", ""},
+		{"valid chain", "on_success = 'review'\non_failure = 'fix'\n[action.review]\nrun = 'echo r'\n[action.fix]\nrun = 'echo f'\ntype = 'run'", ""},
+		{"diamond is no cycle", "on_success = 'a'\non_failure = 'b'\n[action.a]\nrun = 'echo a'\non_success = 'c'\n[action.b]\nrun = 'echo b'\non_success = 'c'\n[action.c]\nrun = 'echo c'", ""},
+		{"unknown on_success", "on_success = 'nope'", `on_success: unknown action "nope"`},
+		{"unknown on_failure", "on_failure = 'nope'", `on_failure: unknown action "nope"`},
+		{"self cycle", "on_failure = 'work'", "cycle"},
+		{"two-step cycle", "on_success = 'review'\n[action.review]\nrun = 'echo r'\non_failure = 'work'", "cycle"},
+		{"target confirms single", "on_success = 'review'\n[action.review]\nrun = 'echo r'\nconfirm = 'single'", `"review" has confirm = "single"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+			t.Setenv("HOME", tmp)
+			old, _ := os.Getwd()
+			defer os.Chdir(old)
+			if err := os.Chdir(tmp); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[action.work]
+run = "echo work"
+`+tt.actions+`
+`)
+			c, err := Load()
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want one containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("err = %v, want none", err)
+			}
+			if tt.name == "valid chain" && (c.Action["work"].OnSuccess != "review" || c.Action["work"].OnFailure != "fix") {
+				t.Errorf("work = %+v, want on_success review, on_failure fix", c.Action["work"])
+			}
+		})
+	}
+}
+
 func TestReservedShellAction(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))

@@ -154,6 +154,9 @@ const projectTail = `
 # refresh = false             # run type only: refetch the lists when it finishes (default false)
 # when = 'kind == "pr"'       # filter expression; the action only runs on matching items (default: all)
 # jump = false               # session type only: on one item, attach once started, or if running (default false)
+# on_success = "merge"        # start this action on the same item when the session or run exits 0
+# on_failure = "fix"          # ... or exits non-zero; killed sessions start nothing. Must be an existing action
+#                             # without confirm = "single", and chains must not loop back
 
 # ---------------------------------------------------------------------------------------------------------
 # Theme: hex colors overriding the adaptive palette (merged per field, also in [theme.light] / [theme.dark]).

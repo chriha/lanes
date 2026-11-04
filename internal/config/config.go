@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"text/template/parse"
@@ -414,6 +415,9 @@ func Load() (*Config, error) {
 		}
 		c.Action[name] = a // a is a copy: store the compiled filter
 	}
+	if err := validateChains(c.Action); err != nil {
+		return nil, fmt.Errorf("%s: %w", p, err)
+	}
 	if err := c.Theme.validate(); err != nil {
 		return nil, fmt.Errorf("%s: %w", p, err)
 	}
@@ -423,6 +427,56 @@ func Load() (*Config, error) {
 		}
 	}
 	return &c, nil
+}
+
+// validateChains checks on_success / on_failure: each names an existing action that does not ask for confirmation
+// (a follow-up starts unattended), and following them never leads back to an action already on the path.
+func validateChains(actions map[string]Action) error {
+	names := make([]string, 0, len(actions))
+	for name := range actions {
+		names = append(names, name)
+	}
+	sort.Strings(names) // deterministic error for configs with several problems
+	for _, name := range names {
+		a := actions[name]
+		for _, o := range []struct{ field, target string }{{"on_success", a.OnSuccess}, {"on_failure", a.OnFailure}} {
+			if o.target == "" {
+				continue
+			}
+			t, ok := actions[o.target]
+			if !ok {
+				return fmt.Errorf("action %q: %s: unknown action %q", name, o.field, o.target)
+			}
+			if t.Confirm == "single" {
+				return fmt.Errorf("action %q: %s: %q has confirm = \"single\", but a follow-up starts without asking", name, o.field, o.target)
+			}
+		}
+	}
+	done := map[string]bool{} // fully explored, no cycle through it
+	var visit func(name string, path []string) error
+	visit = func(name string, path []string) error {
+		if slices.Contains(path, name) {
+			return fmt.Errorf("action %q: on_success/on_failure cycle: %s", path[0], strings.Join(append(path, name), " → "))
+		}
+		if name == "" || done[name] {
+			return nil
+		}
+		path = append(path, name)
+		a := actions[name]
+		for _, next := range []string{a.OnSuccess, a.OnFailure} {
+			if err := visit(next, path); err != nil {
+				return err
+			}
+		}
+		done[name] = true
+		return nil
+	}
+	for _, name := range names {
+		if err := visit(name, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // misplacedKeyHint names the likely cause when a [keymap] key is a [theme] or [settings] key, which happens when

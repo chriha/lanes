@@ -60,3 +60,4 @@ changelog:
       - '^test:'
       - '^ci:'
       - '^style:'
+      - '^chore:'

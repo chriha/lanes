@@ -25,6 +25,12 @@ import (
 // version is set at build time: -ldflags "-X main.version=v1.0.0".
 var version = "dev"
 
+// resolveVersion is the version lanes reports: the ldflags value, else the release `go install …@vX` stamped into the
+// build info.
+func resolveVersion(ldflags string, buildInfo func() (*debug.BuildInfo, bool)) string {
+	return ldflags // stub
+}
+
 func main() {
 	quietterm.Restore() // undo the TERM=dumb that kept bubbletea's init from querying the terminal
 	if msg := usageError(os.Args[1:]); msg != "" {
@@ -34,7 +40,7 @@ func main() {
 	wd, _ := os.Getwd()
 	os.Exit(run(os.Args[1:], env{
 		wd: wd, isTTY: stdinIsTerminal(), stdout: os.Stdout, stderr: os.Stderr,
-		version:   version,
+		version:   resolveVersion(version, debug.ReadBuildInfo),
 		fetch:     update.GitHub(),
 		upgrade:   upgradeCommand,
 		updateOff: updateOff,

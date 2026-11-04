@@ -21,4 +21,8 @@ test:
 lint:
 	golangci-lint run
 
-.PHONY: build install dev test lint
+# Tag the next release from the Conventional Commits since the last tag (see README § Development).
+version:
+	@scripts/version.sh
+
+.PHONY: build install dev test lint version

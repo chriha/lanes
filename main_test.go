@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,33 @@ import (
 	"github.com/chriha/lanes/internal/trust"
 	"github.com/chriha/lanes/internal/update"
 )
+
+func TestResolveVersion(t *testing.T) {
+	tests := []struct {
+		name, ldflags, module string // module: the build info's Main.Version; "" = no build info
+		want                  string
+	}{
+		{"dev without build info", "dev", "", "dev"},
+		{"dev build from a checkout", "dev", "(devel)", "dev"},
+		{"go install @v1.2.3", "dev", "v1.2.3", "v1.2.3"},
+		{"go build stamps a pseudo-version", "dev", "v1.2.4-0.20261101120000-abcdef123456", "dev"},
+		{"go build stamps a dirty pseudo-version", "dev", "v0.0.0-20261101120000-abcdef123456+dirty", "dev"},
+		{"ldflags value wins", "v1.0.0", "v1.2.3", "v1.0.0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := func() (*debug.BuildInfo, bool) {
+				if tt.module == "" {
+					return nil, false
+				}
+				return &debug.BuildInfo{Main: debug.Module{Version: tt.module}}, true
+			}
+			if got := resolveVersion(tt.ldflags, info); got != tt.want {
+				t.Errorf("resolveVersion(%q) with module %q = %q, want %q", tt.ldflags, tt.module, got, tt.want)
+			}
+		})
+	}
+}
 
 func TestUsageError(t *testing.T) {
 	tests := []struct {

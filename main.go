@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime/debug"
 	"time"
 
@@ -25,6 +26,22 @@ import (
 // version is set at build time: -ldflags "-X main.version=v1.0.0".
 var version = "dev"
 
+// resolveVersion is the version lanes reports: the ldflags value, else the release `go install …@vX` stamped into the
+// build info.
+func resolveVersion(ldflags string, buildInfo func() (*debug.BuildInfo, bool)) string {
+	if ldflags != "dev" {
+		return ldflags
+	}
+	bi, ok := buildInfo()
+	if !ok || !releaseVersion.MatchString(bi.Main.Version) {
+		return ldflags // "(devel)", or the pseudo-version go build stamps from the checkout
+	}
+	return bi.Main.Version
+}
+
+// releaseVersion matches a release tag such as v1.2.3 or v1.2.3-rc.1, not a pseudo-version or a +dirty build.
+var releaseVersion = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`)
+
 func main() {
 	quietterm.Restore() // undo the TERM=dumb that kept bubbletea's init from querying the terminal
 	if msg := usageError(os.Args[1:]); msg != "" {
@@ -34,7 +51,7 @@ func main() {
 	wd, _ := os.Getwd()
 	os.Exit(run(os.Args[1:], env{
 		wd: wd, isTTY: stdinIsTerminal(), stdout: os.Stdout, stderr: os.Stderr,
-		version:   version,
+		version:   resolveVersion(version, debug.ReadBuildInfo),
 		fetch:     update.GitHub(),
 		upgrade:   upgradeCommand,
 		updateOff: updateOff,

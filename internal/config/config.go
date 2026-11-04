@@ -179,6 +179,9 @@ type Action struct {
 	Refresh bool           `toml:"refresh"` // run type: refetch providers when finished
 	When    string         `toml:"when"`    // expr against the item's fields; the action only runs on matching items (empty = all)
 	Jump    bool           `toml:"jump"`    // session type: on a single item, attach to the session once started (or if running)
+	// Follow-ups started on the same item when this action's session or run exits: 0 → OnSuccess, else OnFailure.
+	OnSuccess string `toml:"on_success"`
+	OnFailure string `toml:"on_failure"`
 
 	WhenFilter *filter.Filter `toml:"-"` // compiled When; filled by CompileWhen (config load), nil on a hand-built action
 }

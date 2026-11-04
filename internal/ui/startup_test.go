@@ -30,6 +30,7 @@ func (b *blockingProv) Fetch(context.Context) ([]item.Item, error) {
 type blockingQuicker struct{ blockingProv }
 
 func (b *blockingQuicker) Quick(context.Context) ([]item.Item, error) {
+	defer b.wg.Done()
 	<-b.release
 	return mkItems("1"), nil
 }
@@ -77,7 +78,7 @@ func TestStartDrawsAndHandlesKeysWhileProvidersBlock(t *testing.T) {
 	m, _ := busyModel(t) // isolated XDG dirs, no tmux polling
 	release := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3) // gitlab: Quick and Fetch, linear: Fetch
 	m.providers = map[string]provider.Provider{
 		"gitlab": &blockingQuicker{blockingProv{release, &wg}},
 		"linear": &blockingProv{release, &wg},
@@ -93,6 +94,14 @@ func TestStartDrawsAndHandlesKeysWhileProvidersBlock(t *testing.T) {
 
 	out := &frames{wake: make(chan struct{}, 1)}
 	prog := tea.NewProgram(m, tea.WithInput(nil), tea.WithOutput(out), tea.WithoutSignals())
+	t.Cleanup(func() { // a failed wait must not leave the fakes and the program running
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+		prog.Kill()
+	})
 	done := make(chan error, 1)
 	go func() { _, err := prog.Run(); done <- err }()
 
@@ -101,7 +110,13 @@ func TestStartDrawsAndHandlesKeysWhileProvidersBlock(t *testing.T) {
 	out.waitFor(t, "move down / up", "the help screen after a key press")
 
 	close(release)
-	wg.Wait()
+	fetched := make(chan struct{})
+	go func() { wg.Wait(); close(fetched) }()
+	select {
+	case <-fetched:
+	case <-time.After(10 * time.Second):
+		t.Fatal("a fetch did not return after release")
+	}
 	prog.Quit()
 	select {
 	case err := <-done:

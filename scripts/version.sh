@@ -20,7 +20,7 @@ git fetch -q --tags origin || die "git fetch origin failed"
 head=$(git rev-parse HEAD)
 [ "$head" = "$(git rev-parse origin/main)" ] || die "HEAD is not origin/main; pull or push first"
 
-last=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+last=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' 2>/dev/null || true) # pre-releases don't count
 range=${last:+$last..}HEAD
 count=$(git rev-list --count "$range")
 [ "$count" -gt 0 ] || die "nothing to release since $last"
@@ -58,8 +58,9 @@ if [ -n "${V:-}" ]; then
 	next=$V reason="set by V"
 fi
 
-if [ -n "$last" ] && [ "$(semver "$next" | cut -d' ' -f1)" -gt "$lmaj" ] && [ "${MAJOR:-}" != 1 ]; then
-	die "$last -> $next is a major bump ($reason). A v2+ release needs a /v2 module path, or \`go install …@latest\` stops seeing releases. Pass MAJOR=1 to tag it anyway."
+nmaj=$(semver "$next" | cut -d' ' -f1)
+if [ "$nmaj" -gt "$lmaj" ] && [ "$nmaj" -ge 2 ] && [ "${MAJOR:-}" != 1 ]; then
+	die "${last:-no release} -> $next is a major bump ($reason). A v2+ release needs a /v2 module path, or \`go install …@latest\` stops seeing releases. Pass MAJOR=1 to tag it anyway."
 fi
 ! git rev-parse -q --verify "refs/tags/$next" >/dev/null || die "tag $next already exists"
 

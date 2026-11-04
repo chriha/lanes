@@ -98,6 +98,9 @@ func TestVersionNext(t *testing.T) {
 		{"V override not semver", "v1.2.3", []string{"fix: a"}, []string{"V=1.5"}, false, "vX.Y.Z"},
 		{"V override not greater", "v1.2.3", []string{"fix: a"}, []string{"V=v1.2.3"}, false, "greater"},
 		{"V override major needs MAJOR=1", "v1.2.3", []string{"fix: a"}, []string{"V=v2.0.0"}, false, "MAJOR=1"},
+		{"first release V=v2 needs MAJOR=1", "", []string{"fix: a"}, []string{"V=v2.0.0"}, false, "MAJOR=1"},
+		{"breaking change on v0 is v1 without MAJOR=1", "v0.3.0", []string{"feat!: a"}, nil, true, "v1.0.0"},
+		{"pre-release tags are not the last release", "v1.2.3", []string{"fix: a"}, []string{"V=v1.2.4", "PRE=v1.2.4-rc.1"}, true, "v1.2.4"},
 		{"no commits since tag stops", "v1.2.3", nil, nil, false, "nothing to release"},
 	}
 	for _, tt := range tests {
@@ -108,6 +111,11 @@ func TestVersionNext(t *testing.T) {
 			}
 			for _, c := range tt.commits {
 				r.commit(c)
+			}
+			for _, e := range tt.env {
+				if pre, ok := strings.CutPrefix(e, "PRE="); ok { // tag a pre-release of HEAD first
+					r.git("tag", "-a", pre, "-m", pre)
+				}
 			}
 			r.git("push", "-q", "origin", "main")
 			before := r.tags()

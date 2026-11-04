@@ -994,3 +994,32 @@ provider = "gl"
 		})
 	}
 }
+
+func TestThemeLabelsGlobalCaseDuplicateWithProjectOverride(t *testing.T) {
+	const global = `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[theme.labels]
+bug = "#F87171"
+BUG = "#F87171"
+`
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+	t.Setenv("HOME", tmp)
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), global)
+	write(t, filepath.Join(tmp, ".lanes.toml"), "[theme.labels]\nBug = \"#4ADE80\"\n")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "theme.labels.bug: same label as theme.labels.BUG") {
+		t.Fatalf("err = %v, want a case-duplicate error naming the global key", err)
+	}
+}

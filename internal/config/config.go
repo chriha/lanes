@@ -358,6 +358,14 @@ func Load() (*Config, error) {
 		if _, err := toml.DecodeFile(pp, &pc); err != nil {
 			return nil, fmt.Errorf("%s: %w", pp, err)
 		}
+		// the global tables must not collide on their own, even when a project key is about to shadow them
+		for prefix, labels := range map[string]map[string]string{
+			"theme.labels.": c.Theme.Labels, "theme.light.labels.": c.Theme.Light.Labels, "theme.dark.labels.": c.Theme.Dark.Labels,
+		} {
+			if err := validateLabels(labels, prefix); err != nil {
+				return nil, fmt.Errorf("%s: %w", p, err)
+			}
+		}
 		global := append([]View(nil), c.View...) // copy: decoding below reuses the backing array
 		// decoding over c only touches the keys the file defines; slices are replaced, so views merge by hand
 		if _, err := toml.DecodeFile(pp, &c); err != nil {

@@ -185,6 +185,7 @@ Besides the TUI, `lanes` has these commands:
 | `lanes doctor`   | check tmux, the forge CLIs, the config and the state dirs (see [Troubleshooting](#troubleshooting)); asks for trust first, like the TUI |
 | `lanes status`   | print the current project's sessions that need input (see [tmux and lanes](#tmux-and-lanes)); prints nothing in an untrusted project and never asks |
 | `lanes --version`| print the version; never asks for trust                                                   |
+| `lanes --untrust`| forget the trust of the current project, so the next start asks again (see [Trusting a project](#trusting-a-project)); never asks, works without a terminal |
 
 ## Using lanes
 
@@ -1039,28 +1040,41 @@ Do you trust /home/you/src/payments?
 Its .lanes.toml can run shell commands (command providers, actions).
 
 Type yes to trust it: [NO]
+[ ] always trust this project, even when its .lanes.toml changes
 
-enter confirm · esc quit
+enter confirm · tab toggle always · esc quit
 ```
 
 Only `yes` (any case, surrounding spaces ignored) followed by `enter` trusts the project; `lanes` then continues and
 does not ask again there. Anything else — an empty answer, other text, `esc`, `ctrl-c` — is a no: `lanes` prints
-`not trusted` to stderr, exits 1 and records nothing.
+`not trusted` to stderr, exits 1 and records nothing, whether the checkbox is checked or not.
+
+- **Always trust.** `tab` toggles the checkbox (`[x]`); it starts unchecked and only counts together with `yes`.
+  Checked, `lanes` trusts this project root whatever its `.lanes.toml` files say: changing, adding or removing one
+  never asks again, and while `lanes` runs a changed `.lanes.toml` is reloaded and applied like any trusted change.
+  Only the root shown in the dialog is covered; other projects are still asked the first time. Use it for projects
+  you edit yourself, not for repositories where a `git pull` could bring in commands you have not read.
 
 - **Changes ask again.** The trust covers the content of every `.lanes.toml` under the root (`.git` and
   `node_modules` are skipped). Changing one, or adding one where there was none, makes the project untrusted at the
   next start. While `lanes` runs, a reload of an untrusted change is not applied: the old config stays and the footer
   shows `.lanes.toml changed — restart lanes to trust it`. Edits you make through `lanes` itself — `:edit project` and
-  `lanes init` in a trusted project — are trusted right away.
+  `lanes init` in a trusted project — are trusted right away. In an always-trusted project none of this applies, and
+  `:edit project` and `lanes init` keep it always-trusted.
 - **No terminal, no trust.** Without a terminal on stdin an untrusted project is refused with
   `<root> is not trusted; run lanes in a terminal to trust it` and exit 1. There is deliberately no way to trust a
   project from a script — no subcommand, flag or environment variable; a person has to type `yes`.
 - **Silent commands.** `lanes status` and the Claude Code hooks (`lanes hook`) never ask: in an untrusted project
   `status` prints nothing and the hooks do nothing, except in a session `lanes` started itself (its working
   directory, e.g. a git worktree, may be a root of its own).
+- **Untrust.** `lanes --untrust` removes the current project root's entry, whether it is a hash or always, prints
+  `<root> is no longer trusted` (or `<root> was not trusted` when there was no entry) and exits 0; the next start
+  shows the dialog again. It runs before any git, config or provider, needs no terminal and never asks, so scripts
+  may use it. With a corrupt trust list it reports the error on stderr, exits 1 and leaves the file alone.
 - **The trust list** is `trust.json` in the state directory (see [Where things live](#where-things-live)), mode 0600,
-  one entry per project root. Delete an entry, or the file, to be asked again. A corrupt file trusts nothing: `lanes`
-  reports the error and leaves the file alone rather than overwriting it.
+  one entry per project root: the hash of the root's `.lanes.toml` files, or `"always"` for an always-trusted root.
+  Use `lanes --untrust` to be asked again, or delete an entry or the whole file by hand. A corrupt file trusts
+  nothing: `lanes` reports the error and leaves the file alone rather than overwriting it.
 
 ### Full reference
 

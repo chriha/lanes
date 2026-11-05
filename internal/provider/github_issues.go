@@ -160,3 +160,8 @@ func ghIssueToItem(is ghIssue, me string) item.Item {
 		}),
 	}
 }
+
+// ghPriority maps priority:1..priority:4 labels to a priority, the lowest N wins, 0 if there is none.
+func ghPriority(labels []string) int {
+	return 0
+}

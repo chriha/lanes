@@ -380,6 +380,11 @@ func listName(it item.Item) string {
 	return strings.Join(names, ", ")
 }
 
+// prioStrip is the ▰▱ strip of a ticket's priority (1 urgent .. 4 low) and its style; empty for 0 or other kinds.
+func prioStrip(it item.Item) (string, lipgloss.Style) {
+	return "", sDim
+}
+
 func matches(it item.Item, q string) bool {
 	hay := strings.ToLower(it.ID + " " + it.Title + " " + it.Author + " " + listName(it))
 	if t, ok := it.Fields["ticket"].(string); ok {

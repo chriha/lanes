@@ -45,7 +45,7 @@ func Sort(items []Item, keys []SortKey) {
 	}
 	slices.SortStableFunc(items, func(a, b Item) int {
 		for _, k := range keys {
-			va, vb := envs[a.ID][k.Field], envs[b.ID][k.Field]
+			va, vb := sortValue(k.Field, envs[a.ID][k.Field]), sortValue(k.Field, envs[b.ID][k.Field])
 			switch {
 			case va == nil && vb == nil:
 				continue
@@ -64,6 +64,14 @@ func Sort(items []Item, keys []SortKey) {
 		}
 		return 0
 	})
+}
+
+// sortValue is v, except that a priority of 0 ("none") counts as missing so it sorts last.
+func sortValue(field string, v any) any {
+	if n, ok := number(v); ok && field == "priority" && n == 0 {
+		return nil
+	}
+	return v
 }
 
 // compare orders two field values: numbers, bools and times by value, everything else as strings.

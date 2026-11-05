@@ -96,3 +96,41 @@ func TestSort(t *testing.T) {
 		})
 	}
 }
+
+func TestSortPriorityNoneLast(t *testing.T) {
+	it := func(id string, f map[string]any) Item { return Item{ID: id, Title: "t" + id, Fields: f} }
+	items := []Item{
+		it("1", map[string]any{"priority": 0, "open_threads": 2}),
+		it("2", map[string]any{"priority": 4, "open_threads": 0}),
+		it("3", map[string]any{"priority": 0, "open_threads": 0}),
+		it("4", map[string]any{"priority": 1, "open_threads": 1}),
+		it("5", map[string]any{"priority": 3, "open_threads": 3}),
+	}
+	tests := []struct {
+		name string
+		spec string
+		want []string
+	}{
+		{"ascending puts none last", "priority", []string{"4", "5", "2", "1", "3"}},
+		{"descending puts none last", "-priority", []string{"2", "5", "4", "1", "3"}},
+		{"secondary key breaks ties among nones", "priority,open_threads", []string{"4", "5", "2", "3", "1"}},
+		{"other numeric fields sort 0 by value", "open_threads", []string{"2", "3", "4", "1", "5"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			keys, err := ParseSort(tt.spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := append([]Item(nil), items...)
+			Sort(got, keys)
+			ids := make([]string, len(got))
+			for i, g := range got {
+				ids[i] = g.ID
+			}
+			if !reflect.DeepEqual(ids, tt.want) {
+				t.Errorf("got %v, want %v", ids, tt.want)
+			}
+		})
+	}
+}

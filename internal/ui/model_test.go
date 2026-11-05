@@ -521,7 +521,7 @@ func TestTicketRowPriorityStrip(t *testing.T) {
 }
 
 func TestPrioStripColour(t *testing.T) {
-	for p, want := range map[int]lipgloss.TerminalColor{1: cBad, 2: cOrange, 3: cWarn, 4: cDim} {
+	for p, want := range map[int]lipgloss.TerminalColor{1: cBad, 2: lipgloss.AdaptiveColor{Light: "#C05621", Dark: "#FB923C"}, 3: cWarn, 4: cDim} {
 		_, st := prioStrip(item.Item{Fields: map[string]any{"kind": "ticket", "priority": p}})
 		if st.GetForeground() != want {
 			t.Errorf("priority %d colour = %v, want %v", p, st.GetForeground(), want)

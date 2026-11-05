@@ -294,3 +294,48 @@ func TestNewGitHub(t *testing.T) {
 		t.Fatalf("New = %#v, want *GitHub{Project: o/r}", p)
 	}
 }
+
+func TestGitHubCIJobs(t *testing.T) {
+	if !strings.Contains(ghQuery, "contexts(") {
+		t.Error("ghQuery does not request the status check contexts")
+	}
+	for _, tc := range []struct {
+		name     string
+		contexts string
+		want     []string
+	}{
+		{"failing check runs and status contexts", `[
+			{"__typename":"CheckRun","name":"lint","conclusion":"FAILURE"},
+			{"__typename":"CheckRun","name":"slow","conclusion":"TIMED_OUT"},
+			{"__typename":"CheckRun","name":"boot","conclusion":"STARTUP_FAILURE"},
+			{"__typename":"StatusContext","context":"ci/legacy","state":"ERROR"},
+			{"__typename":"StatusContext","context":"ci/other","state":"FAILURE"}]`,
+			[]string{"✗ lint", "✗ slow", "✗ boot", "✗ ci/legacy", "✗ ci/other"}},
+		{"others are ignored", `[
+			{"__typename":"CheckRun","name":"a","conclusion":"SUCCESS"},
+			{"__typename":"CheckRun","name":"b","conclusion":"SKIPPED"},
+			{"__typename":"CheckRun","name":"c","conclusion":"CANCELLED"},
+			{"__typename":"CheckRun","name":"d","conclusion":"NEUTRAL"},
+			{"__typename":"CheckRun","name":"e","conclusion":null},
+			{"__typename":"StatusContext","context":"f","state":"PENDING"},
+			{"__typename":"StatusContext","context":"g","state":"SUCCESS"}]`, nil},
+		{"no contexts", `[]`, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := strings.Replace(ghResponse, `"statusCheckRollup":{"state":"FAILURE"}`,
+				`"statusCheckRollup":{"state":"FAILURE","contexts":{"nodes":`+tc.contexts+`}}`, 1)
+			var args []string
+			items, err := (&GitHub{Project: "o/r", Run: fakeGH(resp, nil, &args)}).Fetch(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, _ := items[0].Fields["ci_jobs"].([]string)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("ci_jobs = %#v, want %#v", got, tc.want)
+			}
+			if _, ok := items[1].Fields["ci_jobs"]; ok {
+				t.Errorf("PR without contexts has ci_jobs = %v", items[1].Fields["ci_jobs"])
+			}
+		})
+	}
+}

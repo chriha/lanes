@@ -162,6 +162,7 @@ type View struct {
 	Filter   string  `toml:"filter"`
 	Sort     string  `toml:"sort"`   // comma-separated fields, "-" prefix = descending; empty = provider order
 	Groups   []Group `toml:"groups"` // named filters; an item goes into the first group it matches, the rest stay ungrouped
+	Divider  bool    `toml:"-"`      // draw a dim separator before this tab
 }
 
 // Group is a named filter inside a view.

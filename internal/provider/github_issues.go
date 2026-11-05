@@ -156,12 +156,19 @@ func ghIssueToItem(is ghIssue, me string) item.Item {
 		Badges: badges,
 		Fields: links.fields(map[string]any{
 			"kind": "ticket", "number": is.Number, "status": "open", "assignees": assignees, "labels": labels,
-			"blocked": len(blockedBy) > 0, "priority": 0, "me": me,
+			"blocked": len(blockedBy) > 0, "priority": ghPriority(labels), "me": me,
 		}),
 	}
 }
 
 // ghPriority maps priority:1..priority:4 labels to a priority, the lowest N wins, 0 if there is none.
 func ghPriority(labels []string) int {
-	return 0
+	best := 0
+	for _, l := range labels {
+		n, ok := strings.CutPrefix(l, "priority:")
+		if p, err := strconv.Atoi(n); ok && err == nil && p >= 1 && p <= 4 && (best == 0 || p < best) {
+			best = p
+		}
+	}
+	return best
 }

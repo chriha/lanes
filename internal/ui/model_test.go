@@ -484,3 +484,47 @@ func TestTicketRowShowsAssignees(t *testing.T) {
 		t.Errorf("row = %q, want the assignees instead of the creator", line)
 	}
 }
+
+func TestTicketRowPriorityStrip(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields map[string]any
+		author string
+		want   string // substring of the stripped row
+		not    string // must be absent
+	}{
+		{"urgent", map[string]any{"kind": "ticket", "priority": 1, "assignees": []string{"bob"}}, "", "fix it  bob ▰▰▰", ""},
+		{"high", map[string]any{"kind": "ticket", "priority": 2, "assignees": []string{"bob"}}, "", "fix it  bob ▰▰▱", ""},
+		{"medium", map[string]any{"kind": "ticket", "priority": 3, "assignees": []string{"bob"}}, "", "fix it  bob ▰▱▱", ""},
+		{"low", map[string]any{"kind": "ticket", "priority": 4, "assignees": []string{"bob"}}, "", "fix it  bob ▱▱▱", ""},
+		{"priority decoded from JSON", map[string]any{"kind": "ticket", "priority": float64(1), "assignees": []string{"bob"}}, "", "bob ▰▰▰", ""},
+		{"none", map[string]any{"kind": "ticket", "priority": 0, "assignees": []string{"bob"}}, "", "fix it  bob", "▰"},
+		{"unassigned shows the strip alone", map[string]any{"kind": "ticket", "priority": 2, "assignees": []string{}}, "alice", "fix it  ▰▰▱", "alice"},
+		{"long names truncate, the strip stays", map[string]any{"kind": "ticket", "priority": 1, "assignees": []string{"bob", "carol", "dave"}}, "", "bob, carol,… ▰▰▰", ""},
+		{"MR is unchanged", map[string]any{"kind": "mr", "priority": 1}, "alice", "fix it  alice", "▰"},
+		{"command item is unchanged", map[string]any{"priority": 1}, "alice", "fix it  alice", "▰"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newNotesModel(t)
+			m.width = 80
+			it := item.Item{ID: "#1", Title: "fix it", Author: tt.author, Fields: tt.fields}
+			line := ansi.Strip(m.row(it, false, 7))
+			if !strings.Contains(line, tt.want) || (tt.not != "" && strings.Contains(line, tt.not)) {
+				t.Errorf("row = %q, want it to contain %q and not %q", line, tt.want, tt.not)
+			}
+			if w := ansi.StringWidth(line); w != 79 { // the same as a row without a strip
+				t.Errorf("row width = %d, want 79", w)
+			}
+		})
+	}
+}
+
+func TestPrioStripColour(t *testing.T) {
+	for p, want := range map[int]lipgloss.TerminalColor{1: cBad, 2: cOrange, 3: cWarn, 4: cDim} {
+		_, st := prioStrip(item.Item{Fields: map[string]any{"kind": "ticket", "priority": p}})
+		if st.GetForeground() != want {
+			t.Errorf("priority %d colour = %v, want %v", p, st.GetForeground(), want)
+		}
+	}
+}

@@ -60,3 +60,49 @@ func TestHeaderAttentionCount(t *testing.T) {
 		}
 	}
 }
+
+func TestHeaderDivider(t *testing.T) {
+	tests := []struct {
+		name  string
+		views []config.View
+		want  string
+	}{
+		{"none", []config.View{{Name: "a"}, {Name: "b"}}, "a 0 b 0"},
+		{"before second", []config.View{{Name: "a"}, {Name: "b", Divider: true}, {Name: "c"}}, "a 0 │ b 0 c 0"},
+		{"not before the first", []config.View{{Name: "a", Divider: true}, {Name: "b"}}, "a 0 b 0"},
+	}
+	for _, tt := range tests {
+		m := &Model{width: 200, fetchedAt: map[string]time.Time{}}
+		for _, v := range tt.views {
+			m.views = append(m.views, &view{cfg: v})
+		}
+		got := strings.Join(strings.Fields(ansi.Strip(m.header())), " ")
+		if !strings.Contains(got, tt.want) {
+			t.Errorf("%s: header %q lacks %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+// dividers are not views: keys and numbering skip them
+func TestDividerDoesNotChangeViewSwitching(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	m := New(&config.Config{
+		Provider: map[string]config.Provider{"p": {Type: "command", Command: "true"}},
+		View: []config.View{
+			{Name: "a", Provider: "p", Filter: "true"},
+			{Name: "b", Provider: "p", Filter: "true", Divider: true},
+			{Name: "c", Provider: "p", Filter: "true"},
+		},
+	})
+	m.width, m.height = 160, 20
+	for _, tt := range []struct {
+		keys []string
+		want int
+	}{{[]string{"l"}, 1}, {[]string{"l", "l"}, 2}, {[]string{"3"}, 2}, {[]string{"2"}, 1}, {[]string{"3", "h"}, 1}} {
+		m.cur = 0
+		nav(m, tt.keys...)
+		if m.cur != tt.want {
+			t.Errorf("keys %v: cur = %d, want %d", tt.keys, m.cur, tt.want)
+		}
+	}
+}

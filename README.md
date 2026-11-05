@@ -392,7 +392,7 @@ narrows the view; it does not change its filter.
 ### Row badges
 
 Each row ends with small status badges: the item's own (from the provider) followed by up to three of its
-sessions. A blue `✎` after the author, or the assignees on tickets (or after the title when there is no author) is not a badge: it marks an
+sessions. A blue `✎` after the name (the author, or the assignees on tickets), or after the title when there is no name, is not a badge: it marks an
 item you left a [note](#preview-pane-and-item-history) on.
 
 | Badge          | Meaning                                                       |

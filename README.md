@@ -207,7 +207,7 @@ Views come from three places: the global config, the project config, and views y
 `:newview` (stored outside your config, see [The command line](#the-command-line)). A view whose filter was
 edited inside the app shows a `*` in the tab bar.
 
-To group tabs, set `divider = true` on a view: a dim `│` is drawn before its tab. A divider is not a view, so
+To group tabs, set `divider = true` on a view: a dim `¦` is drawn before its tab. A divider is not a view, so
 `h`/`l`, `1`–`9` and `:view` skip it and the numbering is unchanged.
 
 ```toml
@@ -449,7 +449,7 @@ footer and left alone until you save a note, which moves it to `notes.json.bak`.
 
 ### Snoozing
 
-`z` puts the selected item (or all marked items) aside: it opens a prompt (`:snooze `) that takes a duration
+`z` puts the selected item (or all marked items) aside: it opens a prompt (`:snooze`) that takes a duration
 (`30m`, `2h`, `3d`), a weekday (`mon`, `friday`: its next occurrence, at midnight) or a date (`2026-11-03`).
 Empty input snoozes **until the item changes**: its title, draft state, badges or provider fields differ on a later
 fetch (your note does not count). Invalid input or a time in the past shows an error and snoozes nothing.
@@ -1252,15 +1252,18 @@ two projects never share history, views or sessions. The `$XDG_*` variables are 
 - Inside tmux, jumping into a session opens a **popup** (`display-popup`) rather than switching your client.
   `TMUX` is unset for the nested attach, so tmux does not complain about nesting.
 - You can always inspect sessions yourself:
+
   ```sh
   tmux -L lanes-<project> ls
   tmux -L lanes-<project> attach -t '=review~_1948'
   ```
+
   (In session names, characters outside `A-Za-z0-9_-` in the item id are replaced with `_`; `!1948` becomes
   `_1948`.)
 - Detach with the private server's prefix, `ctrl-b d`.
 - `lanes status` prints the current project's sessions that need input, as `? <asking> ● <waiting>` (zero parts
   left out, nothing at all when none do). It never prints errors, so it fits a status bar or a shell prompt:
+
   ```tmux
   # ~/.tmux.conf
   set -g status-right '#(cd #{pane_current_path} && lanes status) %H:%M'

@@ -68,7 +68,8 @@ func TestHeaderDivider(t *testing.T) {
 		want  string
 	}{
 		{"none", []config.View{{Name: "a"}, {Name: "b"}}, "a 0 b 0"},
-		{"before second", []config.View{{Name: "a"}, {Name: "b", Divider: true}, {Name: "c"}}, "a 0 │ b 0 c 0"},
+		// {"before second", []config.View{{Name: "a"}, {Name: "b", Divider: true}, {Name: "c"}}, "a 0 · b 0 c 0"},
+		{"before second", []config.View{{Name: "a"}, {Name: "b", Divider: true}, {Name: "c"}}, "a 0 ¦ b 0 c 0"},
 		{"not before the first", []config.View{{Name: "a", Divider: true}, {Name: "b"}}, "a 0 b 0"},
 	}
 	for _, tt := range tests {

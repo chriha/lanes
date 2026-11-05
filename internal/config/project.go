@@ -121,7 +121,7 @@ const projectTail = `
 #   https://github.com/chriha/lanes#filters
 # sort: comma-separated fields, "-" prefix = descending; empty = provider order.
 #   https://github.com/chriha/lanes#sorting
-# divider: true draws a dim │ before this tab to group views; it is not a view (default false).
+# divider: true draws a dim ¦ before this tab to group views; it is not a view (default false).
 # groups: named filters; each item is listed under the first group it matches, items matching none follow
 #   the groups without a header. Empty groups are hidden; sort applies inside each group.
 # ---------------------------------------------------------------------------------------------------------

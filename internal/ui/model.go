@@ -1110,7 +1110,7 @@ func (m *Model) header() string {
 	var tabs []string
 	for i, v := range m.views {
 		if v.cfg.Divider && i > 0 {
-			tabs = append(tabs, sDim.Render("│"))
+			tabs = append(tabs, sDim.Render("¦"))
 		}
 		name := v.cfg.Name
 		if v.edited {

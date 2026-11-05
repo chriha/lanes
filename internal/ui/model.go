@@ -363,11 +363,25 @@ func (v *view) lines() []int {
 
 // listName is the name shown in a row's name column: the assignees for tickets, the author otherwise.
 func listName(it item.Item) string {
-	return it.Author
+	if it.Fields["kind"] != "ticket" {
+		return it.Author
+	}
+	var names []string
+	switch v := it.Fields["assignees"].(type) {
+	case []string:
+		names = v
+	case []any: // decoded from the cache or a command provider's JSON
+		for _, a := range v {
+			if s, ok := a.(string); ok {
+				names = append(names, s)
+			}
+		}
+	}
+	return strings.Join(names, ", ")
 }
 
 func matches(it item.Item, q string) bool {
-	hay := strings.ToLower(it.ID + " " + it.Title + " " + it.Author)
+	hay := strings.ToLower(it.ID + " " + it.Title + " " + it.Author + " " + listName(it))
 	if t, ok := it.Fields["ticket"].(string); ok {
 		hay += " " + strings.ToLower(t)
 	}

@@ -24,7 +24,7 @@ const ghIssuesResponse = `{"data":{"viewer":{"login":"me"},"repository":{"issues
  "subIssues":{"nodes":[{"number":12,"state":"OPEN"},{"number":13,"state":"CLOSED"}]}},
 {"number":8,"title":"Fix a bug","url":"https://github.com/o/r/issues/8","author":{"login":"me"},
  "assignees":{"nodes":[{"login":"me"}]},
- "labels":{"nodes":[{"name":"bug"}]},
+ "labels":{"nodes":[{"name":"bug"},{"name":"priority:3"},{"name":"priority:2"}]},
  "blockedBy":{"nodes":[{"number":5,"state":"CLOSED"}]},"blocking":{"nodes":[]},
  "parent":{"number":2,"state":"CLOSED"},"subIssues":{"nodes":[]}},
 {"number":9,"title":"Idea","url":"https://github.com/o/r/issues/9","author":null,
@@ -53,8 +53,8 @@ func TestGitHubIssuesFetch(t *testing.T) {
 				"priority": 0, "me": "me"}},
 		{ID: "#8", Title: "Fix a bug", URL: "https://github.com/o/r/issues/8", Author: "me",
 			Fields: map[string]any{"kind": "ticket", "number": 8, "status": "open", "assignees": []string{"me"},
-				"labels": []string{"bug"}, "blocked": false, "blocked_by": []string{}, "blocking": []string{}, "related": []string{},
-				"closed_links": []string{"blocked_by:#5", "related:#2"}, "priority": 0, "me": "me"}},
+				"labels": []string{"bug", "priority:3", "priority:2"}, "blocked": false, "blocked_by": []string{}, "blocking": []string{}, "related": []string{},
+				"closed_links": []string{"blocked_by:#5", "related:#2"}, "priority": 2, "me": "me"}},
 		{ID: "#9", Title: "Idea", URL: "https://github.com/o/r/issues/9",
 			Fields: map[string]any{"kind": "ticket", "number": 9, "status": "open", "assignees": []string{},
 				"labels": []string{}, "blocked": false, "blocked_by": []string{}, "blocking": []string{}, "related": []string{},
@@ -170,6 +170,29 @@ func TestGitHubIssuesFetchWithoutRelations(t *testing.T) {
 			f := items[0].Fields
 			if f["blocked"] != false || len(f["blocked_by"].([]string)) != 0 || len(f["blocking"].([]string)) != 0 || len(f["related"].([]string)) != 0 {
 				t.Errorf("relation fields not empty: %#v", f)
+			}
+		})
+	}
+}
+
+func TestGHPriority(t *testing.T) {
+	tests := []struct {
+		name   string
+		labels []string
+		want   int
+	}{
+		{"none", nil, 0},
+		{"unrelated labels", []string{"bug", "priority"}, 0},
+		{"each level", []string{"priority:3"}, 3},
+		{"lowest N wins", []string{"priority:4", "priority:2", "priority:3"}, 2},
+		{"out of range ignored", []string{"priority:0", "priority:5", "priority:x"}, 0},
+		{"out of range beside a valid one", []string{"priority:9", "priority:4"}, 4},
+		{"prefix must match", []string{"xpriority:1", "priority:1x"}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ghPriority(tt.labels); got != tt.want {
+				t.Errorf("ghPriority(%v) = %d, want %d", tt.labels, got, tt.want)
 			}
 		})
 	}

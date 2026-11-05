@@ -356,6 +356,9 @@ interrupt; an older `[keymap]` binding of `X` is now shadowed.
 
 ### Searching
 
+Ticket rows end with a priority strip after the assignees: `▰▰▰` urgent (red), `▰▰▱` high (orange), `▰▱▱` medium
+(yellow), `▱▱▱` low (dim); none for priority `0`.
+
 `/` opens an incremental search over the current view: it matches id, title, author, ticket and (for tickets) assignees, case
 insensitively, as you type. `enter` keeps the search active (shown in the footer), `esc` clears it. The search
 narrows the view; it does not change its filter.
@@ -859,7 +862,7 @@ type = "github-issues"
 
 Lists the repository's **open issues** via `gh api graphql` (pull requests are not included), the 100 most
 recently updated, each with its first 20 blockers, blocked issues and sub-issues. The ID is `#<number>`; `author` and `url` are set as usual
-(the list shows the assignees instead of the author), and a `blocked` badge marks issues with an open blocker.
+(the list shows the assignees instead of the author, then a priority strip), and a `blocked` badge marks issues with an open blocker.
 
 Ticket fields:
 
@@ -875,7 +878,7 @@ Ticket fields:
 | `blocking`   | []string | the open issues it blocks                                            |
 | `related`    | []string | its open parent and sub-issues (GitHub has no "related" relation)    |
 | `closed_links` | []string | closed blockers, blocked and related issues as `<relation>:<id>`, e.g. `["blocked_by:#9"]` |
-| `priority`   | number   | always `0` on GitHub                                                 |
+| `priority`   | number   | from `priority:1`..`priority:4` labels (lowest wins), `0` if none    |
 | `me`         | string   | your login                                                           |
 
 A view of your unblocked issues that are not being planned, with a key that hands the selected one to Claude:
@@ -906,7 +909,7 @@ team = "ENG"                    # required: the team key (the prefix of its issu
 Lists the team's **open issues** (state not completed or canceled) via the Linear GraphQL API, fetched
 100 per request until all pages are read. The API key is read from the environment on every fetch and never written anywhere;
 `lanes doctor` reports whether the variable is set. The ID is the identifier (`ENG-12`), `author` is the
-creator (the list shows the assignee instead), and badges show `blocked` and the workflow state.
+creator (the list shows the assignee instead, then a priority strip), and badges show `blocked` and the workflow state.
 
 Items carry the same [ticket fields](#github-issues) as `github-issues`, so views and actions work with either
 tracker. The differences:

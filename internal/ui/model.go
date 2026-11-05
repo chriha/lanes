@@ -380,6 +380,32 @@ func listName(it item.Item) string {
 	return strings.Join(names, ", ")
 }
 
+// prioStrip is the ▰▱ strip of a ticket's priority (1 urgent .. 4 low) and its style; empty for 0 or other kinds.
+func prioStrip(it item.Item) (string, lipgloss.Style) {
+	if it.Fields["kind"] != "ticket" {
+		return "", sDim
+	}
+	p := 0
+	switch v := it.Fields["priority"].(type) {
+	case int:
+		p = v
+	case float64: // decoded from the cache or a command provider's JSON
+		p = int(v)
+	}
+	fg := lipgloss.NewStyle().Foreground
+	switch p {
+	case 1:
+		return "▰▰▰", fg(cBad)
+	case 2:
+		return "▰▰▱", fg(cOrange)
+	case 3:
+		return "▰▱▱", fg(cWarn)
+	case 4:
+		return "▱▱▱", sDim
+	}
+	return "", sDim
+}
+
 func matches(it item.Item, q string) bool {
 	hay := strings.ToLower(it.ID + " " + it.Title + " " + it.Author + " " + listName(it))
 	if t, ok := it.Fields["ticket"].(string); ok {
@@ -1256,10 +1282,23 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	id := st(sID).Render(fmt.Sprintf("%-*s", idW, ansi.Truncate(it.ID, idW, "…")))
 	fixed := 1 + 1 + idW + 1 + 1 + rightW + 1
 	cellW := m.width - fixed // title, author and padding share this cell
-	authText := ansi.Truncate(listName(it), authW, "…")
+	strip, stripSt := prioStrip(it)
+	nameW := authW
+	if strip != "" {
+		nameW -= 4 // the strip and a space stay inside the budget; only the names truncate
+	}
+	authText := ansi.Truncate(listName(it), nameW, "…")
 	authCellW := 0
 	if authText != "" {
 		authCellW = 2 + ansi.StringWidth(authText) // two spaces, then the author
+	}
+	if strip != "" {
+		if authText == "" {
+			authCellW = 2
+		} else {
+			authCellW++ // a space between the names and the strip
+		}
+		authCellW += 3
 	}
 	noteW := 0
 	if m.notes.Get(it.ID) != "" {
@@ -1283,6 +1322,16 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	title := st(ts).Render(titleText)
 	if authText != "" {
 		title += plain.Render("  ") + st(sDim).Render(authText)
+	}
+	if strip != "" {
+		if authText == "" {
+			title += plain.Render("  ")
+		} else {
+			title += plain.Render(" ")
+		}
+		title += st(stripSt).Render(strip)
+	}
+	if authCellW > 0 {
 		used += authCellW
 	}
 	if noteW > 0 {

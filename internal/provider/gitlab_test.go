@@ -240,3 +240,41 @@ func TestGitLabFetchLoadsDiscussionsOnlyForChangedMRs(t *testing.T) {
 		}
 	})
 }
+
+func TestGitLabCIJobs(t *testing.T) {
+	if !strings.Contains(gqlQuery, "allowFailure") {
+		t.Error("gqlQuery does not request the head pipeline jobs")
+	}
+	for _, tc := range []struct {
+		name string
+		raw  string
+		want any
+	}{
+		{"failed and allow_failure", `{"headPipeline":{"status":"FAILED","jobs":{"nodes":[
+			{"name":"lint","status":"FAILED","allowFailure":false},
+			{"name":"e2e","status":"FAILED","allowFailure":true}]}}}`, []string{"✗ lint", "⚠ e2e"}},
+		{"success, running and skipped are ignored", `{"headPipeline":{"status":"RUNNING","jobs":{"nodes":[
+			{"name":"a","status":"SUCCESS","allowFailure":false},
+			{"name":"b","status":"RUNNING","allowFailure":false},
+			{"name":"c","status":"SKIPPED","allowFailure":true}]}}}`, nil},
+		{"no jobs", `{"headPipeline":{"status":"SUCCESS","jobs":{"nodes":[]}}}`, nil},
+		{"no pipeline", `{"headPipeline":null}`, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mr gqlMR
+			if err := json.Unmarshal([]byte(tc.raw), &mr); err != nil {
+				t.Fatal(err)
+			}
+			got, ok := toItem(mr, "me", nil).Fields["ci_jobs"]
+			if tc.want == nil {
+				if ok && len(got.([]string)) > 0 {
+					t.Errorf("ci_jobs = %v, want none", got)
+				}
+				return
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("ci_jobs = %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}

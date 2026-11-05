@@ -41,7 +41,7 @@ const ghQuery = `query($owner:String!,$name:String!){
     reviewRequests(first:20){nodes{requestedReviewer{... on User{login}}}}
     labels(first:50){nodes{name}}
     latestReviews(first:50){nodes{state author{login}}}
-    commits(last:1){nodes{commit{statusCheckRollup{state}}}}
+    commits(last:1){nodes{commit{statusCheckRollup{state contexts(first:100){nodes{__typename ... on CheckRun{name conclusion} ... on StatusContext{context state}}}}}}}
     reviewThreads(first:100){nodes{id isResolved}}
     closingIssuesReferences(first:10){nodes{number repository{nameWithOwner}}}
   }}}
@@ -68,7 +68,18 @@ type ghPR struct {
 		Author ghUser
 	}]
 	Commits nodes[struct {
-		Commit struct{ StatusCheckRollup *struct{ State string } }
+		Commit struct {
+			StatusCheckRollup *struct {
+				State    string
+				Contexts nodes[struct {
+					Typename   string `json:"__typename"`
+					Name       string // CheckRun
+					Conclusion string
+					Context    string // StatusContext
+					State      string
+				}]
+			}
+		}
 	}]
 	ReviewThreads nodes[struct {
 		ID         string
@@ -262,7 +273,19 @@ func ghToItem(pr ghPR, me string, authors map[string]string) item.Item {
 	}
 	if c := pr.Commits.Nodes; len(c) > 0 && c[0].Commit.StatusCheckRollup != nil {
 		ci := map[string]string{"SUCCESS": "success", "FAILURE": "failed", "ERROR": "failed", "PENDING": "running", "EXPECTED": "running"}
-		mr.HeadPipeline = &struct{ Status string }{ci[c[0].Commit.StatusCheckRollup.State]}
+		mr.HeadPipeline = &gqlPipeline{Status: ci[c[0].Commit.StatusCheckRollup.State]}
+		for _, x := range c[0].Commit.StatusCheckRollup.Contexts.Nodes {
+			name, failed := x.Name, false
+			switch x.Typename {
+			case "CheckRun":
+				failed = x.Conclusion == "FAILURE" || x.Conclusion == "TIMED_OUT" || x.Conclusion == "STARTUP_FAILURE"
+			case "StatusContext":
+				name, failed = x.Context, x.State == "FAILURE" || x.State == "ERROR"
+			}
+			if failed {
+				mr.HeadPipeline.Jobs.Nodes = append(mr.HeadPipeline.Jobs.Nodes, gqlJob{Name: name, Status: "FAILED"})
+			}
+		}
 	}
 	// ponytail: first 100 threads only, paginate if a PR ever exceeds that
 	var ti threadInfo

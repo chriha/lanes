@@ -40,7 +40,7 @@ const gqlQuery = `query($p:ID!){
     reviewers{nodes{username}}
     labels{nodes{title}}
     approvedBy{nodes{username}}
-    headPipeline{status}
+    headPipeline{status jobs(statuses:[FAILED],first:50){nodes{name status allowFailure}}}
     resolvableDiscussionsCount resolvedDiscussionsCount
   }}}
 }`
@@ -73,9 +73,20 @@ type gqlMR struct {
 	Reviewers                  nodes[user]
 	Labels                     nodes[struct{ Title string }]
 	ApprovedBy                 nodes[user]
-	HeadPipeline               *struct{ Status string }
+	HeadPipeline               *gqlPipeline
 	ResolvableDiscussionsCount int
 	ResolvedDiscussionsCount   int
+}
+
+type gqlPipeline struct {
+	Status string
+	Jobs   nodes[gqlJob]
+}
+
+type gqlJob struct {
+	Name         string
+	Status       string
+	AllowFailure bool
 }
 
 type gqlThreadMR struct {
@@ -294,8 +305,18 @@ func toItem(mr gqlMR, me string, ti *threadInfo) item.Item {
 		openThreads, openByMe = ti.open, ti.byMe
 	}
 	ci := ""
+	var ciJobs []string // failed jobs "✗ name", failed jobs allowed to fail "⚠ name"
 	if mr.HeadPipeline != nil {
 		ci = strings.ToLower(mr.HeadPipeline.Status)
+		for _, j := range mr.HeadPipeline.Jobs.Nodes {
+			switch {
+			case j.Status != "FAILED":
+			case j.AllowFailure:
+				ciJobs = append(ciJobs, "⚠ "+j.Name)
+			default:
+				ciJobs = append(ciJobs, "✗ "+j.Name)
+			}
+		}
 	}
 	title := strings.TrimPrefix(strings.TrimPrefix(mr.Title, "Draft: "), "draft: ")
 	ticket := strings.ToUpper(ticketRe.FindString(mr.Title))
@@ -328,7 +349,7 @@ func toItem(mr gqlMR, me string, ti *threadInfo) item.Item {
 		badges = append(badges, item.Badge{Text: "✔ approved", Kind: "ok"})
 	}
 
-	return item.Item{
+	it := item.Item{
 		ID:     "!" + mr.IID,
 		Title:  title,
 		URL:    mr.WebURL,
@@ -355,4 +376,8 @@ func toItem(mr gqlMR, me string, ti *threadInfo) item.Item {
 			"iid":               mr.IID,
 		},
 	}
+	if len(ciJobs) > 0 {
+		it.Fields["ci_jobs"] = ciJobs
+	}
+	return it
 }

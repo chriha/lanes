@@ -361,6 +361,11 @@ func (v *view) lines() []int {
 	return out
 }
 
+// listName is the name shown in a row's name column: the assignees for tickets, the author otherwise.
+func listName(it item.Item) string {
+	return it.Author
+}
+
 func matches(it item.Item, q string) bool {
 	hay := strings.ToLower(it.ID + " " + it.Title + " " + it.Author)
 	if t, ok := it.Fields["ticket"].(string); ok {
@@ -1237,7 +1242,7 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	id := st(sID).Render(fmt.Sprintf("%-*s", idW, ansi.Truncate(it.ID, idW, "…")))
 	fixed := 1 + 1 + idW + 1 + 1 + rightW + 1
 	cellW := m.width - fixed // title, author and padding share this cell
-	authText := ansi.Truncate(it.Author, authW, "…")
+	authText := ansi.Truncate(listName(it), authW, "…")
 	authCellW := 0
 	if authText != "" {
 		authCellW = 2 + ansi.StringWidth(authText) // two spaces, then the author

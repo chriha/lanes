@@ -288,8 +288,9 @@ line, and drops the `*`. A filter written across several lines can't be saved th
 A view lists items in provider order unless it sets `sort`: a comma-separated list of field names (the same
 fields as in filters), each optionally prefixed with `-` for descending. Later keys break ties of earlier ones;
 the sort is stable, so items that compare equal keep provider order. Numbers, bools (`false` first) and times
-compare by value, everything else as text. Items missing a field sort last for that key, in either direction. So does a `priority` of 0 (none): `sort = "priority,title"` lists
-urgent, high, medium, low, then unprioritised items by title.
+compare by value, everything else as text. Items missing a field sort last for that key, in either direction.
+A `priority` of 0 (none) counts as missing too, so `sort = "priority,title"` lists urgent, high, medium, low,
+then unprioritised items by title.
 
 ```toml
 [[view]]

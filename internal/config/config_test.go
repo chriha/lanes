@@ -1075,3 +1075,51 @@ BUG = "#F87171"
 		t.Fatalf("err = %v, want a case-duplicate error naming the global key", err)
 	}
 }
+
+func TestViewDivider(t *testing.T) {
+	tmp := t.TempDir()
+	proj := filepath.Join(tmp, "proj")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+	t.Setenv("HOME", tmp)
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(proj); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[[view]]
+name = "b"
+provider = "gl"
+divider = true
+[[view]]
+name = "c"
+provider = "gl"
+`)
+	write(t, filepath.Join(proj, ProjectFile), `
+[[view]]
+name = "c"
+provider = "gl"
+divider = true
+[[view]]
+name = "b"
+provider = "gl"
+`)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"a": false, "b": false, "c": true} // the project's b replaces the global one, flag included
+	for _, v := range c.View {
+		if v.Divider != want[v.Name] {
+			t.Errorf("view %s: Divider = %v, want %v", v.Name, v.Divider, want[v.Name])
+		}
+	}
+}

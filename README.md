@@ -207,6 +207,16 @@ Views come from three places: the global config, the project config, and views y
 `:newview` (stored outside your config, see [The command line](#the-command-line)). A view whose filter was
 edited inside the app shows a `*` in the tab bar.
 
+To group tabs, set `divider = true` on a view: a dim `│` is drawn before its tab. A divider is not a view, so
+`h`/`l`, `1`–`9` and `:view` skip it and the numbering is unchanged.
+
+```toml
+[[view]]
+name = "mine"
+provider = "gitlab"
+divider = true
+```
+
 ### Filters
 
 A view's `filter` is a boolean expression evaluated for every item, using

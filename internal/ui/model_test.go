@@ -446,3 +446,41 @@ func TestCachedItemsAreSanitized(t *testing.T) {
 		t.Errorf("cached items reached the model unsanitized: %#v", got)
 	}
 }
+
+func TestListNameAndSearch(t *testing.T) {
+	tests := []struct {
+		name       string
+		fields     map[string]any
+		author     string
+		wantName   string
+		searchTerm string
+		wantMatch  bool
+	}{
+		{"ticket shows assignees", map[string]any{"kind": "ticket", "assignees": []string{"bob", "carol"}}, "alice", "bob, carol", "carol", true},
+		{"ticket assignees decoded from JSON", map[string]any{"kind": "ticket", "assignees": []any{"bob", "carol"}}, "alice", "bob, carol", "bob", true},
+		{"unassigned ticket has no name", map[string]any{"kind": "ticket", "assignees": []string{}}, "alice", "", "alice", true},
+		{"MR keeps the author", map[string]any{"kind": "mr", "assignees": []string{"bob"}}, "alice", "alice", "bob", false},
+		{"command item keeps the author", map[string]any{}, "alice", "alice", "alice", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			it := item.Item{ID: "#1", Title: "t", Author: tt.author, Fields: tt.fields}
+			if got := listName(it); got != tt.wantName {
+				t.Errorf("listName = %q, want %q", got, tt.wantName)
+			}
+			if got := matches(it, tt.searchTerm); got != tt.wantMatch {
+				t.Errorf("matches(%q) = %v, want %v", tt.searchTerm, got, tt.wantMatch)
+			}
+		})
+	}
+}
+
+func TestTicketRowShowsAssignees(t *testing.T) {
+	m := newNotesModel(t)
+	m.width = 80
+	it := item.Item{ID: "#1", Title: "fix it", Author: "alice", Fields: map[string]any{"kind": "ticket", "assignees": []string{"bob", "carol"}}}
+	line := ansi.Strip(m.row(it, false, 7))
+	if !strings.Contains(line, "fix it  bob, carol") || strings.Contains(line, "alice") {
+		t.Errorf("row = %q, want the assignees instead of the creator", line)
+	}
+}

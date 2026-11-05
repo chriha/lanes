@@ -361,8 +361,27 @@ func (v *view) lines() []int {
 	return out
 }
 
+// listName is the name shown in a row's name column: the assignees for tickets, the author otherwise.
+func listName(it item.Item) string {
+	if it.Fields["kind"] != "ticket" {
+		return it.Author
+	}
+	var names []string
+	switch v := it.Fields["assignees"].(type) {
+	case []string:
+		names = v
+	case []any: // decoded from the cache or a command provider's JSON
+		for _, a := range v {
+			if s, ok := a.(string); ok {
+				names = append(names, s)
+			}
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
 func matches(it item.Item, q string) bool {
-	hay := strings.ToLower(it.ID + " " + it.Title + " " + it.Author)
+	hay := strings.ToLower(it.ID + " " + it.Title + " " + it.Author + " " + listName(it))
 	if t, ok := it.Fields["ticket"].(string); ok {
 		hay += " " + strings.ToLower(t)
 	}
@@ -1237,7 +1256,7 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	id := st(sID).Render(fmt.Sprintf("%-*s", idW, ansi.Truncate(it.ID, idW, "…")))
 	fixed := 1 + 1 + idW + 1 + 1 + rightW + 1
 	cellW := m.width - fixed // title, author and padding share this cell
-	authText := ansi.Truncate(it.Author, authW, "…")
+	authText := ansi.Truncate(listName(it), authW, "…")
 	authCellW := 0
 	if authText != "" {
 		authCellW = 2 + ansi.StringWidth(authText) // two spaces, then the author

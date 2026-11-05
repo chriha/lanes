@@ -356,7 +356,7 @@ interrupt; an older `[keymap]` binding of `X` is now shadowed.
 
 ### Searching
 
-`/` opens an incremental search over the current view: it matches id, title, author and ticket, case
+`/` opens an incremental search over the current view: it matches id, title, author, ticket and (for tickets) assignees, case
 insensitively, as you type. `enter` keeps the search active (shown in the footer), `esc` clears it. The search
 narrows the view; it does not change its filter.
 
@@ -392,7 +392,7 @@ narrows the view; it does not change its filter.
 ### Row badges
 
 Each row ends with small status badges: the item's own (from the provider) followed by up to three of its
-sessions. A blue `✎` after the author (or after the title when there is no author) is not a badge: it marks an
+sessions. A blue `✎` after the name (the author, or the assignees on tickets), or after the title when there is no name, is not a badge: it marks an
 item you left a [note](#preview-pane-and-item-history) on.
 
 | Badge          | Meaning                                                       |
@@ -858,8 +858,8 @@ type = "github-issues"
 ```
 
 Lists the repository's **open issues** via `gh api graphql` (pull requests are not included), the 100 most
-recently updated, each with its first 20 blockers, blocked issues and sub-issues. The ID is `#<number>`; `author` and `url` are set as usual,
-and a `blocked` badge marks issues with an open blocker.
+recently updated, each with its first 20 blockers, blocked issues and sub-issues. The ID is `#<number>`; `author` and `url` are set as usual
+(the list shows the assignees instead of the author), and a `blocked` badge marks issues with an open blocker.
 
 Ticket fields:
 
@@ -906,7 +906,7 @@ team = "ENG"                    # required: the team key (the prefix of its issu
 Lists the team's **open issues** (state not completed or canceled) via the Linear GraphQL API, fetched
 100 per request until all pages are read. The API key is read from the environment on every fetch and never written anywhere;
 `lanes doctor` reports whether the variable is set. The ID is the identifier (`ENG-12`), `author` is the
-creator, and badges show `blocked` and the workflow state.
+creator (the list shows the assignee instead), and badges show `blocked` and the workflow state.
 
 Items carry the same [ticket fields](#github-issues) as `github-issues`, so views and actions work with either
 tracker. The differences:

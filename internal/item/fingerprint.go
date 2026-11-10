@@ -8,7 +8,7 @@ import (
 )
 
 // injected lists fields the UI adds to Fields itself; they are not item data and never change the fingerprint.
-var injected = []string{"note", "snoozed"}
+var injected = []string{"note", "snoozed", "unread"}
 
 // Fingerprint hashes the item's stable data (title, draft, badges and provider fields, without injected and
 // pending fields), so a later fetch can tell whether the item changed.

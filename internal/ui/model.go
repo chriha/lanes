@@ -20,6 +20,7 @@ import (
 	"github.com/chriha/lanes/internal/item"
 	"github.com/chriha/lanes/internal/notes"
 	"github.com/chriha/lanes/internal/provider"
+	"github.com/chriha/lanes/internal/seen"
 	"github.com/chriha/lanes/internal/session"
 	"github.com/chriha/lanes/internal/snooze"
 	"github.com/chriha/lanes/internal/update"
@@ -138,6 +139,16 @@ type Model struct {
 	ov          *config.Overrides
 	notes       notes.Store
 	snoozes     snooze.Store
+	seen        seen.Store
+	// seenBase holds, on the first run with seen.json, the providers whose first full result is still to be
+	// recorded as seen; their items count as read until then
+	seenBase map[string]bool
+	// unread holds the IDs of the listed items that changed since the user last saw them (set by rebuild)
+	unread map[string]bool
+	// dwellID is the unread cursor item a dwell tick is armed for, "" for none
+	dwellID string
+	// dwellGen counts the dwell ticks armed, to drop the ticks of a cursor that moved on
+	dwellGen int
 	// showSnoozed lists snoozed items too (:snoozed)
 	showSnoozed bool
 	preview_    bool
@@ -183,6 +194,16 @@ func New(cfg *config.Config, opts ...Option) *Model {
 	}
 	if m.snoozes, err = snooze.Load(); err != nil {
 		m.say(lvErr, strings.TrimSpace(m.notice+" snoozes: "+err.Error()))
+	}
+	var first bool
+	if m.seen, first, err = seen.Load(); err != nil {
+		m.say(lvErr, strings.TrimSpace(m.notice+" seen: "+err.Error()))
+	}
+	if first {
+		m.seenBase = map[string]bool{}
+		for name := range cfg.Provider {
+			m.seenBase[name] = true
+		}
 	}
 	m.settings, _ = session.SettingsFile()
 	m.sessByItem = map[string][]session.Info{}
@@ -286,6 +307,7 @@ func (m *Model) applyBuilt(cfg *config.Config, provs map[string]provider.Provide
 func (m *Model) rebuild() {
 	selected := m.selectedID()
 	q := strings.ToLower(m.query)
+	m.unread = map[string]bool{}
 	for i, v := range m.views {
 		v.items, v.heads, v.snoozed = v.items[:0], nil, 0
 		if v.err != nil {
@@ -293,6 +315,8 @@ func (m *Model) rebuild() {
 		}
 		for _, it := range m.data[v.cfg.Provider] {
 			it = m.withSnooze(m.withNote(it))
+			unread := m.isUnread(v.cfg.Provider, it)
+			it = withUnread(it, unread)
 			ok, err := v.filter.Match(it.Env())
 			if err != nil {
 				v.err = err
@@ -311,6 +335,9 @@ func (m *Model) rebuild() {
 				continue
 			}
 			v.items = append(v.items, it)
+			if unread {
+				m.unread[it.ID] = true
+			}
 		}
 		item.Sort(v.items, v.sort)
 		if v.err == nil && len(v.groups) > 0 {
@@ -514,6 +541,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if spin := m.armSpin(); spin != nil {
 		cmd = tea.Batch(cmd, spin)
 	}
+	if d := m.armDwell(); d != nil {
+		cmd = tea.Batch(cmd, d)
+	}
 	return model, cmd
 }
 
@@ -556,6 +586,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.partial {
 			m.fetchedAt[msg.name] = time.Now()
 			m.wake(time.Now(), items) // a partial result lacks pending fields: only a full one can tell a change
+			if m.seenBase[msg.name] {
+				m.markRead(items...)
+				delete(m.seenBase, msg.name)
+			}
 		}
 		// landed items are never mutated afterwards (the next landing builds a new slice), so the command may read them
 		save := func() tea.Msg { cache.Save(msg.name, items); return nil }
@@ -569,6 +603,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.FocusMsg:
 		m.blurred = false
 		return m, m.fetchStale(m.cfg.Poll())
+	case dwellMsg:
+		m.dwelled(msg)
+		return m, nil
 	case spinTickMsg:
 		m.spinning = false // this loop ends; Update re-arms it while a provider fetches
 		return m, nil
@@ -1325,6 +1362,9 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 		titleW = 10
 	}
 	ts := sText
+	if m.unread[it.ID] {
+		ts = ts.Bold(true)
+	}
 	if it.Draft || len(b.refetch) > 0 || snoozed {
 		ts = sDim // drafts, snoozed items (:snoozed), and items whose refresh run's result is not fetched yet
 	}

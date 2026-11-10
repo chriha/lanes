@@ -31,5 +31,8 @@ func (i Item) Env() map[string]any {
 	if _, ok := env["snoozed"]; !ok {
 		env["snoozed"] = false // injected by the UI like note
 	}
+	if _, ok := env["unread"]; !ok {
+		env["unread"] = false // injected by the UI like note
+	}
 	return env
 }

@@ -16,19 +16,33 @@ func (m *Model) showDetail() {
 	}
 }
 
-// detailLines lists the detail item's title, URL, author, note and every field untruncated, the ci_jobs one job
-// per line, wrapped at the screen width.
+// detailLines stacks the detail screen's sections: a header with the item's id, title, URL, author and its
+// pipeline/draft state, then Fields with the note and every remaining field untruncated (the ci_jobs one job per
+// line), keys in one column as wide as the longest key and wrapped values indented to the value column.
 func (m *Model) detailLines() []string {
 	it := m.detail
-	row := func(k, v string) string { return " " + sDim.Render(fmt.Sprintf("%-12s", k)) + sText.Render(v) }
-	lines := []string{" " + sID.Render(it.ID) + "  " + sTitle.Render(it.Title), " " + sDim.Render(it.URL), "", row("author", it.Author)}
+	w := max(m.width, 1)
+	var out []string
+	add := func(l string) { out = append(out, strings.Split(ansi.Wrap(l, w, ""), "\n")...) }
+	add(" " + sID.Render(it.ID) + "  " + sTitle.Render(it.Title))
+	add(" " + sDim.Render(it.URL))
+	state := sDim.Render("by ") + sText.Render(it.Author)
+	if ci, ok := it.Fields["ci"]; ok {
+		state += sDim.Render(" · ci ") + sText.Render(fmtVal(ci))
+	}
+	if it.Draft {
+		state += sDim.Render(" · ") + sWarn.Render("draft")
+	}
+	add(" " + state)
+
+	type row struct {
+		key  string
+		vals []string
+	}
+	var rows []row
 	note := m.notes.Get(it.ID)
 	if note != "" {
-		label := "note"
-		for _, l := range strings.Split(note, "\n") {
-			lines = append(lines, row(label, l))
-			label = ""
-		}
+		rows = append(rows, row{"note", strings.Split(note, "\n")})
 	}
 	// the preview's order first, then the remaining fields by name
 	keys, seen := []string{}, map[string]bool{}
@@ -46,11 +60,11 @@ func (m *Model) detailLines() []string {
 	sort.Strings(rest)
 	for _, k := range append(keys, rest...) {
 		v := it.Fields[k]
-		if k == "note" && v == any(note) {
+		if k == "ci" || k == "note" && v == any(note) {
 			continue // shown above
 		}
 		if k != "ci_jobs" {
-			lines = append(lines, row(k, fmtVal(v)))
+			rows = append(rows, row{k, []string{fmtVal(v)}})
 			continue
 		}
 		var jobs []string
@@ -64,15 +78,26 @@ func (m *Model) detailLines() []string {
 		default:
 			jobs = []string{fmtVal(v)}
 		}
-		label := k
-		for _, j := range jobs {
-			lines = append(lines, row(label, j))
-			label = ""
+		if len(jobs) > 0 {
+			rows = append(rows, row{k, jobs})
 		}
 	}
-	var out []string
-	for _, l := range lines {
-		out = append(out, strings.Split(ansi.Wrap(l, max(m.width, 1), ""), "\n")...)
+	if len(rows) == 0 {
+		return out
+	}
+	kw := 0
+	for _, r := range rows {
+		kw = max(kw, ansi.StringWidth(r.key))
+	}
+	out = append(out, "", " "+sTitle.Render("Fields"))
+	for _, r := range rows {
+		label := r.key
+		for _, v := range r.vals {
+			for _, l := range strings.Split(ansi.Wrap(v, max(w-kw-3, 1), ""), "\n") {
+				out = append(out, " "+sDim.Render(label+strings.Repeat(" ", kw-ansi.StringWidth(label)))+"  "+sText.Render(l))
+				label = ""
+			}
+		}
 	}
 	return out
 }

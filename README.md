@@ -436,8 +436,10 @@ Tickets also get `blocked_by`, `blocking` and `related` lines after labels and a
 followed by the closed ones dimmed with a `✓` (e.g. `blocked_by  #7, #9 ✓`); empty relations are skipped. Set `preview = true` under `[settings]` to start with
 it open.
 
-`d` opens the item's **details** on a full screen: the title, URL, author, your note and every field untruncated,
-with the CI jobs (`ci_jobs`) one per line, so a failed job stays readable when the preview has to cut it short.
+`d` opens the item's **details** on a full screen, in stacked sections: a header with the id, title, URL, author
+and the pipeline (`ci`) and draft state, then **Fields** with your note and every remaining field untruncated, the
+CI jobs (`ci_jobs`) one per line, so a failed job stays readable when the preview has to cut it short. The values
+line up in one column after the longest key, and a long value wraps under its value column.
 Scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; `q` or `esc` returns to the list.
 
 `i` shows the item's **history**: every action started on it, and how it ended (`finished`, `failed (exit n)`,

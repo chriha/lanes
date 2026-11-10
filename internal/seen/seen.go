@@ -33,6 +33,9 @@ func Load() (s Store, first bool, err error) {
 	if err != nil {
 		return Store{}, false, fmt.Errorf("%s: %w", path(), err)
 	}
+	if s == nil { // the file held `null`
+		s = Store{}
+	}
 	return s, false, nil
 }
 

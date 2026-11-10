@@ -166,6 +166,23 @@ func TestCorruptFileIsReportedAndKept(t *testing.T) {
 	}
 }
 
+func TestNullFileLoadsUsableStore(t *testing.T) {
+	setup(t)
+	if err := os.MkdirAll(filepath.Dir(path()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path(), []byte("null"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, _ := load(t)
+	if err := s.MarkRead(map[string]string{"a": "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := load(t); got["a"] != "x" {
+		t.Fatal("seen state not saved")
+	}
+}
+
 func TestUnreadableFileIsNotBackedUp(t *testing.T) {
 	setup(t)
 	s, _ := load(t)

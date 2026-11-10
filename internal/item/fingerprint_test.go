@@ -18,6 +18,7 @@ func TestFingerprint(t *testing.T) {
 		{"identical data", func(*Item) {}, true},
 		{"note is injected, not data", func(i *Item) { i.Fields["note"] = "later" }, true},
 		{"snoozed is injected, not data", func(i *Item) { i.Fields["snoozed"] = true }, true},
+		{"unread is injected, not data", func(i *Item) { i.Fields["unread"] = true }, true},
 		{"url and author are not part of it", func(i *Item) { i.URL, i.Author = "v", "b" }, true},
 		{"title", func(i *Item) { i.Title = "fix it now" }, false},
 		{"draft", func(i *Item) { i.Draft = true }, false},

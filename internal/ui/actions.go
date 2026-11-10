@@ -66,11 +66,13 @@ func (m *Model) pollSessions() tea.Cmd {
 	}
 }
 
-func (m *Model) onSessions(msg sessionsMsg) {
+// onSessions takes in a poll; it returns the starts of the follow-ups of the sessions seen dying.
+func (m *Model) onSessions(msg sessionsMsg) tea.Cmd {
 	m.polling = false
 	if msg.err != nil {
-		return
+		return nil
 	}
+	var ended []session.Info // chained once sessByItem is complete, so the follow-up sees every live session
 	prev := map[string]session.Info{}
 	for _, s := range m.sessions {
 		prev[s.Name] = s
@@ -88,6 +90,9 @@ func (m *Model) onSessions(msg sessionsMsg) {
 				ev = "failed"
 			}
 			recordEnd(s, ev, s.Exit)
+			if !m.interrupted[s.Name] { // killed sessions vanish instead of dying, so they never get here
+				ended = append(ended, s)
+			}
 		}
 		m.sessByItem[s.ItemKey] = append(m.sessByItem[s.ItemKey], s)
 	}
@@ -99,6 +104,48 @@ func (m *Model) onSessions(msg sessionsMsg) {
 	sel := m.selectedSession()
 	m.sessions = msg.infos
 	m.restoreSessCursor(sel)
+	var chains []tea.Cmd
+	for _, s := range ended {
+		chains = append(chains, m.chain(s.Action, s.ItemKey, s.Exit))
+	}
+	return tea.Batch(chains...)
+}
+
+// chain starts, on the item with key, the follow-up of action for exit (0 → on_success, else on_failure) through
+// the normal start path, and says so in the footer. Marks are kept and the follow-up never jumps.
+func (m *Model) chain(action, key string, exit int) tea.Cmd {
+	act := m.cfg.Action[action]
+	next, ev := act.OnSuccess, "finished"
+	if exit != 0 {
+		next, ev = act.OnFailure, "failed"
+	}
+	if next == "" {
+		return nil
+	}
+	var target *item.Item
+	for _, items := range m.data {
+		for i := range items {
+			if session.Key(items[i].ID) == key {
+				target = &items[i]
+			}
+		}
+	}
+	if target == nil {
+		m.say(lvWarn, fmt.Sprintf("%s %s on %s → %s: %s no longer listed", action, ev, key, next, key))
+		return nil
+	}
+	prefix := fmt.Sprintf("%s %s on %s → ", action, ev, target.ID)
+	nact := m.cfg.Action[next]
+	nact.Jump = false // lanes never pulls the user into a session out of the blue
+	marks := m.marks
+	cmd := m.runActionOn(next, nact, []item.Item{*target})
+	m.marks = marks // the follow-up runs on its item alone; the user's marks stay
+	if cmd != nil {
+		m.notice = prefix + "starting " + next
+	} else {
+		m.notice = prefix + next + ": " + strings.TrimPrefix(m.notice, next+": ")
+	}
+	return cmd
 }
 
 // recordEvent appends an event of session s to the history with the id of the Claude session the hooks saw in it.
@@ -230,11 +277,16 @@ func identifierKey(data map[string]any) string {
 }
 
 func (m *Model) runAction(name string, act config.Action) tea.Cmd {
+	return m.runActionOn(name, act, m.targets())
+}
+
+// runActionOn starts action name on targets: when, busy and already-running items are skipped with a notice.
+func (m *Model) runActionOn(name string, act config.Action, targets []item.Item) tea.Cmd {
 	if m.sess == nil {
 		m.say(lvWarn, "tmux unavailable")
 		return nil
 	}
-	all, unmatched, werr := matchWhen(act, m.targets())
+	all, unmatched, werr := matchWhen(act, targets)
 	skippedWhen := whenNotice(len(unmatched), werr)
 	if len(all) == 0 {
 		if skippedWhen != "" {

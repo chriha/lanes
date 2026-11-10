@@ -736,7 +736,7 @@ func (m *Model) fetchStale(interval time.Duration) tea.Cmd {
 }
 
 // builtinKeys cannot be rebound through [keymap].
-const builtinKeys = "jkgGhlVqRoixXtpnNFSyzA/:? "
+const builtinKeys = "jkgGhlVqRoidxXtpnNFSyzA/:? "
 
 // level is how severe a footer notice is: it picks the notice's colour.
 type level int
@@ -833,7 +833,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyCommand(k)
 	case modeConfirm:
 		return m.keyConfirm(k)
-	case modeHelp:
+	case modeHelp, modeDetail:
 		return m.keyHelp(k)
 	case modeHistory:
 		m.mode = modeNormal
@@ -958,6 +958,8 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "i":
 		m.showHistory()
+	case "d":
+		m.showDetail()
 	case "z":
 		if m.toggleSnooze() {
 			m.mode = modeCommand
@@ -1068,7 +1070,9 @@ func (m *Model) View() string {
 	}
 	switch m.mode {
 	case modeHelp:
-		return m.helpView()
+		return m.scrollView(m.helpLines())
+	case modeDetail:
+		return m.scrollView(m.detailLines())
 	case modeHistory:
 		return m.historyView()
 	case modeSessions:
@@ -1411,6 +1415,7 @@ func (m *Model) helpLines() []string {
 		{"t", "shell for the cursor item: jump into it (started, or restarted if finished)"},
 		{"gr", "resume the cursor item's newest finished Claude session (actions with resume)"},
 		{"i", "item history"},
+		{"d", "item details: every field untruncated, the failed CI jobs one per line (j/k scroll, q close)"},
 		{"N", "edit the item's note in $EDITOR (save empty to delete)"},
 		{"z", "snooze item(s): 2h, 3d, mon, 2026-11-03, empty = until it changes; on a snoozed one: unsnooze"},
 		{"n", "jump into the next session that is asking or waiting"},
@@ -1482,8 +1487,8 @@ func (m *Model) helpLines() []string {
 	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 }
 
-func (m *Model) helpView() string {
-	lines := m.helpLines()
+// scrollView renders lines as a full screen scrolled by helpOff (the help and detail screens).
+func (m *Model) scrollView(lines []string) string {
 	h := m.height - 1
 	if h < 3 {
 		h = 3
@@ -1525,7 +1530,7 @@ func (m *Model) keyHelp(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "g", "home":
 		m.helpOff = 0
 	case "G", "end":
-		m.helpOff = 1 << 20 // clamped in helpView
+		m.helpOff = 1 << 20 // clamped in scrollView
 	}
 	return m, nil
 }

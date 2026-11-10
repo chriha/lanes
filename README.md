@@ -350,6 +350,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
 | `gr`                | resume the item's newest finished Claude session (see [Resuming a Claude session](#resuming-a-claude-session)) |
 | `i`                 | show the item's history                            |
+| `d`                 | item details: every field untruncated, failed CI jobs one per line (scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; close with `q`/`esc`) |
 | `N`                 | edit the item's note in `$VISUAL` / `$EDITOR` (save it empty to delete it) |
 | `z`                 | [snooze](#snoozing) the item (all marked items, if any are marked); on a snoozed item: unsnooze it |
 | `n`                 | jump into the next session that is asking or waiting (any view) |
@@ -434,6 +435,10 @@ The top right of the screen summarizes live sessions (`◐ 2  ? 1  ● 1`) and w
 Tickets also get `blocked_by`, `blocking` and `related` lines after labels and assignees, listing the open ids
 followed by the closed ones dimmed with a `✓` (e.g. `blocked_by  #7, #9 ✓`); empty relations are skipped. Set `preview = true` under `[settings]` to start with
 it open.
+
+`d` opens the item's **details** on a full screen: the title, URL, author, your note and every field untruncated,
+with the CI jobs (`ci_jobs`) one per line, so a failed job stays readable when the preview has to cut it short.
+Scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; `q` or `esc` returns to the list.
 
 `i` shows the item's **history**: every action started on it, and how it ended (`finished`, `failed (exit n)`,
 `killed`). History is stored per project and survives restarts.

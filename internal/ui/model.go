@@ -555,12 +555,13 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.fetchedAt[msg.name] = time.Now()
 			m.wake(time.Now(), items) // a partial result lacks pending fields: only a full one can tell a change
 		}
-		cache.Save(msg.name, items)
+		// landed items are never mutated afterwards (the next landing builds a new slice), so the command may read them
+		save := func() tea.Msg { cache.Save(msg.name, items); return nil }
 		for _, v := range m.views {
 			v.err = nil // filter errors may have been transient (stale data shape)
 		}
 		m.rebuild()
-		return m, again
+		return m, tea.Batch(save, again)
 	case tea.BlurMsg:
 		m.blurred = true
 	case tea.FocusMsg:

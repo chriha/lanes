@@ -2,9 +2,12 @@ package ui
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/chriha/lanes/internal/cache"
 	"github.com/chriha/lanes/internal/config"
 )
 
@@ -73,6 +76,33 @@ func TestBackoffResets(t *testing.T) {
 		m.Update(boom)
 		if got := m.list(); !strings.Contains(got, "retry in 30s") {
 			t.Errorf("wait not reset by success: %q", got)
+		}
+	})
+}
+
+func TestFetchedCacheWriteRunsInCmd(t *testing.T) {
+	t.Run("written by the returned command, not by Update", func(t *testing.T) {
+		m := newBackoffModel(t)
+		_, cmd := m.Update(fetchedMsg{name: "p", items: mkItems("a", "b")})
+		if got := cache.Load("p"); len(got) != 0 {
+			t.Fatalf("Update wrote the cache itself: %v", got)
+		}
+		runAll(cmd)
+		if got := cache.Load("p"); len(got) != 2 || got[0].ID != "a" {
+			t.Errorf("cache after running the command = %v, want items a, b", got)
+		}
+	})
+	t.Run("a write failure is ignored", func(t *testing.T) {
+		m := newBackoffModel(t)
+		blocker := filepath.Join(t.TempDir(), "file")
+		if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("XDG_CACHE_HOME", blocker) // the cache dir cannot be created below a file
+		_, cmd := m.Update(fetchedMsg{name: "p", items: mkItems("a")})
+		runAll(cmd)
+		if got := m.data["p"]; len(got) != 1 || got[0].ID != "a" {
+			t.Errorf("items after a failed write = %v, want item a", got)
 		}
 	})
 }

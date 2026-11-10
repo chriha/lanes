@@ -36,6 +36,7 @@ const (
 	modeHistory
 	modeSessions
 	modeAgents
+	modeDetail
 )
 
 type view struct {
@@ -126,9 +127,10 @@ type Model struct {
 	confirm    *confirmState
 	histTitle  string
 	hist       []string
-	helpOff    int
-	sessCursor int    // cursor of the sessions screen
-	lastAttn   string // session the n key jumped to last
+	helpOff    int       // scroll offset of the help and detail screens
+	detail     item.Item // the item the detail screen shows
+	sessCursor int       // cursor of the sessions screen
+	lastAttn   string    // session the n key jumped to last
 	// interrupted holds the sessions X interrupted in this run; X on one of them again sends SIGKILL
 	interrupted map[string]bool
 	agents      *agentView // the open agent view, nil when closed

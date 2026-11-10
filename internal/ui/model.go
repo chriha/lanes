@@ -582,10 +582,11 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case updateMsg:
 		m.onUpdate(msg)
 	case sessionsMsg:
-		m.onSessions(msg)
+		chains := m.onSessions(msg)
 		if msg.err == nil {
 			m.syncAgents()
 		}
+		return m, chains
 	case agentPollMsg:
 		return m, m.onAgentPoll(msg)
 	case agentSnapMsg:

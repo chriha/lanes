@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -100,6 +101,9 @@ func (m *Model) onSessions(msg sessionsMsg) {
 	m.sessions = msg.infos
 	m.restoreSessCursor(sel)
 }
+
+// clock is the time source for history durations; tests replace it.
+var clock = time.Now
 
 // recordEvent appends an event of session s to the history with the id of the Claude session the hooks saw in it.
 func recordEvent(s session.Info, event string, exit int) {

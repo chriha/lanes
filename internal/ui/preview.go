@@ -108,6 +108,7 @@ func (m *Model) preview() string {
 				label = ""
 			}
 		}
+		jobs := -1 // index of the ci_jobs line, -1 when there is none
 		for _, k := range keys {
 			if k == "note" && cur.Fields[k] == any(note) {
 				continue // shown above
@@ -126,13 +127,21 @@ func (m *Model) preview() string {
 				}
 			}
 			if v := fmtVal(cur.Fields[k]); v != "" && v != "[]" && v != "0" {
+				if k == "ci_jobs" {
+					jobs = len(lines)
+				}
 				lines = append(lines, " "+sDim.Render(fmt.Sprintf("%-12s", k))+sText.Render(v))
 			}
 		}
-		// the session and last-run lines outrank the field lines: trim the fields to make room
+		// the session and last-run lines outrank the field lines: trim the fields to make room, but keep the
+		// ci_jobs line (the failed jobs) as the last field line when it would be cut
 		extra := m.previewSessions(cur)
 		if room := previewH - len(extra); len(lines) > room {
-			lines = lines[:max(room, 0)]
+			if jobs >= room && room > 0 {
+				lines = append(lines[:room-1], lines[jobs])
+			} else {
+				lines = lines[:max(room, 0)]
+			}
 		}
 		lines = append(lines, extra...)
 	}

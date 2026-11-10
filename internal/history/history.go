@@ -17,6 +17,8 @@ type Event struct {
 	Action string    `json:"action"`
 	Event  string    `json:"event"` // started | finished | failed | killed
 	Exit   int       `json:"exit,omitempty"`
+	// Dur is how long the session or run lasted, in seconds, on end events.
+	Dur int64 `json:"dur,omitempty"`
 	// ClaudeSession is the Claude Code session id of a session's end event, when Claude ran in it.
 	ClaudeSession string `json:"claude_session,omitempty"`
 }

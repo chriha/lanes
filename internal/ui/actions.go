@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -148,10 +149,21 @@ func (m *Model) chain(action, key string, exit int) tea.Cmd {
 	return cmd
 }
 
+// clock is the time source for history durations; tests replace it.
+var clock = time.Now
+
 // recordEvent appends an event of session s to the history with the id of the Claude session the hooks saw in it.
+// It carries the time since the session's creation, when that is known.
 func recordEvent(s session.Info, event string, exit int) {
-	history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: event, Exit: exit, ClaudeSession: session.ClaudeSession(s.Name)})
+	var dur int64
+	if !s.Created.IsZero() {
+		dur = seconds(clock().Sub(s.Created))
+	}
+	history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: event, Exit: exit, Dur: dur, ClaudeSession: session.ClaudeSession(s.Name)})
 }
+
+// seconds rounds d to whole seconds.
+func seconds(d time.Duration) int64 { return int64(d.Round(time.Second) / time.Second) }
 
 // recordEnd records the end of session s. Its Claude session ids stay (the agent view needs the transcript of a
 // finished session); Manager.Kill and Start drop them.
@@ -549,9 +561,11 @@ func (m *Model) executeRun(action string, jobs []job, refresh bool, busy int, sk
 				history.Append(history.Event{Item: j.itemKey, Action: action, Event: "started"})
 				cmd := exec.Command(shell, "-c", j.cmd)
 				cmd.Dir = j.cwd
+				start := clock()
 				out, err := cmd.CombinedOutput()
+				dur := seconds(clock().Sub(start))
 				if err == nil {
-					history.Append(history.Event{Item: j.itemKey, Action: action, Event: "finished"})
+					history.Append(history.Event{Item: j.itemKey, Action: action, Event: "finished", Dur: dur})
 					return
 				}
 				code := -1
@@ -559,7 +573,7 @@ func (m *Model) executeRun(action string, jobs []job, refresh bool, busy int, sk
 				if errors.As(err, &ee) {
 					code = ee.ExitCode()
 				}
-				history.Append(history.Event{Item: j.itemKey, Action: action, Event: "failed", Exit: code})
+				history.Append(history.Event{Item: j.itemKey, Action: action, Event: "failed", Exit: code, Dur: dur})
 				fails[i] = j.label + ": " + lastLine(string(out), err)
 			}()
 		}

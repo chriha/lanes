@@ -138,7 +138,8 @@ func (m *Model) preview() string {
 		extra := m.previewSessions(cur)
 		if room := previewH - len(extra); len(lines) > room {
 			if jobs >= room && room > 0 {
-				lines = append(lines[:room-1], lines[jobs])
+				jobsLine := lines[jobs]
+				lines = append(lines[:room-1], jobsLine)
 			} else {
 				lines = lines[:max(room, 0)]
 			}

@@ -57,3 +57,60 @@ func TestPreviewCIJobs(t *testing.T) {
 		})
 	}
 }
+
+func TestPreviewKeepsCIJobsInCrowdedPane(t *testing.T) {
+	crowded := map[string]any{
+		"number": 7, "branch": "fix/x", "target": "main", "labels": []string{"bug"},
+		"reviewers": []string{"bo"}, "assignees": []string{"al"}, "ci": "failed", "open_threads": 2,
+	}
+	tests := []struct {
+		name     string
+		note     string
+		jobs     any    // nil: field not set
+		want     string // the ci_jobs line, "" when it must be absent
+		wantGone string // a field line trimmed to make room, "" for none
+	}{
+		{"fields fill the pane", "", []string{"✗ lint"}, "ci_jobs     ✗ lint", "assignees"},
+		{"note and fields fill the pane", "one\ntwo\nthree", []any{"✗ lint"}, "ci_jobs     ✗ lint", "target"},
+		{"empty jobs", "one\ntwo\nthree", []string{}, "", ""},
+		{"unset jobs", "", nil, "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newNotesModel(t)
+			f := map[string]any{}
+			for k, v := range crowded {
+				f[k] = v
+			}
+			if tt.jobs != nil {
+				f["ci_jobs"] = tt.jobs
+			}
+			m.data["p"] = []item.Item{{ID: "a", Title: "t", URL: "u", Author: "me", Fields: f}}
+			m.rebuild()
+			if tt.note != "" {
+				if err := m.notes.Set("a", tt.note); err != nil {
+					t.Fatal(err)
+				}
+			}
+			out := m.preview()
+			if n := strings.Count(out, "\n"); n != previewH {
+				t.Fatalf("preview has %d lines, want %d", n, previewH)
+			}
+			lines := strings.Split(ansi.Strip(out), "\n")
+			has := func(prefix string) string {
+				for _, l := range lines {
+					if strings.HasPrefix(strings.TrimSpace(l), prefix) {
+						return strings.TrimSpace(l)
+					}
+				}
+				return ""
+			}
+			if got := has("ci_jobs"); got != tt.want {
+				t.Fatalf("ci_jobs line = %q, want %q:\n%s", got, tt.want, strings.Join(lines, "\n"))
+			}
+			if tt.wantGone != "" && has(tt.wantGone) != "" {
+				t.Errorf("%q line kept, want it trimmed:\n%s", tt.wantGone, strings.Join(lines, "\n"))
+			}
+		})
+	}
+}

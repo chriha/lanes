@@ -33,25 +33,27 @@ func claudeHook(t *testing.T, name, claudeID string) {
 	session.RunHook("Stop")
 }
 
-// Every way lanes records a session's end carries the Claude session id the hooks saw, and forgets it after.
+// Every way lanes records a session's end carries the Claude session id the hooks saw. A killed session is gone and
+// its ids with it; a finished or failed one stays listed and keeps them for the agent view.
 func TestEndEventCarriesClaudeSession(t *testing.T) {
 	alive := session.Info{Name: "fix~1", Action: "fix", ItemKey: "1"}
 	tests := []struct {
 		name  string
 		event string
+		gone  bool // the session is gone, so are its Claude ids
 		end   func(m *Model)
 	}{
-		{"finished", "finished", func(m *Model) {
+		{"finished", "finished", false, func(m *Model) {
 			dead := alive
 			dead.Dead = true
 			m.onSessions(sessionsMsg{infos: []session.Info{dead}})
 		}},
-		{"failed", "failed", func(m *Model) {
+		{"failed", "failed", false, func(m *Model) {
 			dead := alive
 			dead.Dead, dead.Exit = true, 1
 			m.onSessions(sessionsMsg{infos: []session.Info{dead}})
 		}},
-		{"killed", "killed", func(m *Model) {
+		{"killed", "killed", true, func(m *Model) {
 			press(m, "x")
 			settle(m, press(m, "y"))
 		}},
@@ -79,8 +81,9 @@ func TestEndEventCarriesClaudeSession(t *testing.T) {
 			if last.Event != tt.event || last.ClaudeSession != "abc" {
 				t.Errorf("last event = %+v, want %s with claude_session abc", last, tt.event)
 			}
-			if _, err := os.Stat(filepath.Join(app.StateDir(), "sessions", alive.Name+".claude.json")); !os.IsNotExist(err) {
-				t.Errorf("Claude session file kept after the end event: %v", err)
+			_, err = os.Stat(filepath.Join(app.StateDir(), "sessions", alive.Name+".claude.json"))
+			if tt.gone != os.IsNotExist(err) {
+				t.Errorf("Claude session file after the end event: err %v, want gone %v", err, tt.gone)
 			}
 		})
 	}

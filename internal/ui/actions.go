@@ -118,11 +118,9 @@ func recordEvent(s session.Info, event string, exit int) {
 // seconds rounds d to whole seconds.
 func seconds(d time.Duration) int64 { return int64(d.Round(time.Second) / time.Second) }
 
-// recordEnd records the end of session s, then forgets its Claude session id.
-func recordEnd(s session.Info, event string, exit int) {
-	recordEvent(s, event, exit)
-	session.ForgetClaude(s.Name)
-}
+// recordEnd records the end of session s. Its Claude session ids stay (the agent view needs the transcript of a
+// finished session); Manager.Kill and Start drop them.
+func recordEnd(s session.Info, event string, exit int) { recordEvent(s, event, exit) }
 
 func (m *Model) sessionsOf(it item.Item) []session.Info { return m.sessByItem[session.Key(it.ID)] }
 

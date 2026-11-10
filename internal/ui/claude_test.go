@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/history"
@@ -133,5 +134,114 @@ func TestEndEventWithoutClaude(t *testing.T) {
 	evs := history.For("1")
 	if len(evs) != 1 || evs[0].Event != "finished" || evs[0].ClaudeSession != "" {
 		t.Errorf("history = %+v, want one finished event without claude_session", evs)
+	}
+}
+
+// fixClock makes clock return t for the test's duration.
+func fixClock(t *testing.T, at time.Time) {
+	t.Helper()
+	old := clock
+	clock = func() time.Time { return at }
+	t.Cleanup(func() { clock = old })
+}
+
+// Every session end event carries how long the session ran: from its tmux creation to the observed end.
+func TestEndEventCarriesDuration(t *testing.T) {
+	end := time.Date(2026, 11, 1, 15, 4, 0, 0, time.UTC)
+	alive := session.Info{Name: "fix~1", Action: "fix", ItemKey: "1", Created: end.Add(-90 * time.Second)}
+	tests := []struct {
+		name  string
+		event string
+		end   func(m *Model)
+	}{
+		{"finished", "finished", func(m *Model) {
+			dead := alive
+			dead.Dead = true
+			m.onSessions(sessionsMsg{infos: []session.Info{dead}})
+		}},
+		{"failed", "failed", func(m *Model) {
+			dead := alive
+			dead.Dead, dead.Exit = true, 1
+			m.onSessions(sessionsMsg{infos: []session.Info{dead}})
+		}},
+		{"killed", "killed", func(m *Model) {
+			press(m, "x")
+			settle(m, press(m, "y"))
+		}},
+		{"interrupted", "interrupted", func(m *Model) {
+			press(m, "X")
+			settle(m, press(m, "y"))
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, _ := busyModel(t)
+			paneTmux(t, 0)
+			mgr, err := session.NewManager()
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.sess = mgr
+			m.sessions = []session.Info{alive}
+			m.sessByItem["1"] = m.sessions
+			fixClock(t, end)
+
+			tt.end(m)
+
+			evs := history.For("1")
+			if len(evs) == 0 {
+				t.Fatal("no history event recorded")
+			}
+			if last := evs[len(evs)-1]; last.Event != tt.event || last.Dur != 90 {
+				t.Errorf("last event = %+v, want %s with dur 90", last, tt.event)
+			}
+		})
+	}
+}
+
+// A session whose creation time is unknown records no duration rather than one since year 1.
+func TestEndEventWithoutCreatedHasNoDuration(t *testing.T) {
+	m, _ := busyModel(t)
+	alive := session.Info{Name: "fix~1", Action: "fix", ItemKey: "1"}
+	m.sessions = []session.Info{alive}
+	dead := alive
+	dead.Dead = true
+	m.onSessions(sessionsMsg{infos: []session.Info{dead}})
+	if evs := history.For("1"); len(evs) != 1 || evs[0].Dur != 0 {
+		t.Errorf("history = %+v, want one event without dur", evs)
+	}
+}
+
+// A run's end event carries the time measured around its command.
+func TestRunEndEventCarriesDuration(t *testing.T) {
+	tests := []struct {
+		name  string
+		cmd   string
+		event string
+	}{
+		{"finished", "true", "finished"},
+		{"failed", "exit 3", "failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			t.Setenv("SHELL", "/bin/sh")
+			t0 := time.Date(2026, 11, 1, 15, 4, 0, 0, time.UTC)
+			calls := 0
+			old := clock
+			clock = func() time.Time { calls++; return t0.Add(time.Duration(calls-1) * 42 * time.Second) } // one job: no concurrent calls
+			t.Cleanup(func() { clock = old })
+
+			m := &Model{}
+			m.executeRun("act", []job{{label: "a", itemKey: "k", cwd: t.TempDir(), cmd: tt.cmd}}, false, 0, "")()
+
+			evs := history.For("k")
+			if len(evs) != 2 {
+				t.Fatalf("history = %+v, want started and end", evs)
+			}
+			if evs[0].Dur != 0 || evs[1].Event != tt.event || evs[1].Dur != 42 {
+				t.Errorf("history = %+v, want started without dur, then %s with dur 42", evs, tt.event)
+			}
+		})
 	}
 }

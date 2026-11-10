@@ -136,3 +136,32 @@ func TestClaudeSessionField(t *testing.T) {
 		t.Errorf("lines = %q, want claude_session only where set", lines)
 	}
 }
+
+// Dur round-trips, is written only when set, and old lines without it still decode.
+func TestDurField(t *testing.T) {
+	setup(t)
+	if err := os.MkdirAll(filepath.Dir(path()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"time":"2026-01-02T03:04:05Z","item":"a","action":"work","event":"finished"}` + "\n"
+	if err := os.WriteFile(path(), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	Append(Event{Item: "a", Action: "work", Event: "killed", Dur: 840})
+	Append(Event{Item: "a", Action: "work", Event: "started"})
+
+	got := For("a")
+	if len(got) != 3 {
+		t.Fatalf("want 3 events, got %+v", got)
+	}
+	for i, want := range []int64{0, 840, 0} {
+		if got[i].Dur != want {
+			t.Errorf("event %d (%s) dur = %d, want %d", i, got[i].Event, got[i].Dur, want)
+		}
+	}
+	raw, _ := os.ReadFile(path())
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if !strings.Contains(lines[1], `"dur":840`) || strings.Contains(lines[2], "dur") {
+		t.Errorf("lines = %q, want dur only where set", lines)
+	}
+}

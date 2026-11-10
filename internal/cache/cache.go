@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/item"
@@ -24,8 +25,12 @@ func Load(name string) []item.Item {
 	return items
 }
 
+var saveMu sync.Mutex // Save runs from tea.Cmds, so two writes of one file must not interleave
+
 func Save(name string, items []item.Item) {
 	b, err := json.Marshal(items)
+	saveMu.Lock()
+	defer saveMu.Unlock()
 	if err != nil || os.MkdirAll(app.CacheDir(), app.DirMode) != nil {
 		return
 	}

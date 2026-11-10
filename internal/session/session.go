@@ -154,6 +154,7 @@ func (m *Manager) Start(name, cwd, command string) error {
 		shell = "/bin/sh"
 	}
 	_ = os.Remove(statePath(name))
+	ForgetClaude(name) // a restart under the same name must not inherit the ended session's ids
 	script := fmt.Sprintf("export LANES_SESSION=%s LANES_STATE_DIR=%s; %s", shq(name), shq(app.StateDir()), command)
 	args := []string{"new-session", "-d", "-s", name, "-x", "220", "-y", "55"}
 	if cwd != "" {
@@ -168,6 +169,7 @@ func (m *Manager) Start(name, cwd, command string) error {
 
 func (m *Manager) Kill(name string) error {
 	_ = os.Remove(statePath(name))
+	ForgetClaude(name)
 	_, err := m.run("kill-session", "-t", "="+name)
 	return err
 }

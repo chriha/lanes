@@ -508,3 +508,17 @@ func TestAgentViewStopsSampling(t *testing.T) {
 		})
 	}
 }
+
+// A session that ended while lanes ran (recordEnd) keeps its transcript, so A still opens its frozen view.
+func TestAgentKeyAfterSessionEnded(t *testing.T) {
+	m := agentModel(t, working("fix~1"))
+	withTranscript(t, "fix~1")
+	dead := working("fix~1")
+	dead.Dead = true
+	m.onSessions(sessionsMsg{infos: []session.Info{dead}})
+
+	press(m, "A")
+	if m.agents == nil || m.mode != modeAgents || m.agents.name != "fix~1" || !m.agents.ended {
+		t.Fatalf("mode %v, view %+v; want the agent view of fix~1 open and ended (notice %q)", m.mode, m.agents, m.notice)
+	}
+}

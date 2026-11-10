@@ -136,6 +136,8 @@ type Model struct {
 	ov          *config.Overrides
 	notes       notes.Store
 	snoozes     snooze.Store
+	// dwellGen counts the dwell ticks armed, to drop the ticks of a cursor that moved on
+	dwellGen int
 	// showSnoozed lists snoozed items too (:snoozed)
 	showSnoozed bool
 	preview_    bool

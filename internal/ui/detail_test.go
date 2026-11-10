@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -22,24 +23,24 @@ func TestDetailLines(t *testing.T) {
 		{
 			name:   "ci_jobs one per line",
 			fields: map[string]any{"ci": "failed", "ci_jobs": []string{"✗ lint", "⚠ e2e"}},
-			want:   []string{"ci          failed", "ci_jobs     ✗ lint", "⚠ e2e"},
+			want:   []string{"ci_jobs  ✗ lint", "⚠ e2e"},
 		},
 		{
 			name:   "ci_jobs decoded from the cache",
 			fields: map[string]any{"ci_jobs": []any{"✗ lint", "✗ unit"}},
-			want:   []string{"ci_jobs     ✗ lint", "✗ unit"},
+			want:   []string{"ci_jobs  ✗ lint", "✗ unit"},
 		},
 		{
 			name:   "empty ci_jobs",
 			fields: map[string]any{"ci": "passed", "ci_jobs": []string{}},
-			want:   []string{"ci          passed"},
+			want:   []string{"by me · ci passed"},
 			absent: []string{"ci_jobs"},
 		},
 		{
 			name:   "every field, also the ones the preview leaves out",
 			fields: map[string]any{"number": 7, "zeta": "z", "branch": long},
 			note:   "first\nsecond",
-			want:   []string{"t-title", "https://x/7", "author      me", "note        first", "second", "number      7", "zeta        z"},
+			want:   []string{"t-title", "https://x/7", "by me", "note    first", "second", "number  7", "zeta    z"},
 		},
 	}
 	for _, tt := range tests {
@@ -101,7 +102,7 @@ func TestDetailKeys(t *testing.T) {
 		{"k scrolls back up", nil, []string{"d", "j", "k"}, modeDetail, "a  t-title", ""},
 		{"G to the bottom", nil, []string{"d", "G"}, modeDetail, "", "✗ job9"},
 		{"g to the top", nil, []string{"d", "G", "g"}, modeDetail, "a  t-title", ""},
-		{"ctrl-d pages down", nil, []string{"d", "ctrl+d"}, modeDetail, "author      me", ""},
+		{"ctrl-d pages down", nil, []string{"d", "ctrl+d", "ctrl+d"}, modeDetail, "✗ job1", ""},
 		{"ctrl-u pages up", nil, []string{"d", "ctrl+d", "ctrl+u"}, modeDetail, "a  t-title", ""},
 		{"q closes", nil, []string{"d", "q"}, modeNormal, "", ""},
 		{"esc closes", nil, []string{"d", "esc"}, modeNormal, "", ""},
@@ -140,5 +141,91 @@ func TestDetailKeys(t *testing.T) {
 				t.Errorf("last line = %q, want %q:\n%s", screen[len(screen)-2], tt.wantLast, strings.Join(screen, "\n"))
 			}
 		})
+	}
+}
+
+func TestDetailHeader(t *testing.T) {
+	tests := []struct {
+		name   string
+		draft  bool
+		fields map[string]any
+		want   string // third line, trimmed
+	}{
+		{"author only", false, nil, "by me"},
+		{"pipeline state", false, map[string]any{"ci": "failed"}, "by me · ci failed"},
+		{"draft", true, map[string]any{"ci": "running"}, "by me · ci running · draft"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newNotesModel(t)
+			m.width, m.height = 80, 40
+			m.data["p"] = []item.Item{{ID: "a", Title: "t-title", URL: "https://x/7", Author: "me", Draft: tt.draft, Fields: tt.fields}}
+			m.rebuild()
+			m.showDetail()
+			lines := m.detailLines()
+			if got := strings.TrimSpace(ansi.Strip(lines[2])); got != tt.want {
+				t.Errorf("header state = %q, want %q", got, tt.want)
+			}
+			for _, l := range lines[3:] {
+				if strings.HasPrefix(strings.TrimSpace(ansi.Strip(l)), "ci ") {
+					t.Errorf("ci listed again under the fields: %q", l)
+				}
+			}
+		})
+	}
+}
+
+// TestDetailAlign checks that every field value starts in one column sized to the longest key shown, and that a
+// wrapped value continues in that column.
+func TestDetailAlign(t *testing.T) {
+	long := strings.TrimSpace(strings.Repeat("word ", 60))
+	tests := []struct {
+		name   string
+		fields map[string]any
+		keyW   int
+	}{
+		{"short keys", map[string]any{"iid": 7, "zeta": long}, 4},
+		{"key longer than 12", map[string]any{"iid": 7, "open_thread_by_me": "yes", "zeta": long}, 17},
+	}
+	for _, tt := range tests {
+		for _, width := range []int{40, 80, 200} {
+			t.Run(fmt.Sprintf("%s/%d", tt.name, width), func(t *testing.T) {
+				m := newNotesModel(t)
+				m.width, m.height = width, 40
+				m.data["p"] = []item.Item{{ID: "a", Title: "t-title", URL: "https://x/7", Author: "me", Fields: tt.fields}}
+				m.rebuild()
+				m.showDetail()
+				col := 1 + tt.keyW + 2
+				var rows, wrapped int
+				for _, l := range m.detailLines()[5:] { // after the header, the blank line and the section title
+					l = ansi.Strip(l)
+					if n := ansi.StringWidth(l); n > width {
+						t.Errorf("line %q is %d wide, screen %d", l, n, width)
+					}
+					if len(l) <= col || l[col-1] != ' ' || l[col] == ' ' {
+						t.Errorf("value of %q not at column %d", l, col)
+						continue
+					}
+					if strings.TrimSpace(l[:col]) == "" {
+						wrapped++
+					} else {
+						rows++
+					}
+				}
+				if rows != len(tt.fields) {
+					t.Errorf("%d field rows, want %d", rows, len(tt.fields))
+				}
+				if width < 200 && wrapped == 0 {
+					t.Errorf("long value did not wrap at width %d", width)
+				}
+				var all strings.Builder
+				for _, l := range m.detailLines() {
+					all.WriteString(strings.TrimSpace(ansi.Strip(l)) + " ")
+				}
+				if !strings.Contains(all.String(), long) {
+					t.Errorf("long value truncated:\n%s", all.String())
+				}
+			})
+		}
 	}
 }

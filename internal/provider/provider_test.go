@@ -147,7 +147,7 @@ func TestAutoDetail(t *testing.T) {
 		origin func() (string, error)
 		want   string
 	}{
-		{"forge without details", func() (string, error) { return "git@github.com:o/r.git", nil }, ErrNoDetail.Error()},
+		{"forge detail", func() (string, error) { return "git@github.com:o/r.git", nil }, "bad pull request number"},
 		{"missing origin", func() (string, error) { return "", errors.New("exit status 2") }, `set type = "github" or "gitlab"`},
 	}
 	for _, tt := range tests {

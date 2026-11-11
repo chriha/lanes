@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/filter"
@@ -337,5 +339,105 @@ func TestGitHubCIJobs(t *testing.T) {
 				t.Errorf("PR without contexts has ci_jobs = %v", items[1].Fields["ci_jobs"])
 			}
 		})
+	}
+}
+
+const ghDetailResponse = `{"data":{"repository":{"pullRequest":{
+ "body":"Fixes the thing.",
+ "comments":{"nodes":[{"body":"looks good","createdAt":"2026-11-04T10:00:00Z","author":{"login":"kim"}}]},
+ "reviewThreads":{"nodes":[
+  {"isResolved":false,"path":"a.go","line":12,"originalLine":10,"comments":{"nodes":[
+   {"body":"why?","createdAt":"2026-11-01T10:00:00Z","author":{"login":"alex"}},
+   {"body":"because","createdAt":"2026-11-01T11:00:00Z","author":{"login":"me"}}]}},
+  {"isResolved":true,"path":"b.go","line":null,"originalLine":7,"comments":{"nodes":[
+   {"body":"removed line","createdAt":"2026-11-02T10:00:00Z","author":{"login":"alex"}}]}}]},
+ "commits":{"nodes":[{"commit":{"abbreviatedOid":"abc1234","statusCheckRollup":{"state":"FAILURE","contexts":{"nodes":[
+  {"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"SUCCESS","startedAt":"2026-11-01T10:00:00Z","completedAt":"2026-11-01T10:00:30Z","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},
+  {"__typename":"CheckRun","name":"lint","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2026-11-01T10:00:05Z","completedAt":"2026-11-01T10:02:05Z","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},
+  {"__typename":"CheckRun","name":"docs","status":"COMPLETED","conclusion":"SKIPPED","startedAt":null,"completedAt":null,"checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},
+  {"__typename":"CheckRun","name":"e2e","status":"IN_PROGRESS","conclusion":null,"startedAt":"2026-11-01T10:00:10Z","completedAt":null,"checkSuite":{"workflowRun":null}},
+  {"__typename":"StatusContext","context":"ci/jenkins","state":"PENDING"}]}}}}]}
+}}}}`
+
+func TestGitHubDetail(t *testing.T) {
+	at := func(s string) time.Time {
+		tm, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tm
+	}
+	want := item.Detail{
+		Description: "Fixes the thing.",
+		Pipeline: &item.Pipeline{ID: "abc1234", Status: "failed", Duration: 125 * time.Second, Jobs: []item.Job{
+			{Name: "build", Stage: "CI", Status: "success", Duration: 30 * time.Second},
+			{Name: "lint", Stage: "CI", Status: "failed", Duration: 120 * time.Second},
+			{Name: "docs", Stage: "CI", Status: "skipped"},
+			{Name: "e2e", Stage: "checks", Status: "running"},
+			{Name: "ci/jenkins", Stage: "checks", Status: "pending"},
+		}},
+		Threads: []item.Thread{
+			{File: "a.go", Line: 12, Comments: []item.Comment{
+				{Author: "alex", Body: "why?", Created: at("2026-11-01T10:00:00Z")},
+				{Author: "me", Body: "because", Created: at("2026-11-01T11:00:00Z")},
+			}},
+			{File: "b.go", Line: 7, Resolved: true, Comments: []item.Comment{
+				{Author: "alex", Body: "removed line", Created: at("2026-11-02T10:00:00Z")},
+			}},
+		},
+		Comments: []item.Comment{{Author: "kim", Body: "looks good", Created: at("2026-11-04T10:00:00Z")}},
+	}
+	for _, tc := range []struct {
+		name       string
+		it         item.Item
+		resp       string
+		runErr     error
+		want       *item.Detail
+		wantErr    string
+		wantNumber string
+	}{
+		{"full PR", item.Item{ID: "#7", Fields: map[string]any{"number": 7}}, ghDetailResponse, nil, &want, "", "number=7"},
+		{"no checks", item.Item{ID: "#8"}, `{"data":{"repository":{"pullRequest":{"body":"d","comments":{"nodes":[]},"reviewThreads":{"nodes":[]},"commits":{"nodes":[{"commit":{"abbreviatedOid":"x","statusCheckRollup":null}}]}}}}}`,
+			nil, &item.Detail{Description: "d"}, "", "number=8"},
+		{"bad number", item.Item{ID: "#x"}, ghDetailResponse, nil, nil, "bad pull request number", ""},
+		{"run fails", item.Item{ID: "#7"}, "", errors.New("boom"), nil, "gh: boom", ""},
+		{"graphql error", item.Item{ID: "#7"}, `{"errors":[{"message":"nope"}]}`, nil, nil, "github: nope", ""},
+		{"PR missing", item.Item{ID: "#7"}, `{"data":{"repository":{"pullRequest":null}}}`, nil, nil, "not found", ""},
+		{"repo missing", item.Item{ID: "#7"}, `{"data":{"repository":null}}`, nil, nil, "not found", ""},
+		{"bad json", item.Item{ID: "#7"}, `nope`, nil, nil, "bad response", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls [][]string
+			g := &GitHub{Project: "o/r", Run: func(_ context.Context, args ...string) ([]byte, error) {
+				calls = append(calls, args)
+				return []byte(tc.resp), tc.runErr
+			}}
+			got, err := g.Detail(context.Background(), tc.it)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want containing %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, *tc.want) {
+				t.Errorf("detail =\n%+v\nwant\n%+v", got, *tc.want)
+			}
+			if len(calls) != 1 || !slices.Contains(calls[0], tc.wantNumber) {
+				t.Errorf("calls = %v, want one with %s", calls, tc.wantNumber)
+			}
+		})
+	}
+}
+
+func TestGitHubListPollFetchesNoDetail(t *testing.T) {
+	var args []string
+	if _, err := (&GitHub{Project: "o/r", Run: fakeGH(ghResponse, nil, &args)}).Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if q := strings.Join(args, " "); strings.Contains(q, "body") || strings.Contains(q, "comments(last") {
+		t.Errorf("list poll query fetches detail data: %s", q)
 	}
 }

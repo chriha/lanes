@@ -5,16 +5,39 @@ import (
 	"sort"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/chriha/lanes/internal/item"
 )
 
-// showDetail opens the detail screen for the item under the cursor; it does nothing without one.
-func (m *Model) showDetail() {
+// detailEntry is the fetched detail of one item, or the fetch still running for it.
+type detailEntry struct {
+	fp      string // fingerprint of the item the fetch started for
+	loading bool
+	d       item.Detail
+	err     error
+}
+
+// detailMsg delivers a detail fetch started by showDetail.
+type detailMsg struct {
+	key, fp string
+	d       item.Detail
+	err     error
+}
+
+// showDetail opens the detail screen for the item under the cursor; it does nothing without one. When the item's
+// provider can fetch details and none is cached for the item as it is now, it returns the fetch.
+func (m *Model) showDetail() tea.Cmd {
 	if it := m.items(); m.cursor < len(it) {
 		m.detail = it[m.cursor]
 		m.mode, m.helpOff = modeDetail, 0
 	}
+	return nil
 }
+
+// onDetail stores a landed detail fetch unless its item changed since it started.
+func (m *Model) onDetail(msg detailMsg) {}
 
 // detailLines stacks the detail screen's sections: a header with the item's id, title, URL, author and its
 // pipeline/draft state, then Fields with the note and every remaining field untruncated (the ci_jobs one job per

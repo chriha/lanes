@@ -244,8 +244,8 @@ Useful building blocks:
 | `open_threads > 0`             | numbers                                    |
 
 **Fields** are the item's own (`id`, `title`, `url`, `author`, `draft`), your [note](#preview-pane-and-item-history)
-(`note`, empty when there is none, e.g. `note != ""`), whether you [snoozed](#snoozing) it (`snoozed`) plus whatever
-the provider adds. The `fields` section at the
+(`note`, empty when there is none, e.g. `note != ""`), whether you [snoozed](#snoozing) it (`snoozed`), whether it changed since you last saw it
+(`unread`, see [Row badges](#row-badges)) plus whatever the provider adds. The `fields` section at the
 bottom of the help (`?`) lists every provider type's keys, and for each configured `command` provider the keys of its
 last fetched items. For GitLab (GitHub has the same fields, with `number` instead of `iid`):
 
@@ -352,6 +352,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `i`                 | show the item's history                            |
 | `d`                 | item details: every field untruncated, description, pipeline, threads and comments (scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; `J`/`K` move between threads, `enter`/`space` fold the one under the cursor, `za`/`zA` fold/unfold all; close with `q`/`esc`) |
 | `N`                 | edit the item's note in `$VISUAL` / `$EDITOR` (save it empty to delete it) |
+| `m`                 | mark the item unread (all marked items, if any are marked); when all of them are unread: mark them read (see [Row badges](#row-badges)) |
 | `z`                 | [snooze](#snoozing) the item (all marked items, if any are marked); on a snoozed item: unsnooze it |
 | `n`                 | jump into the next session that is asking or waiting (any view) |
 | `S`                 | sessions screen: every session, also of items no longer listed |
@@ -410,6 +411,11 @@ narrows the view; it does not change its filter.
 Each row ends with small status badges: the item's own (from the provider) followed by up to three of its
 sessions. A blue `✎` after the name (the author, or the assignees on tickets), or after the title when there is no name, is not a badge: it marks an
 item you left a [note](#preview-pane-and-item-history) on.
+
+A **bold title** marks an unread item: it is new, or its title, draft state, badges or provider fields changed since
+you last saw it. The cursor resting on it for a second marks it read; `m` toggles it by hand. Filters see `unread`
+(`true` / `false`). On the first run every listed item counts as read. Seen items are stored per project
+(`seen.json`, a corrupt file moves to `seen.json.bak` like notes).
 
 | Badge          | Meaning                                                       |
 |----------------|---------------------------------------------------------------|

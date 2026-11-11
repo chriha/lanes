@@ -163,3 +163,60 @@ func TestDwellMarksRead(t *testing.T) {
 		})
 	}
 }
+
+func TestMTogglesRead(t *testing.T) {
+	fp := map[string]string{}
+	for _, it := range mkItems("a", "b") {
+		fp[it.ID] = it.Fingerprint()
+	}
+	read := func(ids ...string) map[string]string { // stored: ids read, the rest of a, b unread
+		s := map[string]string{"a": "old", "b": "old"}
+		for _, id := range ids {
+			s[id] = fp[id]
+		}
+		return s
+	}
+	tests := []struct {
+		name       string
+		stored     map[string]string
+		marks      []string
+		wantUnread map[string]bool
+	}{
+		{"read cursor item turns unread", read("a", "b"), nil, map[string]bool{"a": true, "b": false}},
+		{"unread cursor item turns read", read(), nil, map[string]bool{"a": false, "b": true}},
+		{"marked, not all unread: all unread", read("a"), []string{"a", "b"}, map[string]bool{"a": true, "b": true}},
+		{"marked, all unread: all read", read(), []string{"a", "b"}, map[string]bool{"a": false, "b": false}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newSeenModel(t, tt.stored)
+			m.data["p"] = mkItems("a", "b")
+			m.rebuild()
+			m.Update(tea.WindowSizeMsg{Width: 80, Height: 20}) // the cursor lands on a
+			for _, id := range tt.marks {
+				m.marks[id] = true
+			}
+			if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("m")}); cmd != nil {
+				t.Error("m armed a command (a dwell tick would undo the choice)")
+			}
+
+			for id, want := range tt.wantUnread {
+				if got := itemOf(t, m, id).Env()["unread"]; got != want {
+					t.Errorf("%s unread = %v, want %v", id, got, want)
+				}
+				if saved := storedSeen(t).Unread(id, fp[id]); saved != want {
+					t.Errorf("seen.json: %s unread = %v, want %v", id, saved, want)
+				}
+			}
+			if len(m.marks) != 0 {
+				t.Errorf("marks not cleared: %v", m.marks)
+			}
+		})
+	}
+}
+
+func TestMIsBuiltIn(t *testing.T) {
+	if !strings.Contains(builtinKeys, "m") {
+		t.Error("m is not in builtinKeys")
+	}
+}

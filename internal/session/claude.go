@@ -73,10 +73,10 @@ func readState(name string) string {
 // payload's Claude session id in a sidecar (SessionEnd too), for lanes to record with the session's end. Never
 // fails loudly: it must not disturb claude.
 func RunHook(event string) {
-	name := os.Getenv("LANES_SESSION")
-	if name == "" {
+	if !InSession() { // an empty state dir would make the state paths relative to cwd
 		return
 	}
+	name := os.Getenv("LANES_SESSION")
 	var in struct {
 		claudeIDs
 		NotificationType string `json:"notification_type"`

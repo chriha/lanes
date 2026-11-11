@@ -165,3 +165,35 @@ func TestDurField(t *testing.T) {
 		t.Errorf("lines = %q, want dur only where set", lines)
 	}
 }
+
+// Tokens round-trip with every count on its own, are written only when set, and old lines without them still decode.
+func TestTokensField(t *testing.T) {
+	setup(t)
+	if err := os.MkdirAll(filepath.Dir(path()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"time":"2026-01-02T03:04:05Z","item":"a","action":"work","event":"finished","dur":60}` + "\n"
+	if err := os.WriteFile(path(), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tok := Tokens{Input: 1, CacheWrite: 2, CacheRead: 3, Output: 4}
+	Append(Event{Item: "a", Action: "work", Event: "finished", Tokens: &tok})
+	Append(Event{Item: "a", Action: "work", Event: "started"})
+
+	got := For("a")
+	if len(got) != 3 {
+		t.Fatalf("want 3 events, got %+v", got)
+	}
+	if got[0].Tokens != nil || got[2].Tokens != nil {
+		t.Errorf("events without tokens decoded with %+v, %+v", got[0].Tokens, got[2].Tokens)
+	}
+	if got[1].Tokens == nil || *got[1].Tokens != tok {
+		t.Errorf("tokens = %+v, want %+v", got[1].Tokens, tok)
+	}
+	raw, _ := os.ReadFile(path())
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	want := `"tokens":{"input":1,"cache_write":2,"cache_read":3,"output":4}`
+	if !strings.Contains(lines[1], want) || strings.Contains(lines[2], "tokens") {
+		t.Errorf("lines = %q, want %s only where set", lines, want)
+	}
+}

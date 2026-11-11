@@ -69,13 +69,14 @@ func (m *Model) pollSessions() tea.Cmd {
 	}
 }
 
-// onSessions takes in a poll; it returns the starts of the follow-ups of the sessions seen dying.
+// onSessions takes in a poll; it returns the history writes of the sessions seen dying, then their follow-ups' starts.
 func (m *Model) onSessions(msg sessionsMsg) tea.Cmd {
 	m.polling = false
 	if msg.err != nil {
 		return nil
 	}
 	var ended []session.Info // chained once sessByItem is complete, so the follow-up sees every live session
+	var writes []func()      // end events, written off the UI goroutine: they read the Claude transcripts
 	prev := map[string]session.Info{}
 	for _, s := range m.sessions {
 		prev[s.Name] = s
@@ -92,7 +93,7 @@ func (m *Model) onSessions(msg sessionsMsg) tea.Cmd {
 			if s.Exit != 0 {
 				ev = "failed"
 			}
-			recordEnd(s, ev, s.Exit)
+			writes = append(writes, eventWriter(s, ev, s.Exit))
 			if !m.interrupted[s.Name] { // killed sessions vanish instead of dying, so they never get here
 				ended = append(ended, s)
 			}
@@ -111,7 +112,16 @@ func (m *Model) onSessions(msg sessionsMsg) tea.Cmd {
 	for _, s := range ended {
 		chains = append(chains, m.chain(s.Action, s.ItemKey, s.Exit))
 	}
-	return tea.Batch(chains...)
+	if len(writes) == 0 {
+		return tea.Batch(chains...)
+	}
+	record := func() tea.Msg {
+		for _, w := range writes {
+			w()
+		}
+		return nil
+	}
+	return tea.Sequence(record, tea.Batch(chains...)) // an end event goes into the history before its follow-up's start
 }
 
 // chain starts, on the item with key, the follow-up of action for exit (0 → on_success, else on_failure) through
@@ -158,14 +168,27 @@ func followUp(act config.Action, exit int) (next, ev string) {
 // clock is the time source for history durations; tests replace it.
 var clock = time.Now
 
-// recordEvent appends an event of session s to the history with the id of the Claude session the hooks saw in it.
-// It carries the time since the session's creation, when that is known.
-func recordEvent(s session.Info, event string, exit int) {
+// recordEvent appends an event of session s to the history; see eventWriter. It reads the transcript: call it off
+// the UI goroutine.
+func recordEvent(s session.Info, event string, exit int) { eventWriter(s, event, exit)() }
+
+// eventWriter takes, now, what an event of session s carries and may not outlast the moment: the time since the
+// session's creation, when that is known, and the ids of the Claude session the hooks saw in it. The returned func
+// adds the tokens of that Claude session since the creation, read from its transcript, and appends the event; it
+// reads a file of any size, so it runs in a tea.Cmd.
+func eventWriter(s session.Info, event string, exit int) func() {
 	var dur int64
 	if !s.Created.IsZero() {
 		dur = seconds(clock().Sub(s.Created))
 	}
-	history.Append(history.Event{Item: s.ItemKey, Action: s.Action, Event: event, Exit: exit, Dur: dur, ClaudeSession: session.ClaudeSession(s.Name)})
+	e := history.Event{Item: s.ItemKey, Action: s.Action, Event: event, Exit: exit, Dur: dur, ClaudeSession: session.ClaudeSession(s.Name)}
+	transcript := session.ClaudeTranscript(s.Name)
+	return func() {
+		if t, ok := session.TranscriptUsage(transcript, s.Created); ok && t != (session.Tokens{}) {
+			e.Tokens = &history.Tokens{Input: t.Input, CacheWrite: t.CacheWrite, CacheRead: t.CacheRead, Output: t.Output}
+		}
+		history.Append(e)
+	}
 }
 
 // seconds rounds d to whole seconds.

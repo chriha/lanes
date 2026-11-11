@@ -46,12 +46,12 @@ func TestEndEventCarriesClaudeSession(t *testing.T) {
 		{"finished", "finished", false, func(m *Model) {
 			dead := alive
 			dead.Dead = true
-			m.onSessions(sessionsMsg{infos: []session.Info{dead}})
+			runAll(m.onSessions(sessionsMsg{infos: []session.Info{dead}}))
 		}},
 		{"failed", "failed", false, func(m *Model) {
 			dead := alive
 			dead.Dead, dead.Exit = true, 1
-			m.onSessions(sessionsMsg{infos: []session.Info{dead}})
+			runAll(m.onSessions(sessionsMsg{infos: []session.Info{dead}}))
 		}},
 		{"killed", "killed", true, func(m *Model) {
 			press(m, "x")
@@ -133,7 +133,7 @@ func TestEndEventWithoutClaude(t *testing.T) {
 	m.sessions = []session.Info{alive}
 	dead := alive
 	dead.Dead = true
-	m.onSessions(sessionsMsg{infos: []session.Info{dead}})
+	runAll(m.onSessions(sessionsMsg{infos: []session.Info{dead}}))
 	evs := history.For("1")
 	if len(evs) != 1 || evs[0].Event != "finished" || evs[0].ClaudeSession != "" {
 		t.Errorf("history = %+v, want one finished event without claude_session", evs)
@@ -160,12 +160,12 @@ func TestEndEventCarriesDuration(t *testing.T) {
 		{"finished", "finished", func(m *Model) {
 			dead := alive
 			dead.Dead = true
-			m.onSessions(sessionsMsg{infos: []session.Info{dead}})
+			runAll(m.onSessions(sessionsMsg{infos: []session.Info{dead}}))
 		}},
 		{"failed", "failed", func(m *Model) {
 			dead := alive
 			dead.Dead, dead.Exit = true, 1
-			m.onSessions(sessionsMsg{infos: []session.Info{dead}})
+			runAll(m.onSessions(sessionsMsg{infos: []session.Info{dead}}))
 		}},
 		{"killed", "killed", func(m *Model) {
 			press(m, "x")
@@ -209,7 +209,7 @@ func TestEndEventWithoutCreatedHasNoDuration(t *testing.T) {
 	m.sessions = []session.Info{alive}
 	dead := alive
 	dead.Dead = true
-	m.onSessions(sessionsMsg{infos: []session.Info{dead}})
+	runAll(m.onSessions(sessionsMsg{infos: []session.Info{dead}}))
 	if evs := history.For("1"); len(evs) != 1 || evs[0].Dur != 0 {
 		t.Errorf("history = %+v, want one event without dur", evs)
 	}
@@ -244,6 +244,100 @@ func TestRunEndEventCarriesDuration(t *testing.T) {
 			}
 			if evs[0].Dur != 0 || evs[1].Event != tt.event || evs[1].Dur != 42 {
 				t.Errorf("history = %+v, want started without dur, then %s with dur 42", evs, tt.event)
+			}
+		})
+	}
+}
+
+// Every session end event of a Claude session carries the tokens its transcript holds since the session's creation;
+// a resumed session's transcript also holds its predecessor's, which don't count.
+func TestEndEventCarriesTokens(t *testing.T) {
+	end := time.Date(2026, 11, 1, 15, 4, 0, 0, time.UTC)
+	alive := session.Info{Name: "fix~1", Action: "fix", ItemKey: "1", Created: end.Add(-90 * time.Second)}
+	transcript := `{"type":"assistant","timestamp":"2026-11-01T14:00:00Z","message":{"id":"old","usage":{"input_tokens":900,"cache_creation_input_tokens":900,"cache_read_input_tokens":900,"output_tokens":900}}}
+{"type":"assistant","timestamp":"2026-11-01T15:03:00Z","message":{"id":"a","usage":{"input_tokens":1,"cache_creation_input_tokens":20,"cache_read_input_tokens":300,"output_tokens":4}}}
+{"type":"assistant","timestamp":"2026-11-01T15:03:01Z","message":{"id":"a","usage":{"input_tokens":1,"cache_creation_input_tokens":20,"cache_read_input_tokens":300,"output_tokens":40}}}
+{"type":"assistant","timestamp":"2026-11-01T15:03:30Z","message":{"id":"b","usage":{"input_tokens":5,"cache_creation_input_tokens":60,"cache_read_input_tokens":700,"output_tokens":8}}}
+`
+	want := history.Tokens{Input: 6, CacheWrite: 80, CacheRead: 1000, Output: 48}
+	tests := []struct {
+		name  string
+		event string
+		end   func(m *Model)
+	}{
+		{"finished", "finished", func(m *Model) {
+			dead := alive
+			dead.Dead = true
+			runAll(m.onSessions(sessionsMsg{infos: []session.Info{dead}}))
+		}},
+		{"failed", "failed", func(m *Model) {
+			dead := alive
+			dead.Dead, dead.Exit = true, 1
+			runAll(m.onSessions(sessionsMsg{infos: []session.Info{dead}}))
+		}},
+		{"killed", "killed", func(m *Model) {
+			press(m, "x")
+			settle(m, press(m, "y"))
+		}},
+		{"interrupted", "interrupted", func(m *Model) {
+			press(m, "X")
+			settle(m, press(m, "y"))
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, _ := busyModel(t)
+			paneTmux(t, 0)
+			mgr, err := session.NewManager()
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.sess = mgr
+			m.sessions = []session.Info{alive}
+			m.sessByItem["1"] = m.sessions
+			fixClock(t, end)
+			if err := os.WriteFile(withTranscript(t, alive.Name), []byte(transcript), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			tt.end(m)
+
+			evs := history.For("1")
+			if len(evs) == 0 {
+				t.Fatal("no history event recorded")
+			}
+			if last := evs[len(evs)-1]; last.Event != tt.event || last.Tokens == nil || *last.Tokens != want {
+				t.Errorf("last event = %+v (tokens %+v), want %s with tokens %+v", last, last.Tokens, tt.event, want)
+			}
+		})
+	}
+}
+
+// A session without Claude, or whose transcript is gone, records its end without tokens.
+func TestEndEventWithoutTranscriptHasNoTokens(t *testing.T) {
+	tests := []struct {
+		name   string
+		claude bool // the hooks saw Claude, with a transcript path that doesn't exist
+	}{
+		{"no Claude", false},
+		{"transcript gone", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, _ := busyModel(t)
+			alive := session.Info{Name: "fix~1", Action: "fix", ItemKey: "1", Created: time.Date(2026, 11, 1, 15, 0, 0, 0, time.UTC)}
+			m.sessions = []session.Info{alive}
+			if tt.claude {
+				if err := os.Remove(withTranscript(t, alive.Name)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			dead := alive
+			dead.Dead = true
+			runAll(m.onSessions(sessionsMsg{infos: []session.Info{dead}}))
+			evs := history.For("1")
+			if len(evs) != 1 || evs[0].Event != "finished" || evs[0].Tokens != nil {
+				t.Errorf("history = %+v, want one finished event without tokens", evs)
 			}
 		})
 	}

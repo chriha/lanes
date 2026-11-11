@@ -706,7 +706,7 @@ func TestTailerEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Ordered by time; at equal times the lead first, then spawns, then the agents' own events, then ends. The
-	// Explore agent has no transcript: its spawn and failure have no time. Calls without a result are left out.
+	// Explore agent has no transcript: its spawn and failure have no time. A call the model went on without is logged as interrupted.
 	want := `-- lead claude-opus-5-5 2 spawned Explore
 -- Explore haiku 4 failed ✗
 00:02.0 lead claude-opus-5-5 1 Looking at the ticket.
@@ -715,6 +715,7 @@ func TestTailerEvents(t *testing.T) {
 00:05.0 lead claude-opus-5-5 0 Agent Find callers ✗
 00:05.0 lead claude-opus-5-5 2 spawned implementer
 00:06.0 implementer claude-opus-5-5 0 Write old.go
+00:06.0 implementer claude-opus-5-5 0 Agent Review the diff (interrupted)
 00:06.0 implementer claude-opus-5-5 0 Edit x.go
 00:06.5 implementer claude-opus-5-5 0 NotebookEdit
 00:08.0 lead claude-opus-5-5 1 Waiting for the agents.
@@ -737,6 +738,43 @@ func TestTailerEvents(t *testing.T) {
 	}
 	if len(again.Events) != 0 {
 		t.Errorf("a poll without new lines repeated events:\n%s", fmtEvents(again.Events))
+	}
+}
+
+func TestTailerEventsWithoutResult(t *testing.T) {
+	user := func(ts, id string, isErr bool) string {
+		return fmt.Sprintf(`{"type":"user","timestamp":"2026-11-01T10:%sZ","message":{"content":[{"type":"tool_result","tool_use_id":"%s","is_error":%t}]}}`, ts, id, isErr)
+	}
+	text := func(ts string) string {
+		return `{"type":"assistant","timestamp":"2026-11-01T10:` + ts + `Z","message":{"id":"x` + ts + `","content":[{"type":"text","text":"moving on"}]}}`
+	}
+	tests := []struct {
+		name string
+		lead []string
+		want string
+	}{
+		{"a call the model moved on from is logged as interrupted",
+			[]string{toolLine("00:01", "Bash", `{"command":"make"}`), user("00:02", "other", false), text("00:03")},
+			"00:01.0 lead  0 Bash make (interrupted)\n00:03.0 lead  1 moving on\n"},
+		{"parallel calls whose results are on the way are not interrupted",
+			[]string{toolLine("00:01", "Read", `{}`), toolLine("00:02", "Grep", `{}`), user("00:03", "t00:01", false)},
+			"00:01.0 lead  0 Read\n"},
+		{"a call still running is not logged yet",
+			[]string{toolLine("00:01", "Bash", `{"command":"make"}`)}, ""},
+		{"a call whose result comes is logged once with its failure",
+			[]string{toolLine("00:01", "Bash", `{"command":"make"}`), user("00:02", "t00:01", true), text("00:03")},
+			"00:01.0 lead  0 Bash make ✗\n00:03.0 lead  1 moving on\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewTailer(writeSession(t, t.TempDir(), tt.lead, nil)).Poll()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s := fmtEvents(got.Events); s != tt.want {
+				t.Errorf("events =\n%s\nwant\n%s", s, tt.want)
+			}
+		})
 	}
 }
 

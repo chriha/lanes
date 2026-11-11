@@ -88,7 +88,7 @@ type Snapshot struct {
 type LogKind int
 
 const (
-	LogTool  LogKind = iota // a tool call, once its result is in: Text is the tool and its argument
+	LogTool  LogKind = iota // a tool call, once its result is in or the model went on without one (Text ends in "(interrupted)"): Text is the tool and its argument
 	LogText                 // an assistant text: Text is its first line
 	LogSpawn                // an agent started: Actor is its spawner, Text "spawned <name>"
 	LogDone                 // an agent finished: Text "done"
@@ -502,6 +502,7 @@ type transcript struct {
 	files        []touch     // the last MaxFiles distinct files touched, oldest first
 	seq          int         // counts the files touched, to order those with the same time
 	events       []LogEvent  // read since the last drain, without actor and model
+	userSince    bool        // a user line was read since the last new assistant message
 }
 
 type usage struct {
@@ -637,6 +638,7 @@ func (t *transcript) apply(line []byte, failed map[string]bool) {
 	}
 	var blocks []contentBlock
 	if l.Type == "user" {
+		t.userSince = true
 		var text string
 		if json.Unmarshal(l.Message.Content, &text) == nil {
 			t.noteBrief(text)
@@ -679,7 +681,11 @@ func (t *transcript) apply(line []byte, failed map[string]bool) {
 	if l.AdvisorModel != "" {
 		t.advisorModel = l.AdvisorModel
 	}
+	if _, known := t.msgs[m.ID]; m.ID != "" && !known && t.userSince {
+		t.abandon() // the model spoke again after the user line: the calls still pending get no result
+	}
 	if m.ID != "" {
+		t.userSince = false
 		// The newest line of a message has its newest usage: it replaces what earlier lines counted.
 		u, old := m.Usage, t.msgs[m.ID]
 		t.in += u.Input - old.Input
@@ -708,6 +714,16 @@ func (t *transcript) apply(line []byte, failed map[string]bool) {
 			}
 		}
 	}
+}
+
+// abandon logs the tool calls still without a result as interrupted: the model went on without them.
+func (t *transcript) abandon() {
+	for _, p := range t.pending {
+		if p.name != "" {
+			t.note(p.at, LogTool, strings.TrimSpace(p.name+" "+p.arg)+" (interrupted)", false)
+		}
+	}
+	t.pending = nil
 }
 
 // noteToolTime keeps the start time of a tool call and drops those older than ToolWindow before the newest line.

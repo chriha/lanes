@@ -31,6 +31,7 @@ type Thread struct {
 	File     string // "" for a thread not on a line of code
 	Line     int
 	Resolved bool
+	URL      string // web URL of the first comment; "" when the provider has none
 	Comments []Comment
 }
 

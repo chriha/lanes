@@ -207,7 +207,7 @@ func (m *Model) detailSections(w int) []string {
 		add(1, d.Description, sText)
 	}
 	if pl := d.Pipeline; pl != nil {
-		title(fmt.Sprintf("Pipeline #%s · %s · %s", pl.ID, pl.Status, pl.Duration.Round(time.Second)))
+		title(pipelineTitle(pl))
 		var stages []string
 		jobs := map[string][]item.Job{}
 		for _, j := range pl.Jobs {
@@ -370,4 +370,19 @@ func (m *Model) detailLines() []string {
 		}
 	}
 	return append(out, m.detailSections(w)...)
+}
+
+// pipelineTitle is the Pipeline section title, built from the parts the provider knows.
+func pipelineTitle(pl *item.Pipeline) string {
+	t := "Pipeline"
+	if pl.ID != "" {
+		t += " #" + pl.ID
+	}
+	if pl.Status != "" {
+		t += " · " + pl.Status
+	}
+	if d := pl.Duration.Round(time.Second); d > 0 {
+		t += " · " + d.String()
+	}
+	return t
 }

@@ -663,3 +663,28 @@ func TestDetailThreadsKeep(t *testing.T) {
 		t.Errorf("folding lost on refresh, want the resolved thread still unfolded:\n%s", s)
 	}
 }
+
+func TestPipelineTitle(t *testing.T) {
+	tests := []struct {
+		name string
+		pl   item.Pipeline
+		want string
+	}{
+		{"jobs only", item.Pipeline{Jobs: []item.Job{{Name: "ci"}}}, "Pipeline"},
+		{"id only", item.Pipeline{ID: "123"}, "Pipeline #123"},
+		{"status only", item.Pipeline{Status: "failed"}, "Pipeline · failed"},
+		{"duration only", item.Pipeline{Duration: 2*time.Minute + 3*time.Second}, "Pipeline · 2m3s"},
+		{"id and status", item.Pipeline{ID: "123", Status: "failed"}, "Pipeline #123 · failed"},
+		{"id and duration", item.Pipeline{ID: "123", Duration: time.Minute}, "Pipeline #123 · 1m0s"},
+		{"status and duration", item.Pipeline{Status: "failed", Duration: time.Minute}, "Pipeline · failed · 1m0s"},
+		{"all", item.Pipeline{ID: "123", Status: "failed", Duration: 2*time.Minute + 3*time.Second}, "Pipeline #123 · failed · 2m3s"},
+		{"sub-second duration is unknown", item.Pipeline{ID: "1", Duration: 400 * time.Millisecond}, "Pipeline #1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := pipelineTitle(&tt.pl); got != tt.want {
+				t.Errorf("pipelineTitle = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

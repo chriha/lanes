@@ -97,11 +97,16 @@ func (m *Model) detailSections(w int) []string {
 	}
 	title := func(t string) { out = append(out, "", " "+sTitle.Render(t)) }
 	now := time.Now()
+	// by is a comment's author and age, leaving out what is unknown
 	by := func(c item.Comment) string {
-		if c.Created.IsZero() {
-			return c.Author
+		parts := []string{}
+		if c.Author != "" {
+			parts = append(parts, c.Author)
 		}
-		return c.Author + " · " + age(now.Sub(c.Created))
+		if !c.Created.IsZero() {
+			parts = append(parts, age(max(now.Sub(c.Created), 0)))
+		}
+		return strings.Join(parts, " · ")
 	}
 	d := e.d
 	if d.Description != "" {
@@ -119,13 +124,21 @@ func (m *Model) detailSections(w int) []string {
 			jobs[j.Stage] = append(jobs[j.Stage], j)
 		}
 		for _, st := range stages {
-			add(1, st, sDim)
+			ind := 1 // jobs without a stage (GitHub checks) go without a stage line
+			if st != "" {
+				add(1, st, sDim)
+				ind = 3
+			}
 			for _, j := range jobs[st] {
 				icon, ok := jobIcons[j.Status]
 				if !ok {
 					icon = "·"
 				}
-				add(3, icon+" "+j.Name+"  "+sDim.Render(j.Duration.Round(time.Second).String()), sText)
+				l := sText.Render(icon + " " + j.Name)
+				if j.Duration > 0 {
+					l += "  " + sDim.Render(j.Duration.Round(time.Second).String())
+				}
+				add(ind, l, lipgloss.NewStyle())
 			}
 		}
 	}

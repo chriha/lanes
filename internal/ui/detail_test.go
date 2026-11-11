@@ -435,4 +435,22 @@ func TestDetailSections(t *testing.T) {
 	inOrder("open thread", "open · main.go:12 · ann · 2h", "why?", "bob", "because")
 	inOrder("resolved thread", "resolved · cy · 2h", "done")
 	inOrder("comments newest last", "Comments", "early", "first", "late", "second")
+
+	// GitHub checks have no stage and may have no duration; a comment may lack an author
+	d = item.Detail{
+		Pipeline: &item.Pipeline{ID: "9", Status: "running", Jobs: []item.Job{{Name: "ci", Status: "running"}}},
+		Comments: []item.Comment{{Body: "anon", Created: ago}},
+	}
+	m = detailModel(t, &detailProv{d: d})
+	_, cmd = m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	m.Update(cmd())
+	lines := strings.Split(screenText(m), "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(l, "Pipeline #9") && (i+1 >= len(lines) || lines[i+1] != "● ci") {
+			t.Errorf("stageless job: want \"● ci\" right under the title, got:\n%s", strings.Join(lines, "\n"))
+		}
+		if strings.HasPrefix(l, "·") {
+			t.Errorf("dangling separator in %q", l)
+		}
+	}
 }

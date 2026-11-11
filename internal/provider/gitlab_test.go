@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chriha/lanes/internal/filter"
 	"github.com/chriha/lanes/internal/item"
@@ -276,5 +277,110 @@ func TestGitLabCIJobs(t *testing.T) {
 				t.Errorf("ci_jobs = %#v, want %#v", got, tc.want)
 			}
 		})
+	}
+}
+
+const glDetailResponse = `{"data":{"project":{"mergeRequest":{
+ "description":"Fixes the thing.",
+ "headPipeline":{"id":"gid://gitlab/Ci::Pipeline/4711","status":"FAILED","duration":125,"jobs":{"nodes":[
+  {"name":"build","status":"SUCCESS","duration":30,"allowFailure":false,"stage":{"name":"build"}},
+  {"name":"lint","status":"FAILED","duration":12,"allowFailure":false,"stage":{"name":"test"}},
+  {"name":"e2e","status":"FAILED","duration":null,"allowFailure":true,"stage":{"name":"test"}}]}},
+ "discussions":{"nodes":[
+  {"resolvable":true,"resolved":false,"notes":{"nodes":[
+   {"body":"why?","system":false,"createdAt":"2026-11-01T10:00:00Z","author":{"username":"alex"},"position":{"filePath":"a.go","newLine":12,"oldLine":10}},
+   {"body":"because","system":false,"createdAt":"2026-11-01T11:00:00Z","author":{"username":"me"},"position":{"filePath":"a.go","newLine":12,"oldLine":10}}]}},
+  {"resolvable":true,"resolved":true,"notes":{"nodes":[
+   {"body":"removed line","system":false,"createdAt":"2026-11-02T10:00:00Z","author":{"username":"alex"},"position":{"filePath":"b.go","newLine":null,"oldLine":7}}]}},
+  {"resolvable":true,"resolved":false,"notes":{"nodes":[
+   {"body":"general thread","system":false,"createdAt":"2026-11-03T10:00:00Z","author":{"username":"kim"},"position":null}]}},
+  {"resolvable":false,"resolved":false,"notes":{"nodes":[
+   {"body":"added 1 commit","system":true,"createdAt":"2026-11-03T12:00:00Z","author":{"username":"me"},"position":null}]}},
+  {"resolvable":false,"resolved":false,"notes":{"nodes":[
+   {"body":"looks good","system":false,"createdAt":"2026-11-04T10:00:00Z","author":{"username":"kim"},"position":null}]}}]}
+}}}}`
+
+func TestGitLabDetail(t *testing.T) {
+	at := func(s string) time.Time {
+		tm, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tm
+	}
+	want := item.Detail{
+		Description: "Fixes the thing.",
+		Pipeline: &item.Pipeline{ID: "4711", Status: "failed", Duration: 125 * time.Second, Jobs: []item.Job{
+			{Name: "build", Stage: "build", Status: "success", Duration: 30 * time.Second},
+			{Name: "lint", Stage: "test", Status: "failed", Duration: 12 * time.Second},
+			{Name: "e2e", Stage: "test", Status: "warning"},
+		}},
+		Threads: []item.Thread{
+			{File: "a.go", Line: 12, Comments: []item.Comment{
+				{Author: "alex", Body: "why?", Created: at("2026-11-01T10:00:00Z")},
+				{Author: "me", Body: "because", Created: at("2026-11-01T11:00:00Z")},
+			}},
+			{File: "b.go", Line: 7, Resolved: true, Comments: []item.Comment{
+				{Author: "alex", Body: "removed line", Created: at("2026-11-02T10:00:00Z")},
+			}},
+			{Comments: []item.Comment{{Author: "kim", Body: "general thread", Created: at("2026-11-03T10:00:00Z")}}},
+		},
+		Comments: []item.Comment{{Author: "kim", Body: "looks good", Created: at("2026-11-04T10:00:00Z")}},
+	}
+	for _, tc := range []struct {
+		name    string
+		it      item.Item
+		resp    string
+		runErr  error
+		want    *item.Detail
+		wantErr string
+		wantIID string
+	}{
+		{"full MR", item.Item{ID: "!7", Fields: map[string]any{"iid": "7"}}, glDetailResponse, nil, &want, "", `iid:"7"`},
+		{"iid from the id", item.Item{ID: "!8"}, `{"data":{"project":{"mergeRequest":{"description":"d","headPipeline":null,"discussions":{"nodes":[]}}}}}`,
+			nil, &item.Detail{Description: "d"}, "", `iid:"8"`},
+		{"bad iid", item.Item{ID: "!x\"y"}, glDetailResponse, nil, nil, "bad merge request iid", ""},
+		{"run fails", item.Item{ID: "!7"}, "", errors.New("boom"), nil, "glab: boom", ""},
+		{"graphql error", item.Item{ID: "!7"}, `{"errors":[{"message":"nope"}]}`, nil, nil, "gitlab: nope", ""},
+		{"MR missing", item.Item{ID: "!7"}, `{"data":{"project":{"mergeRequest":null}}}`, nil, nil, "not found", ""},
+		{"project missing", item.Item{ID: "!7"}, `{"data":{"project":null}}`, nil, nil, "not found", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &countingGlab{base: tc.resp, threads: tc.resp}
+			run := c.run
+			if tc.runErr != nil {
+				run = fakeGlab("", "", tc.runErr)
+			}
+			g := &GitLab{Project: "g/p", Run: run}
+			got, err := g.Detail(context.Background(), tc.it)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want containing %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, *tc.want) {
+				t.Errorf("detail =\n%+v\nwant\n%+v", got, *tc.want)
+			}
+			if len(c.queries) != 1 || !strings.Contains(c.queries[0], tc.wantIID) {
+				t.Errorf("queries = %v, want one for %s", c.queries, tc.wantIID)
+			}
+		})
+	}
+}
+
+func TestGitLabListPollFetchesNoDetail(t *testing.T) {
+	c := &countingGlab{base: glBaseResponse, threads: glThreadsResponse}
+	g := &GitLab{Project: "g/p", Run: c.run}
+	if _, err := g.Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range c.queries {
+		if strings.Contains(q, "description") || strings.Contains(q, "body") {
+			t.Errorf("list poll query fetches detail data: %s", q)
+		}
 	}
 }

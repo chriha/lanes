@@ -168,3 +168,13 @@ func (m *Model) previewSessions(it item.Item) []string {
 	}
 	return out
 }
+
+// lastRun is the preview's last-run text for an item's newest history event: action, duration, tokens and outcome
+// joined by " · ", leaving out the parts the event lacks.
+func lastRun(e history.Event) string { return "" }
+
+// runDur is a session's or run's duration in seconds: 42s, 14m, 1h05m.
+func runDur(sec int64) string { return "" }
+
+// tokenCount is a compact token count: 850, 12k, 2.1M.
+func tokenCount(n int) string { return "" }

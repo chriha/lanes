@@ -388,7 +388,7 @@ func useSelection(t *testing.T, hex string) {
 	t.Cleanup(func() { applyTheme(config.Theme{}) })
 }
 
-// TestSelectionHighlight covers the default (reverse video, no hex background) against a configured selection
+// TestSelectionHighlight covers the default (muted background, no reverse video) against a configured selection
 // for the list row, the session row, the active tab and its attention badge.
 func TestSelectionHighlight(t *testing.T) {
 	prev := lipgloss.ColorProfile()
@@ -426,8 +426,8 @@ func TestSelectionHighlight(t *testing.T) {
 			t.Run(name+"/selection="+sel, func(t *testing.T) {
 				got := render(t, sel)
 				if sel == "" {
-					if !strings.Contains(got, reverse) || strings.Contains(got, "48;") {
-						t.Errorf("default = %q, want reverse video and no background", got)
+					if !strings.Contains(got, "48;") || strings.Contains(got, reverse) {
+						t.Errorf("default = %q, want a muted background and no reverse video", got)
 					}
 					return
 				}

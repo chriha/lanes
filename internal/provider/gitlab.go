@@ -283,13 +283,14 @@ const gqlDetailFmt = `query($p:ID!){
     description
     headPipeline{id status duration jobs(first:100){nodes{name status duration allowFailure stage{name}}}}
     discussions(first:100){nodes{resolvable resolved
-      notes(first:100){nodes{body system createdAt author{username} position{filePath newLine oldLine}}}}}
+      notes(first:100){nodes{body system url createdAt author{username} position{filePath newLine oldLine}}}}}
   }}
 }`
 
 type gqlNote struct {
 	Body      string
 	System    bool
+	URL       string
 	CreatedAt time.Time
 	Author    user
 	Position  *struct {
@@ -380,11 +381,13 @@ func (g *GitLab) Detail(ctx context.Context, it item.Item) (item.Detail, error) 
 			continue
 		}
 		th := item.Thread{Resolved: disc.Resolved, Comments: cs}
-		if ns := disc.Notes.Nodes; len(ns) > 0 && ns[0].Position != nil {
-			pos := ns[0].Position
-			th.File, th.Line = pos.FilePath, pos.NewLine
-			if th.Line == 0 {
-				th.Line = pos.OldLine
+		if ns := disc.Notes.Nodes; len(ns) > 0 {
+			th.URL = ns[0].URL
+			if pos := ns[0].Position; pos != nil {
+				th.File, th.Line = pos.FilePath, pos.NewLine
+				if th.Line == 0 {
+					th.Line = pos.OldLine
+				}
 			}
 		}
 		d.Threads = append(d.Threads, th)

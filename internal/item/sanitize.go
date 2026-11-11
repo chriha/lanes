@@ -63,7 +63,7 @@ func clean(s string) string {
 }
 
 // SanitizeDetail returns d with terminal control characters removed from every string it carries (description,
-// pipeline and job strings, thread files, comment authors and bodies). Like Sanitize, it treats provider data as
+// pipeline and job strings, thread files and URLs, comment authors and bodies). Like Sanitize, it treats provider data as
 // untrusted. Descriptions and bodies keep their newlines so paragraphs survive; every other string is cleaned as
 // by Sanitize. d is not modified.
 func SanitizeDetail(d Detail) Detail {
@@ -83,7 +83,7 @@ func SanitizeDetail(d Detail) Detail {
 	if d.Threads != nil {
 		ths := make([]Thread, len(d.Threads))
 		for i, th := range d.Threads {
-			th.File = clean(th.File)
+			th.File, th.URL = clean(th.File), clean(th.URL)
 			th.Comments = cleanComments(th.Comments)
 			ths[i] = th
 		}

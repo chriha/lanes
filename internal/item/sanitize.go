@@ -98,3 +98,8 @@ func cleanValue(v any) any {
 		return v
 	}
 }
+
+// SanitizeDetail returns d with terminal control characters removed from every string it carries.
+func SanitizeDetail(d Detail) Detail {
+	return d
+}

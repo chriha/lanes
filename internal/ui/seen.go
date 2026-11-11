@@ -94,8 +94,8 @@ func (m *Model) toggleRead() {
 		allUnread = allUnread && m.unread[it.ID]
 	}
 	if allUnread {
-		m.markRead(ts...)
 		m.say(lvInfo, "read "+targetsLabel(ids))
+		m.markRead(ts...) // a save error replaces the notice
 	} else {
 		if err := m.seen.MarkUnread(ids...); err != nil {
 			m.say(lvErr, "saving seen items: "+err.Error())

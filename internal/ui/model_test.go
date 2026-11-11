@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -416,7 +417,8 @@ func TestSelectionHighlight(t *testing.T) {
 			useSelection(t, sel)
 			m.views[0].items = []item.Item{{ID: "1", Title: "a"}}
 			m.sessByItem[session.Key("1")] = []session.Info{{Name: "a~1", ItemKey: "1", Claude: "asking"}}
-			return m.header()
+			// only the count's own segment: the tab label around it is styled by sTabOn
+			return regexp.MustCompile(`\x1b\[[0-9;]*m1\x1b\[0m`).FindString(m.header())
 		},
 	}
 	for name, render := range surfaces {

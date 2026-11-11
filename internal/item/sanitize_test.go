@@ -111,7 +111,7 @@ func TestSanitizeDetail(t *testing.T) {
 			Jobs: []Job{{Name: dirty, Stage: dirty, Status: dirty, Duration: 5}},
 		},
 		Threads: []Thread{{
-			File: dirty + "\n", Line: 4, Resolved: true,
+			File: dirty + "\n", Line: 4, Resolved: true, URL: "https://h/" + dirty,
 			Comments: []Comment{{Author: dirty + "\t", Body: "b\n" + dirty}},
 		}},
 		Comments: []Comment{{Author: dirty, Body: dirty}},
@@ -123,7 +123,7 @@ func TestSanitizeDetail(t *testing.T) {
 			Jobs: []Job{{Name: clean, Stage: clean, Status: clean, Duration: 5}},
 		},
 		Threads: []Thread{{
-			File: clean + " ", Line: 4, Resolved: true,
+			File: clean + " ", Line: 4, Resolved: true, URL: "https://h/" + clean,
 			Comments: []Comment{{Author: clean + " ", Body: "b\n" + clean}},
 		}},
 		Comments: []Comment{{Author: clean, Body: clean}},

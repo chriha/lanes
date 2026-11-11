@@ -83,7 +83,7 @@ func SanitizeDetail(d Detail) Detail {
 	if d.Threads != nil {
 		ths := make([]Thread, len(d.Threads))
 		for i, th := range d.Threads {
-			th.File = clean(th.File)
+			th.File, th.URL = clean(th.File), clean(th.URL)
 			th.Comments = cleanComments(th.Comments)
 			ths[i] = th
 		}

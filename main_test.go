@@ -100,7 +100,7 @@ func fakeEnv(dir string, tty, yes bool, calls *[]string) (env, *bytes.Buffer, *b
 			rec("init")
 			return 0
 		},
-		tui: func(update.Checker, string) int { rec("tui"); return 0 },
+		tui: func(string, func() (update.Checker, string)) int { rec("tui"); return 0 },
 	}, &stdout, &stderr
 }
 
@@ -602,8 +602,9 @@ func TestRunChecksUpdatesOnlyInTUI(t *testing.T) {
 			e.version = "v1.0.0"
 			var got *update.Checker
 			var upgrade string
-			e.tui = func(c update.Checker, u string) int {
+			e.tui = func(_ string, ready func() (update.Checker, string)) int {
 				calls = append(calls, "tui")
+				c, u := ready()
 				got, upgrade = &c, u
 				return 0
 			}

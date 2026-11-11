@@ -70,7 +70,8 @@ func main() {
 	}))
 }
 
-func runTUI(updates update.Checker, upgrade string) int {
+func runTUI(root string, ready func() (update.Checker, string)) int {
+	updates, upgrade := ready()
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)
@@ -119,8 +120,8 @@ type env struct {
 	hook           func(event string)
 	status         func()
 	doctor         func() int
-	init           func() int                                       // writes .lanes.toml
-	tui            func(updates update.Checker, upgrade string) int // loads the config and runs the TUI
+	init           func() int                                                   // writes .lanes.toml
+	tui            func(root string, ready func() (update.Checker, string)) int // loads the config and runs the TUI
 }
 
 // updates is the release checker of the current project; call it after initApp, which scopes the cache dir.
@@ -207,7 +208,7 @@ func run(args []string, e env) int {
 		}
 		return code
 	}
-	return e.tui(e.updates(), e.upgrade())
+	return e.tui(root, func() (update.Checker, string) { return e.updates(), e.upgrade() })
 }
 
 // printUpdateHint prints the newer release the last check found, from the cache only: it never asks the network.

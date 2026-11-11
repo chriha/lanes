@@ -45,6 +45,7 @@ you what each session is doing (running, working, asking a question, waiting for
   - [Templates](#templates)
   - [Running on many items](#running-on-many-items)
   - [Restricting actions (`when`)](#restricting-actions-when)
+  - [Chaining actions (`on_success`, `on_failure`)](#chaining-actions-on_success-on_failure)
   - [Sessions: jump, close, status](#sessions-jump-close-status)
   - [Claude Code integration](#claude-code-integration)
   - [Agent view](#agent-view)
@@ -498,6 +499,8 @@ Every action accepts:
 | `refresh` | `false`   | `run` type only: refetch the lists when the command finishes                         |
 | `when`    | none      | [filter expression](#filters); the action runs only on items it matches (see [below](#restricting-actions-when)) |
 | `jump`    | `false`   | `session` type only: on a single item, attach to the session once it has started (see [below](#session-actions)) |
+| `on_success` | none   | action to start on the same item when this one exits 0 (see [below](#chaining-actions-on_success-on_failure)) |
+| `on_failure` | none   | action to start on the same item when this one exits non-zero                        |
 
 ### Session actions
 
@@ -629,6 +632,31 @@ provider sets it in its fields, if at all).
 - The help screen (`?`) lists only the actions that match the item under the cursor.
 - An invalid expression fails config load, naming the action. An expression that fails on one item (for example
   a type mismatch) counts as no match; the error is shown in the footer.
+
+### Chaining actions (`on_success`, `on_failure`)
+
+`on_success` and `on_failure` name another action that lanes starts on the **same item** when this one ends:
+exit 0 starts `on_success`, any other exit `on_failure`.
+
+```toml
+[action.work]
+run        = 'claude --settings {{.settings}} -p "/harness:work {{.number}}"'
+on_success = "review"
+on_failure = "fix"
+```
+
+- A session action chains when lanes sees its session's command exit. An interactive `claude` session chains
+  when you quit Claude, not when it stops to ask; `claude -p` and scripts chain when they finish. A session that
+  ends while lanes is not running is never seen ending, so it starts nothing.
+- A run action chains per item: in a multi-item run each item starts the follow-up for its own outcome. After a
+  `refresh = true` run the follow-up starts right away; it does not wait for the refetch.
+- Sessions closed with `x` or interrupted with `X` start nothing.
+- The follow-up goes through the normal start path, without asking and without jumping in: its `when` is honoured,
+  and an item that is busy, already running it or no longer listed is skipped with a notice. Your marks stay.
+- The footer says `work finished on #5 → starting review` (or `work failed on #5 → …`); the item history records
+  the follow-up's `started` as usual.
+- Config load fails on an action name that does not exist, on a follow-up with `confirm = "single"` (lanes never
+  asks out of the blue) and on a chain that loops back (`work → review → work`).
 
 ### Sessions: jump, close, status
 

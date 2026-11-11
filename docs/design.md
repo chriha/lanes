@@ -47,6 +47,11 @@ an env var).
   - `when`: optional filter expression evaluated per item (compiled at config load); items that don't match are
     skipped with a notice, and the help screen lists only actions matching the cursor item. Items carry a `kind`
     field (`pr` from gitlab/github, `ticket` from github-issues/linear) to scope actions by item type.
+  - `on_success` / `on_failure`: an action started on the same item when this one's session or run exits 0 /
+    non-zero. Sessions chain on the death seen in the session poll (`onSessions`), runs per item on the run's
+    `doneMsg` (a refresh run's chained items skip the refetch hold); both go through `chain` and the normal start
+    path (`when`, busy, already running), never confirm or jump. Killed and interrupted sessions start nothing.
+    Config load rejects unknown targets, `confirm = "single"` targets and cycles.
 - **Session** — tmux session on dedicated socket (`tmux -L <Name>`), one per (action, item). Never touches the
   user's own tmux server. `remain-on-exit` keeps exit status.
 - **Status** — session: `running | exited(0) | failed(n)`. Claude sessions additionally:

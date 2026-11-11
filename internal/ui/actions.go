@@ -38,6 +38,8 @@ type doneMsg struct {
 	keys    []string // items the action ran on; their busy lock ends here (or after the refetch)
 	ok      bool     // every job succeeded
 	jump    string   // session to attach to once the start has succeeded
+	action  string   // run actions: the action that ran, for its on_success / on_failure
+	exits   []int    // run actions: exit code per item, in the order of keys
 }
 
 // busyState locks an item while an action on it starts or runs, and after a successful refresh run
@@ -115,11 +117,7 @@ func (m *Model) onSessions(msg sessionsMsg) tea.Cmd {
 // chain starts, on the item with key, the follow-up of action for exit (0 → on_success, else on_failure) through
 // the normal start path, and says so in the footer. Marks are kept and the follow-up never jumps.
 func (m *Model) chain(action, key string, exit int) tea.Cmd {
-	act := m.cfg.Action[action]
-	next, ev := act.OnSuccess, "finished"
-	if exit != 0 {
-		next, ev = act.OnFailure, "failed"
-	}
+	next, ev := followUp(m.cfg.Action[action], exit)
 	if next == "" {
 		return nil
 	}
@@ -147,6 +145,14 @@ func (m *Model) chain(action, key string, exit int) tea.Cmd {
 		m.notice = prefix + next + ": " + strings.TrimPrefix(m.notice, next+": ")
 	}
 	return cmd
+}
+
+// followUp names the action act chains to for exit (0 → on_success, else on_failure) and the outcome's history event.
+func followUp(act config.Action, exit int) (next, ev string) {
+	if exit != 0 {
+		return act.OnFailure, "failed"
+	}
+	return act.OnSuccess, "finished"
 }
 
 // clock is the time source for history durations; tests replace it.
@@ -553,6 +559,7 @@ func (m *Model) executeRun(action string, jobs []job, refresh bool, busy int, sk
 	}
 	return func() tea.Msg {
 		fails := make([]string, len(jobs))
+		exits := make([]int, len(jobs))
 		var wg sync.WaitGroup
 		for i, j := range jobs {
 			wg.Add(1)
@@ -574,6 +581,7 @@ func (m *Model) executeRun(action string, jobs []job, refresh bool, busy int, sk
 					code = ee.ExitCode()
 				}
 				history.Append(history.Event{Item: j.itemKey, Action: action, Event: "failed", Exit: code, Dur: dur})
+				exits[i] = code
 				fails[i] = j.label + ": " + lastLine(string(out), err)
 			}()
 		}
@@ -599,7 +607,7 @@ func (m *Model) executeRun(action string, jobs []job, refresh bool, busy int, sk
 		if len(bad) > 0 {
 			lv = lvErr
 		}
-		return doneMsg{notice: note, level: lv, refresh: refresh, keys: keys, ok: len(bad) == 0}
+		return doneMsg{notice: note, level: lv, refresh: refresh, keys: keys, ok: len(bad) == 0, action: action, exits: exits}
 	}
 }
 

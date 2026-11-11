@@ -50,8 +50,8 @@ func Hash(path string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-// HashRoot is the hex SHA-256 over every .lanes.toml under root (relative path and content, in path order), or ""
-// when there is none. Unlike Hash of the cwd's nearest file it does not depend on where lanes was started, so one
+// HashRoot is the hex SHA-256 over every .lanes.toml under root and in its parents up to home (relative
+// path and content, in path order), or "" when there is none. Unlike Hash of the cwd's nearest file it does not depend on where lanes was started, so one
 // trust entry covers every cwd in the root, and a change to any of those files still changes the hash.
 func HashRoot(root string) (string, error) {
 	var files []string
@@ -72,6 +72,19 @@ func HashRoot(root string) (string, error) {
 	})
 	if err != nil {
 		return "", err
+	}
+	// config.ProjectPath also loads a file above root (it searches up to home), so hash those too.
+	home, _ := os.UserHomeDir()
+	for d := root; d != home; {
+		parent := filepath.Dir(d)
+		if parent == d {
+			break
+		}
+		d = parent
+		p := filepath.Join(d, ".lanes.toml")
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			files = append(files, p)
+		}
 	}
 	if len(files) == 0 {
 		return "", nil

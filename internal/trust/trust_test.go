@@ -343,3 +343,43 @@ func TestUntrustCorruptStore(t *testing.T) {
 		t.Errorf("corrupt trust.json was overwritten: %q", b)
 	}
 }
+
+// A .lanes.toml above the root is loaded by config.ProjectPath (it searches up to home), so it must be hashed.
+func TestHashRootCoversAncestors(t *testing.T) {
+	outer := t.TempDir()
+	home := filepath.Join(outer, "home")
+	t.Setenv("HOME", home)
+	above := filepath.Join(home, "work")
+	root := filepath.Join(above, "repo")
+	mustMkdir(t, filepath.Join(root, ".git"))
+	mustWrite(t, filepath.Join(root, ".lanes.toml"), "a = 1\n")
+	before, err := HashRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name, path string
+		wantDiff   bool
+	}{
+		{"parent of root", filepath.Join(above, ".lanes.toml"), true},
+		{"home itself", filepath.Join(home, ".lanes.toml"), true},
+		{"beyond home", filepath.Join(outer, ".lanes.toml"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mustWrite(t, tc.path, "x = 1\n")
+			defer os.Remove(tc.path)
+			h1, err := HashRoot(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (h1 != before) != tc.wantDiff {
+				t.Fatalf("hash changed = %v, want %v", h1 != before, tc.wantDiff)
+			}
+			mustWrite(t, tc.path, "x = 2\n")
+			if h2, _ := HashRoot(root); (h2 != h1) != tc.wantDiff {
+				t.Errorf("editing it changed the hash = %v, want %v", h2 != h1, tc.wantDiff)
+			}
+		})
+	}
+}

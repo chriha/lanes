@@ -6,7 +6,9 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/chriha/lanes/internal/history"
 	"github.com/chriha/lanes/internal/item"
+	"github.com/chriha/lanes/internal/session"
 )
 
 func TestPreviewCIJobs(t *testing.T) {
@@ -113,4 +115,77 @@ func TestPreviewKeepsCIJobsInCrowdedPane(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLastRun(t *testing.T) {
+	tok := &history.Tokens{Input: 100_000, CacheWrite: 1_000_000, CacheRead: 9_000_000, Output: 1_000_000}
+	tests := []struct {
+		name string
+		e    history.Event
+		want string
+	}{
+		{"claude session finished", history.Event{Action: "work", Event: "finished", Dur: 14 * 60, Tokens: tok}, "work · 14m · 2.1M tok · ✓"},
+		{"run failed", history.Event{Action: "fix", Event: "failed", Exit: 1, Dur: 42}, "fix · 42s · ✗ 1"},
+		{"failed without an exit code", history.Event{Action: "fix", Event: "failed"}, "fix · ✗"},
+		{"killed", history.Event{Action: "work", Event: "killed", Dur: 3900}, "work · 1h05m · killed"},
+		{"interrupted", history.Event{Action: "work", Event: "interrupted", Dur: 5}, "work · 5s · interrupted"},
+		{"started has no duration", history.Event{Action: "work", Event: "started"}, "work · started"},
+		{"old line without dur or tokens", history.Event{Action: "work", Event: "finished"}, "work · ✓"},
+		{"zero tokens left out", history.Event{Action: "work", Event: "finished", Dur: 60, Tokens: &history.Tokens{CacheRead: 500}}, "work · 1m · ✓"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := lastRun(tt.e); got != tt.want {
+				t.Errorf("lastRun() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunDur(t *testing.T) {
+	tests := []struct {
+		sec  int64
+		want string
+	}{
+		{0, "0s"}, {42, "42s"}, {59, "59s"}, {60, "1m"}, {14*60 + 59, "14m"}, {3599, "59m"},
+		{3600, "1h00m"}, {3900, "1h05m"}, {26 * 3600, "26h00m"},
+	}
+	for _, tt := range tests {
+		if got := runDur(tt.sec); got != tt.want {
+			t.Errorf("runDur(%d) = %q, want %q", tt.sec, got, tt.want)
+		}
+	}
+}
+
+func TestTokenCount(t *testing.T) {
+	tests := []struct {
+		n    int
+		want string
+	}{
+		{0, "0"}, {850, "850"}, {999, "999"}, {1000, "1k"}, {1_250, "1.2k"}, {12_345, "12k"}, {999_999, "999k"},
+		{1_000_000, "1M"}, {2_150_000, "2.1M"}, {12_900_000, "12M"},
+	}
+	for _, tt := range tests {
+		if got := tokenCount(tt.n); got != tt.want {
+			t.Errorf("tokenCount(%d) = %q, want %q", tt.n, got, tt.want)
+		}
+	}
+}
+
+func TestPreviewLastRunLine(t *testing.T) {
+	m := newNotesModel(t)
+	m.width = 120
+	m.data["p"] = []item.Item{{ID: "a", Fields: map[string]any{"number": 7}}}
+	m.rebuild()
+	history.Append(history.Event{Item: session.Key("a"), Action: "work", Event: "started"})
+	history.Append(history.Event{Item: session.Key("a"), Action: "work", Event: "finished", Dur: 840, Tokens: &history.Tokens{Input: 12_000, Output: 500}})
+	for _, l := range strings.Split(ansi.Strip(m.preview()), "\n") {
+		if l = strings.TrimSpace(l); strings.HasPrefix(l, "last run") {
+			if want := "last run    work · 14m · 12k tok · ✓"; l != want {
+				t.Errorf("last run line = %q, want %q", l, want)
+			}
+			return
+		}
+	}
+	t.Fatal("preview has no last run line")
 }

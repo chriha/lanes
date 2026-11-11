@@ -174,7 +174,7 @@ const projectTail = `
 # info = "#60A5FA"
 # text = "#E6E8EE"
 # dim = "#6B7280"
-# selection = "#3A3560"
+# selection = "#3A3560"   # selected row/tab background; unset: reverse video, follows the terminal
 # labels = { bug = "#F87171", needs-info = "#FBBF24" }  # preview label colors by name, case-insensitive
 # [theme.light]        # same color keys, light mode only; they win over the flat [theme] keys
 # accent = "#6C3FD1"

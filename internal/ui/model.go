@@ -1199,7 +1199,7 @@ func (m *Model) header() string {
 			// the count carries its own style; the active tab's background must reach it
 			cs := badgeStyle("warn")
 			if i == m.cur {
-				cs = cs.Background(cSelBg)
+				cs = selectStyle(cs, false)
 			}
 			tabs = append(tabs, st.PaddingRight(0).Render(label+" ")+cs.Render(fmt.Sprint(n))+st.PaddingLeft(0).Render(""))
 			continue
@@ -1325,7 +1325,7 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	// every segment carries its own background: a nested style's reset would otherwise end the highlight
 	st := func(s lipgloss.Style) lipgloss.Style {
 		if selected {
-			return s.Background(cSelBg)
+			return selectStyle(s, false)
 		}
 		return s
 	}

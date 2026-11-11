@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/chriha/lanes/internal/cache"
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/item"
+	"github.com/chriha/lanes/internal/session"
 )
 
 func mkItems(ids ...string) []item.Item {
@@ -367,14 +369,73 @@ func TestRowAuthorKeepsDimOnSelection(t *testing.T) {
 	lipgloss.SetColorProfile(0) // termenv.TrueColor: render the colors the test compares
 	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
 	m := newNotesModel(t)
+	useSelection(t, "#112233") // after New, which applies the config's theme
 	m.width = 80
 	it := item.Item{ID: "!1", Title: "fix it", Author: "alice", Fields: map[string]any{}}
-	want := sDim.Background(cSelBg).Render("alice")
+	want := sDim.Background(lipgloss.Color("#112233")).Render("alice")
 	if want == "alice" {
 		t.Fatal("test needs a color profile: styles rendered plain")
 	}
 	if got := m.row(it, true, 7); !strings.Contains(got, want) {
 		t.Errorf("selected row = %q, want dim author with selection background %q", got, want)
+	}
+}
+
+// useSelection configures the selection color for one test and restores the default theme afterwards.
+func useSelection(t *testing.T, hex string) {
+	t.Helper()
+	applyTheme(config.Theme{Colors: config.Colors{Selection: hex}})
+	t.Cleanup(func() { applyTheme(config.Theme{}) })
+}
+
+// TestSelectionHighlight covers the default (reverse video, no hex background) against a configured selection
+// for the list row, the session row, the active tab and its attention badge.
+func TestSelectionHighlight(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0) // termenv.TrueColor: render the colors the test compares
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+	const reverse, hexBg = "\x1b[7", "48;2;17;34;51"
+	surfaces := map[string]func(t *testing.T, sel string) string{
+		"list row": func(t *testing.T, sel string) string {
+			m := newNotesModel(t)
+			useSelection(t, sel)
+			m.width = 80
+			return m.row(item.Item{ID: "!1", Title: "fix it", Author: "alice", Fields: map[string]any{}}, true, 7)
+		},
+		"session row": func(t *testing.T, sel string) string {
+			useSelection(t, sel)
+			m := sessModel(t, session.Info{Name: "a~1", ItemKey: "1", Created: time.Now().Add(-time.Hour)})
+			return strings.Split(m.sessionsView(), "\n")[2]
+		},
+		"active tab": func(t *testing.T, sel string) string {
+			m := newBackoffModel(t)
+			useSelection(t, sel)
+			return m.header()
+		},
+		"tab badge": func(t *testing.T, sel string) string {
+			m := newBackoffModel(t)
+			useSelection(t, sel)
+			m.views[0].items = []item.Item{{ID: "1", Title: "a"}}
+			m.sessByItem[session.Key("1")] = []session.Info{{Name: "a~1", ItemKey: "1", Claude: "asking"}}
+			// only the count's own segment: the tab label around it is styled by sTabOn
+			return regexp.MustCompile(`\x1b\[[0-9;]*m1\x1b\[0m`).FindString(m.header())
+		},
+	}
+	for name, render := range surfaces {
+		for _, sel := range []string{"", "#112233"} {
+			t.Run(name+"/selection="+sel, func(t *testing.T) {
+				got := render(t, sel)
+				if sel == "" {
+					if !strings.Contains(got, reverse) || strings.Contains(got, "48;") {
+						t.Errorf("default = %q, want reverse video and no background", got)
+					}
+					return
+				}
+				if !strings.Contains(got, hexBg) || strings.Contains(got, reverse) {
+					t.Errorf("configured = %q, want background %s and no reverse video", got, hexBg)
+				}
+			})
+		}
 	}
 }
 

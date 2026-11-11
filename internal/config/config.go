@@ -578,7 +578,7 @@ run = 'glab mr update {{.iid}} --ready'
 
 # [theme]
 # mode = "system"      # system (default): follow the terminal background | light | dark
-# accent = "#A78BFA"   # both modes; also: ok, warn, bad, info, text, dim, selection
+# accent = "#A78BFA"   # both modes; also: ok, warn, bad, info, text, dim, selection (unset: reverse video, follows the terminal)
 # [theme.light]        # same color keys, light mode only; they win over the flat [theme] keys
 # accent = "#6C3FD1"
 # [theme.dark]         # same color keys, dark mode only

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/chriha/lanes/internal/config"
+	"github.com/chriha/lanes/internal/item"
 )
 
 func TestForge(t *testing.T) {
@@ -137,5 +138,31 @@ func TestNewExplicitTypeIgnoresOrigin(t *testing.T) {
 	}
 	if called {
 		t.Error("origin read for an explicit provider type")
+	}
+}
+
+func TestAutoDetail(t *testing.T) {
+	tests := []struct {
+		name   string
+		origin func() (string, error)
+		want   string
+	}{
+		{"forge without details", func() (string, error) { return "git@github.com:o/r.git", nil }, ErrNoDetail.Error()},
+		{"missing origin", func() (string, error) { return "", errors.New("exit status 2") }, `set type = "github" or "gitlab"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := newProvider(config.Provider{Type: "auto"}, tt.origin)
+			if err != nil {
+				t.Fatal(err)
+			}
+			d, ok := p.(Detailer)
+			if !ok {
+				t.Fatal("auto provider has no Detail")
+			}
+			if _, err := d.Detail(context.Background(), item.Item{ID: "1"}); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("Detail err = %v, want it to contain %q", err, tt.want)
+			}
+		})
 	}
 }

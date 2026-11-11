@@ -21,6 +21,12 @@ type Quicker interface {
 	Quick(ctx context.Context) ([]item.Item, error)
 }
 
+// Detailer is optionally implemented by providers that can fetch an item's detail (description, pipeline, threads,
+// comments) on demand; the detail screen calls it, never the list poll.
+type Detailer interface {
+	Detail(ctx context.Context, it item.Item) (item.Detail, error)
+}
+
 func New(c config.Provider) (Provider, error) {
 	return newProvider(c, originURL)
 }
@@ -46,6 +52,9 @@ func newProvider(c config.Provider, origin func() (string, error)) (Provider, er
 
 // ErrNoQuick is returned by Quick of a provider whose underlying provider has no quick pass; the full fetch follows.
 var ErrNoQuick = errors.New("no quick pass")
+
+// ErrNoDetail is returned by Detail of a provider whose underlying provider cannot fetch details.
+var ErrNoDetail = errors.New("no detail")
 
 // auto is a provider of type "auto": it reads the origin remote and builds the provider for its forge on first use,
 // in the fetch, so building it spawns no subprocess. The result, an error included, is kept for its lifetime.
@@ -95,6 +104,19 @@ func (a *auto) Quick(ctx context.Context) ([]item.Item, error) {
 		return nil, ErrNoQuick
 	}
 	return q.Quick(ctx)
+}
+
+// Detail fetches the item's detail from the forge provider, or returns ErrNoDetail when it has none.
+func (a *auto) Detail(ctx context.Context, it item.Item) (item.Detail, error) {
+	p, err := a.resolve()
+	if err != nil {
+		return item.Detail{}, err
+	}
+	d, ok := p.(Detailer)
+	if !ok {
+		return item.Detail{}, ErrNoDetail
+	}
+	return d.Detail(ctx, it)
 }
 
 // Forge returns the provider type and the repo path (owner/repo, group/project) for a git remote URL

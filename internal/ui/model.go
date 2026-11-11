@@ -163,6 +163,12 @@ type Model struct {
 	// reloadGen counts the started config reloads; a reloadedMsg of an older one is dropped
 	reloadGen int
 
+	// details caches the fetched details by detailKey, in memory only; an entry is reused while its item's
+	// fingerprint is unchanged
+	details map[string]*detailEntry
+	// detailKey is the details key of the item the detail screen shows, "" when its provider fetches none
+	detailKey string
+
 	width, height int
 }
 
@@ -667,6 +673,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setNote(msg.id, msg.text)
 	case pollNow:
 		return m, m.pollSessions()
+	case detailMsg:
+		m.onDetail(msg)
 	case tea.KeyMsg:
 		return m.key(msg)
 	default:
@@ -998,7 +1006,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "i":
 		m.showHistory()
 	case "d":
-		m.showDetail()
+		return m, m.showDetail()
 	case "z":
 		if m.toggleSnooze() {
 			m.mode = modeCommand

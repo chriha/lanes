@@ -443,6 +443,14 @@ Tickets also get `blocked_by`, `blocking` and `related` lines after labels and a
 followed by the closed ones dimmed with a `✓` (e.g. `blocked_by  #7, #9 ✓`); empty relations are skipped. Set `preview = true` under `[settings]` to start with
 it open.
 
+The **last run** line shows the item's newest history event as `<action> · <duration> · <tokens> tok · <outcome>`,
+e.g. `work · 14m · 2.1M tok · ✓` or `fix · 42s · ✗ 1`. The duration runs from the session's creation (or the run
+command's start) to its end: `42s`, `14m`, `1h05m`. Tokens are those of a Claude session, read from its transcript
+when it ends, and count input, cache writes and output, not cache reads (they mostly repeat earlier context):
+`850`, `12k`, `2.1M`. The outcome is `✓` (finished), `✗ <exit>` (failed), or `killed`, `interrupted`, `started`.
+Parts the event lacks — a started action has no duration, a run or a non-Claude session no tokens, older history
+lines neither — are left out. The history stores every token count separately.
+
 `d` opens the item's **details** on a full screen, in stacked sections: a header with the id, title, URL, author
 and the pipeline (`ci`) and draft state, then **Fields** with your note and every remaining field untruncated, the
 CI jobs (`ci_jobs`) one per line, so a failed job stays readable when the preview has to cut it short. The values

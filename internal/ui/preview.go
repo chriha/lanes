@@ -163,8 +163,61 @@ func (m *Model) previewSessions(it item.Item) []string {
 	}
 	evs := history.For(session.Key(it.ID))
 	if n := len(evs); n > 0 {
-		e := evs[n-1]
-		out = append(out, " "+sDim.Render(fmt.Sprintf("%-12s", "last run"))+sText.Render(fmt.Sprintf("%s %s  %s", e.Action, e.Event, e.Time.Format("01-02 15:04"))))
+		out = append(out, " "+sDim.Render(fmt.Sprintf("%-12s", "last run"))+sText.Render(lastRun(evs[n-1])))
 	}
 	return out
+}
+
+// lastRun is the preview's last-run text for an item's newest history event: action, duration, tokens and outcome
+// joined by " · ", leaving out the parts the event lacks.
+// Tokens count input, cache writes and output; cache reads are left out.
+func lastRun(e history.Event) string {
+	parts := []string{e.Action}
+	if e.Dur > 0 {
+		parts = append(parts, runDur(e.Dur))
+	}
+	if t := e.Tokens; t != nil {
+		if n := t.Input + t.CacheWrite + t.Output; n > 0 {
+			parts = append(parts, tokenCount(n)+" tok")
+		}
+	}
+	switch {
+	case e.Event == "finished":
+		parts = append(parts, "✓")
+	case e.Event == "failed" && e.Exit != 0:
+		parts = append(parts, fmt.Sprintf("✗ %d", e.Exit))
+	case e.Event == "failed":
+		parts = append(parts, "✗")
+	default:
+		parts = append(parts, e.Event)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// runDur is a session's or run's duration in seconds: 42s, 14m, 1h05m.
+func runDur(sec int64) string {
+	switch {
+	case sec < 60:
+		return fmt.Sprintf("%ds", sec)
+	case sec < 3600:
+		return fmt.Sprintf("%dm", sec/60)
+	}
+	return fmt.Sprintf("%dh%02dm", sec/3600, sec%3600/60)
+}
+
+// tokenCount is a compact token count, rounded down: 850, 12k, 2.1M.
+func tokenCount(n int) string {
+	short := func(n, unit int, suffix string) string {
+		if n < 10*unit && n%unit >= unit/10 {
+			return fmt.Sprintf("%d.%d%s", n/unit, n%unit/(unit/10), suffix)
+		}
+		return fmt.Sprintf("%d%s", n/unit, suffix)
+	}
+	switch {
+	case n < 1000:
+		return fmt.Sprintf("%d", n)
+	case n < 1_000_000:
+		return short(n, 1000, "k")
+	}
+	return short(n, 1_000_000, "M")
 }

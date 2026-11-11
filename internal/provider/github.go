@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/chriha/lanes/internal/item"
 )
@@ -190,9 +191,147 @@ func (g *GitHub) lookupAuthors(ctx context.Context, ids []string) bool {
 	return true
 }
 
-// Detail fetches a PR's body, head-commit checks, review threads and comments.
+// ghDetailQuery loads one PR's detail for the detail screen, never with the list poll.
+// ponytail: first 100 threads/checks and last 100 comments only, paginate if a PR ever exceeds that
+const ghDetailQuery = `query($owner:String!,$name:String!,$number:Int!){
+  repository(owner:$owner,name:$name){ pullRequest(number:$number){
+    body
+    comments(last:100){nodes{body createdAt author{login}}}
+    reviewThreads(first:100){nodes{isResolved path line originalLine comments(first:100){nodes{body createdAt author{login}}}}}
+    commits(last:1){nodes{commit{abbreviatedOid statusCheckRollup{state contexts(first:100){nodes{__typename
+      ... on CheckRun{name status conclusion startedAt completedAt checkSuite{workflowRun{workflow{name}}}}
+      ... on StatusContext{context state}}}}}}}
+  }}
+}`
+
+type ghComment struct {
+	Body      string
+	CreatedAt time.Time
+	Author    ghUser
+}
+
+type ghDetailResp struct {
+	Data struct {
+		Repository *struct {
+			PullRequest *struct {
+				Body          string
+				Comments      nodes[ghComment]
+				ReviewThreads nodes[struct {
+					IsResolved         bool
+					Path               string
+					Line, OriginalLine int
+					Comments           nodes[ghComment]
+				}]
+				Commits nodes[struct {
+					Commit struct {
+						AbbreviatedOid    string
+						StatusCheckRollup *struct {
+							State    string
+							Contexts nodes[struct {
+								Typename               string `json:"__typename"`
+								Name, Status           string // CheckRun
+								Conclusion             string
+								StartedAt, CompletedAt *time.Time
+								CheckSuite             struct {
+									WorkflowRun *struct{ Workflow struct{ Name string } }
+								}
+								Context, State string // StatusContext
+							}]
+						}
+					}
+				}]
+			}
+		}
+	}
+	Errors []struct{ Message string }
+}
+
+// ghRollupStatus maps a status check rollup state onto the pipeline status names.
+var ghRollupStatus = map[string]string{"SUCCESS": "success", "FAILURE": "failed", "ERROR": "failed", "PENDING": "running", "EXPECTED": "running"}
+
+// ghCheckStatus maps a check run's conclusion (or, while it runs, its status) and a status context's state
+// onto the job status names.
+var ghCheckStatus = map[string]string{
+	"SUCCESS": "success", "NEUTRAL": "success", "FAILURE": "failed", "TIMED_OUT": "failed", "STARTUP_FAILURE": "failed",
+	"ERROR": "failed", "CANCELLED": "canceled", "SKIPPED": "skipped", "STALE": "skipped", "ACTION_REQUIRED": "manual",
+	"IN_PROGRESS": "running", "QUEUED": "pending", "WAITING": "pending", "REQUESTED": "pending", "PENDING": "pending",
+	"EXPECTED": "pending",
+}
+
+// Detail fetches a PR's body, head-commit checks (stage = workflow name, "checks" without one), review threads
+// and comments. The pipeline id is the head commit's short sha, its duration spans the first start to the last end.
 func (g *GitHub) Detail(ctx context.Context, it item.Item) (item.Detail, error) {
-	return item.Detail{}, ErrNoDetail // ponytail: stub until the query lands
+	num, ok := strings.CutPrefix(it.ID, "#")
+	if n, err := strconv.Atoi(num); !ok || err != nil || n <= 0 {
+		return item.Detail{}, fmt.Errorf("github: bad pull request number %q", it.ID)
+	}
+	out, err := ghGraphQL(ctx, "github", &g.Project, g.Run, ghDetailQuery, "-F", "number="+num)
+	if err != nil {
+		return item.Detail{}, err
+	}
+	var r ghDetailResp
+	if err := json.Unmarshal(out, &r); err != nil {
+		return item.Detail{}, fmt.Errorf("github: bad response: %w", err)
+	}
+	if len(r.Errors) > 0 {
+		return item.Detail{}, fmt.Errorf("github: %s", r.Errors[0].Message)
+	}
+	if r.Data.Repository == nil || r.Data.Repository.PullRequest == nil {
+		return item.Detail{}, fmt.Errorf("github: pull request #%s not found in %q", num, g.Project)
+	}
+	pr := r.Data.Repository.PullRequest
+	d := item.Detail{Description: pr.Body, Comments: ghComments(pr.Comments.Nodes)}
+	for _, t := range pr.ReviewThreads.Nodes {
+		th := item.Thread{File: t.Path, Line: t.Line, Resolved: t.IsResolved, Comments: ghComments(t.Comments.Nodes)}
+		if th.Line == 0 {
+			th.Line = t.OriginalLine // outdated thread: its line is gone from the diff
+		}
+		d.Threads = append(d.Threads, th)
+	}
+	if c := pr.Commits.Nodes; len(c) > 0 && c[0].Commit.StatusCheckRollup != nil {
+		roll := c[0].Commit.StatusCheckRollup
+		pl := &item.Pipeline{ID: c[0].Commit.AbbreviatedOid, Status: ghRollupStatus[roll.State]}
+		var first, last time.Time
+		for _, x := range roll.Contexts.Nodes {
+			j := item.Job{Name: x.Name, Stage: "checks"}
+			switch x.Typename {
+			case "CheckRun":
+				j.Status = ghCheckStatus[x.Conclusion]
+				if x.Status != "COMPLETED" {
+					j.Status = ghCheckStatus[x.Status]
+				}
+				if w := x.CheckSuite.WorkflowRun; w != nil && w.Workflow.Name != "" {
+					j.Stage = w.Workflow.Name
+				}
+				if x.StartedAt != nil && (first.IsZero() || x.StartedAt.Before(first)) {
+					first = *x.StartedAt
+				}
+				if x.CompletedAt != nil && x.CompletedAt.After(last) {
+					last = *x.CompletedAt
+				}
+				if x.StartedAt != nil && x.CompletedAt != nil {
+					j.Duration = x.CompletedAt.Sub(*x.StartedAt)
+				}
+			case "StatusContext":
+				j.Name, j.Status = x.Context, ghCheckStatus[x.State]
+			}
+			pl.Jobs = append(pl.Jobs, j)
+		}
+		if !first.IsZero() && last.After(first) {
+			pl.Duration = last.Sub(first)
+		}
+		d.Pipeline = pl
+	}
+	return d, nil
+}
+
+// ghComments maps GitHub comments onto item comments.
+func ghComments(cs []ghComment) []item.Comment {
+	var out []item.Comment
+	for _, c := range cs {
+		out = append(out, item.Comment{Author: c.Author.Login, Body: c.Body, Created: c.CreatedAt})
+	}
+	return out
 }
 
 // ghRunner returns run, or a runner of the real gh binary when run is nil.
@@ -206,9 +345,9 @@ func ghRunner(run func(context.Context, ...string) ([]byte, error)) func(context
 }
 
 // ghGraphQL runs query through gh for the owner/repo in *project, which is detected from the origin remote
-// (and stored) when empty; typ prefixes the errors. run nil runs the real gh binary. On a gh failure the
+// (and stored) when empty; vars are extra gh args (-F name=value); typ prefixes the errors. run nil runs the real gh binary. On a gh failure the
 // stdout gh produced is returned along with the error.
-func ghGraphQL(ctx context.Context, typ string, project *string, run func(context.Context, ...string) ([]byte, error), query string) ([]byte, error) {
+func ghGraphQL(ctx context.Context, typ string, project *string, run func(context.Context, ...string) ([]byte, error), query string, vars ...string) ([]byte, error) {
 	if *project == "" {
 		u, err := originPath()
 		if err != nil {
@@ -220,7 +359,8 @@ func ghGraphQL(ctx context.Context, typ string, project *string, run func(contex
 	if !ok || owner == "" || name == "" || strings.Contains(name, "/") {
 		return nil, fmt.Errorf("%s: project %q is not owner/repo", typ, *project)
 	}
-	out, err := ghRunner(run)(ctx, "api", "graphql", "-f", "query="+query, "-f", "owner="+owner, "-f", "name="+name)
+	args := append([]string{"api", "graphql", "-f", "query=" + query, "-f", "owner=" + owner, "-f", "name=" + name}, vars...)
+	out, err := ghRunner(run)(ctx, args...)
 	if err != nil {
 		return out, fmt.Errorf("gh: %w", err) // out: gh prints a GraphQL error response to stdout before exiting 1
 	}
@@ -277,8 +417,7 @@ func ghToItem(pr ghPR, me string, authors map[string]string) item.Item {
 		mr.Labels.Nodes = append(mr.Labels.Nodes, struct{ Title string }{l.Name})
 	}
 	if c := pr.Commits.Nodes; len(c) > 0 && c[0].Commit.StatusCheckRollup != nil {
-		ci := map[string]string{"SUCCESS": "success", "FAILURE": "failed", "ERROR": "failed", "PENDING": "running", "EXPECTED": "running"}
-		mr.HeadPipeline = &gqlPipeline{Status: ci[c[0].Commit.StatusCheckRollup.State]}
+		mr.HeadPipeline = &gqlPipeline{Status: ghRollupStatus[c[0].Commit.StatusCheckRollup.State]}
 		for _, x := range c[0].Commit.StatusCheckRollup.Contexts.Nodes {
 			name, failed := x.Name, false
 			switch x.Typename {

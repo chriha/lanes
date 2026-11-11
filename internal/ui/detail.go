@@ -60,6 +60,7 @@ func (m *Model) showDetail() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		d, err := p.Detail(ctx, it)
+		d = item.SanitizeDetail(d) // provider data is untrusted, like the list items
 		return detailMsg{key: key, fp: fp, d: d, err: err}
 	}
 }

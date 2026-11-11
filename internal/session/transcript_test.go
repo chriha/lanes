@@ -534,10 +534,11 @@ func TestTailerLeadDashboardFields(t *testing.T) {
 		want  fields
 	}{
 		{"lines without the fields", []string{bare}, fields{ctx: -1}},
-		{"effort of the newest message wins", []string{high, low}, fields{effort: "low", ctx: -1, in: 10, out: 20}},
-		{"a message without effort keeps the last one", []string{high, noEffort}, fields{effort: "high", ctx: -1, in: 10, out: 20}},
+		{"effort of the newest message wins", []string{high, low}, fields{effort: "low", ctx: 0, in: 10, out: 20}},
+		{"a message without effort keeps the last one", []string{high, noEffort}, fields{effort: "high", ctx: 0, in: 10, out: 20}},
 		{"token split: later usage of a message replaces the earlier", []string{use1, use1b}, fields{ctx: 0, in: 1, out: 50, cache: 8}},
 		{"token split sums messages; ctx of the newest", []string{use1, use2}, fields{ctx: 50, in: 5, out: 3, cache: 100008}},
+		{"a message without usage keeps the last ctx", []string{use2, noEffort}, fields{ctx: 50, in: 4, out: 1, cache: 100000}},
 		{"advisor model newest, calls counted", []string{adv1, adv2, advNone}, fields{ctx: -1, advisor: "claude-opus-5-6", advisorCalls: 2}},
 		{"synthetic messages are ignored", []string{bare, synth}, fields{ctx: -1}},
 	}

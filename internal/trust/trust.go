@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/jsonfile"
@@ -55,25 +56,13 @@ func Hash(path string) (string, error) {
 // path and content, in path order), or "" when there is none. Unlike Hash of the cwd's nearest file it does not depend on where lanes was started, so one
 // trust entry covers every cwd in the root, and a change to any of those files still changes the hash.
 func HashRoot(root string) (string, error) {
-	var files []string
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if n := d.Name(); p != root && (n == ".git" || n == "node_modules") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if d.Name() == ".lanes.toml" && d.Type().IsRegular() {
-			files = append(files, p)
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
+	h, _, err := hashRootWith(root, nil, time.Now(), os.ReadDir)
+	return h, err
+}
+
+// hashFiles is the HashRoot of the files found under root: it adds the ones in root's parents up to home and hashes
+// them all, read now.
+func hashFiles(root string, files []string) (string, error) {
 	// config.ProjectPath also loads a file above root (it searches up to home), so hash those too.
 	home, _ := os.UserHomeDir()
 	for d := root; d != home; {
@@ -90,7 +79,7 @@ func HashRoot(root string) (string, error) {
 	if len(files) == 0 {
 		return "", nil
 	}
-	sort.Strings(files) // WalkDir is lexical per directory, not across a flat path list
+	sort.Strings(files) // the walk is breadth-first, and parents are appended last
 	h := sha256.New()
 	for _, p := range files {
 		b, err := os.ReadFile(p)

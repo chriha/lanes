@@ -611,6 +611,50 @@ func TestDetailOpenThreads(t *testing.T) {
 	}
 }
 
+// TestDetailOpenURL checks o on the detail screen: it opens the URL of the thread under the cursor, and the item's
+// URL when that thread has none or there are no threads.
+func TestDetailOpenURL(t *testing.T) {
+	th := func(file, url string) item.Thread {
+		return item.Thread{File: file, Line: 1, URL: url, Comments: []item.Comment{{Author: "ann", Body: file + "-body"}}}
+	}
+	both := []item.Thread{th("a.go", "https://x/7#note_1"), th("b.go", "https://x/7#note_2")}
+	tests := []struct {
+		name   string
+		prov   *detailProv
+		keys   []string
+		want   []string // URLs handed to the opener
+		notice string   // substring of the notice; "" for none
+	}{
+		{"first thread", &detailProv{d: item.Detail{Threads: both}}, []string{"o"}, []string{"https://x/7#note_1"}, ""},
+		{"thread under the cursor", &detailProv{d: item.Detail{Threads: both}}, []string{"J", "o"}, []string{"https://x/7#note_2"}, ""},
+		{"thread without URL falls back to the item", &detailProv{d: item.Detail{Threads: []item.Thread{th("a.go", "")}}}, []string{"o"}, []string{"https://x/7"}, ""},
+		{"no threads opens the item", &detailProv{d: item.Detail{Description: "body"}}, []string{"o"}, []string{"https://x/7"}, ""},
+		{"provider without details opens the item", nil, []string{"o"}, []string{"https://x/7"}, ""},
+		{"non-web thread URL is refused", &detailProv{d: item.Detail{Threads: []item.Thread{th("a.go", "file:///etc/passwd")}}}, []string{"o"}, nil, "not opened"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := detailModel(t, tt.prov)
+			var got []string
+			m.open = func(u string) error { got = append(got, u); return nil }
+			_, cmd := m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+			if cmd != nil {
+				m.Update(cmd())
+			}
+			nav(m, tt.keys...)
+			if m.mode != modeDetail {
+				t.Fatalf("mode = %d, want detail", m.mode)
+			}
+			if strings.Join(got, " ") != strings.Join(tt.want, " ") {
+				t.Errorf("opened %q, want %q", got, tt.want)
+			}
+			if tt.notice != "" && !strings.Contains(m.notice, tt.notice) {
+				t.Errorf("notice %q lacks %q", m.notice, tt.notice)
+			}
+		})
+	}
+}
+
 // TestDetailOpenThreadsScroll checks that n and N scroll the thread they select into view.
 func TestDetailOpenThreadsScroll(t *testing.T) {
 	d := item.Detail{Threads: []item.Thread{

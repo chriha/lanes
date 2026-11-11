@@ -521,6 +521,86 @@ func TestDetailThreads(t *testing.T) {
 	}
 }
 
+// TestDetailOpenThreads checks n/N: they move the thread cursor to the next/previous unresolved thread, unfold it,
+// and do nothing past the last/first open thread or when every thread is resolved.
+func TestDetailOpenThreads(t *testing.T) {
+	th := func(file string, resolved bool) item.Thread {
+		return item.Thread{File: file, Line: 1, Resolved: resolved, Comments: []item.Comment{{Author: "ann", Body: file + "-body"}}}
+	}
+	mixed := []item.Thread{th("a.go", false), th("b.go", true), th("c.go", false), th("d.go", true)}
+	resolved := []item.Thread{th("a.go", true), th("b.go", true)}
+	tests := []struct {
+		name    string
+		threads []item.Thread
+		keys    []string
+		cursor  string   // substring of the line marked with the cursor
+		want    []string // substrings of the screen
+	}{
+		{"n skips resolved threads", mixed, []string{"n"}, "open · c.go:1", nil},
+		{"n stops at the last open thread", mixed, []string{"n", "n"}, "open · c.go:1", nil},
+		{"n after the last open thread does nothing", mixed, []string{"J", "J", "J", "n"}, "resolved · d.go:1", nil},
+		{"N skips resolved threads", mixed, []string{"J", "J", "J", "N"}, "open · c.go:1", nil},
+		{"N goes back", mixed, []string{"n", "N"}, "open · a.go:1", nil},
+		{"N at the first open thread does nothing", mixed, []string{"N"}, "open · a.go:1", nil},
+		{"N from a resolved thread", mixed, []string{"J", "N"}, "open · a.go:1", nil},
+		{"n unfolds a folded open thread", mixed, []string{"J", "J", "enter", "K", "K", "n"}, "open · c.go:1", []string{"c.go-body"}},
+		{"n with every thread resolved does nothing", resolved, []string{"n"}, "resolved · a.go:1", nil},
+		{"N with every thread resolved does nothing", resolved, []string{"J", "N"}, "resolved · b.go:1", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := detailModel(t, &detailProv{d: item.Detail{Threads: tt.threads}})
+			_, cmd := m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+			m.Update(cmd())
+			for _, k := range tt.keys {
+				if k == "enter" {
+					m.key(tea.KeyMsg{Type: tea.KeyEnter})
+					continue
+				}
+				nav(m, k)
+			}
+			if m.mode != modeDetail {
+				t.Fatalf("mode = %d, want detail", m.mode)
+			}
+			s := screenText(m)
+			var marked []string
+			for _, l := range strings.Split(s, "\n") {
+				if strings.HasPrefix(l, "›") {
+					marked = append(marked, l)
+				}
+			}
+			if len(marked) != 1 || !strings.Contains(marked[0], tt.cursor) {
+				t.Errorf("cursor lines = %q, want one with %q", marked, tt.cursor)
+			}
+			for _, w := range tt.want {
+				if !strings.Contains(s, w) {
+					t.Errorf("no %q in:\n%s", w, s)
+				}
+			}
+		})
+	}
+}
+
+// TestDetailOpenThreadsScroll checks that n and N scroll the thread they select into view.
+func TestDetailOpenThreadsScroll(t *testing.T) {
+	d := item.Detail{Threads: []item.Thread{
+		{File: "a.go", Line: 1, Comments: []item.Comment{{Author: "ann", Body: strings.Repeat("long\n", 20) + "a-end"}}},
+		{File: "b.go", Line: 2, Comments: []item.Comment{{Author: "cy", Body: "b-body"}}},
+	}}
+	m := detailModel(t, &detailProv{d: d})
+	m.height = 8
+	_, cmd := m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	m.Update(cmd())
+	nav(m, "n")
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "open · b.go:2") {
+		t.Errorf("n did not scroll the thread into view:\n%s", v)
+	}
+	nav(m, "G", "N")
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "open · a.go:1") {
+		t.Errorf("N did not scroll the thread into view:\n%s", v)
+	}
+}
+
 // TestDetailThreadsKeep checks that folding survives a refetched detail of the changed item and that J scrolls
 // the thread under the cursor into view.
 func TestDetailThreadsKeep(t *testing.T) {

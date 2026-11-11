@@ -2,12 +2,14 @@ package ui
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/filter"
 	"github.com/chriha/lanes/internal/history"
+	"github.com/chriha/lanes/internal/item"
 	"github.com/chriha/lanes/internal/session"
 )
 
@@ -106,6 +108,84 @@ func TestChainOnSessionExit(t *testing.T) {
 				if len(evs) == 0 || evs[len(evs)-1].Event != "started" || evs[len(evs)-1].Action != want {
 					t.Errorf("history = %+v, want a last %s started event", evs, want)
 				}
+			}
+		})
+	}
+}
+
+// A run action starts, per item, its on_success or on_failure action on that item once the run is done; a refresh
+// run's hold until the refetch does not keep the follow-up from starting.
+func TestChainOnRunResult(t *testing.T) {
+	tests := []struct {
+		name       string
+		action     config.Action // the "check" run action
+		items      []string
+		wantNotice string
+		wantStart  string // follow-up sessions started, in order; "" = none
+		wantHeld   bool   // item 1 stays busy until the refetch
+	}{
+		{name: "success starts on_success", items: []string{"1"},
+			action:     config.Action{Type: "run", Run: "true", OnSuccess: "review", OnFailure: "fix"},
+			wantNotice: "check finished on 1 → starting review", wantStart: "review~1"},
+		{name: "failure starts on_failure", items: []string{"1"},
+			action:     config.Action{Type: "run", Run: "exit 3", OnSuccess: "review", OnFailure: "fix"},
+			wantNotice: "check failed on 1 → starting fix", wantStart: "fix~1"},
+		{name: "each item chains on its own outcome", items: []string{"1", "2"},
+			action:     config.Action{Type: "run", Run: "test {{.id}} = 1", OnSuccess: "review", OnFailure: "fix"},
+			wantNotice: "check failed on 2 → starting fix", wantStart: "review~1,fix~2"},
+		{name: "refresh run still chains", items: []string{"1"},
+			action:     config.Action{Type: "run", Run: "true", Refresh: true, OnSuccess: "review"},
+			wantNotice: "check finished on 1 → starting review", wantStart: "review~1"},
+		{name: "no follow-up for the outcome", items: []string{"1"},
+			action:     config.Action{Type: "run", Run: "true", OnFailure: "fix"},
+			wantNotice: "✓ check done on 1 item(s)"},
+		{name: "refresh run without a follow-up keeps its hold", items: []string{"1"},
+			action:     config.Action{Type: "run", Run: "true", Refresh: true, OnFailure: "fix"},
+			wantNotice: "✓ check done on 1 item(s)", wantHeld: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, _ := busyModel(t)
+			log := paneTmux(t, 0)
+			mgr, err := session.NewManager()
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.sess = mgr
+			m.cfg = &config.Config{Action: map[string]config.Action{
+				"check": tt.action, "review": {Run: "echo review"}, "fix": {Run: "echo fix"},
+			}}
+			m.cfg.Settings.NoNotify = true
+			var its []item.Item
+			for _, it := range m.data["p"] {
+				if slices.Contains(tt.items, it.ID) {
+					its = append(its, it)
+				}
+			}
+			cmd := m.runActionOn("check", tt.action, its)
+			if m.mode == modeConfirm {
+				cmd = press(m, "y")
+			}
+			if cmd == nil {
+				t.Fatalf("no command returned (notice %q)", m.notice)
+			}
+			_, next := m.Update(cmd())
+			if m.notice != tt.wantNotice {
+				t.Errorf("notice = %q, want %q", m.notice, tt.wantNotice)
+			}
+			if b, held := m.busy[session.Key("1")]; (held && b.action == "check") != tt.wantHeld {
+				t.Errorf("item 1 held by check = %v, want %v", held && b.action == "check", tt.wantHeld)
+			}
+			runAll(next)
+			raw, _ := os.ReadFile(log)
+			var started []string
+			for _, l := range strings.Split(string(raw), "\n") {
+				if _, rest, ok := strings.Cut(l, "new-session -d -s "); ok {
+					started = append(started, strings.Fields(rest)[0])
+				}
+			}
+			if strings.Join(started, ",") != tt.wantStart {
+				t.Errorf("started %q, want %q\ntmux calls:\n%s", started, tt.wantStart, raw)
 			}
 		})
 	}

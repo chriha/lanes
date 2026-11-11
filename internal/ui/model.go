@@ -660,13 +660,23 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.say(msg.level, msg.notice)
 		if msg.refresh {
 			m.holdUntilRefetched(msg.keys, msg.ok)
-			return m, tea.Batch(m.pollSessions(), m.refreshAll())
+		} else {
+			m.unlock(msg.keys)
 		}
-		m.unlock(msg.keys)
+		var chains []tea.Cmd
+		for i, exit := range msg.exits {
+			if next, _ := followUp(m.cfg.Action[msg.action], exit); next != "" {
+				delete(m.busy, msg.keys[i]) // the follow-up starts now, not after a refresh run's refetch
+				chains = append(chains, m.chain(msg.action, msg.keys[i], exit))
+			}
+		}
+		if msg.refresh {
+			return m, tea.Batch(append(chains, m.pollSessions(), m.refreshAll())...)
+		}
 		if msg.jump != "" {
 			return m, tea.Batch(m.pollSessions(), m.jumpTo(msg.jump))
 		}
-		return m, m.pollSessions()
+		return m, tea.Batch(append(chains, m.pollSessions())...)
 	case editorDone:
 		// :edit project: the user wrote it through lanes, so the reload trusts its new content first
 		return m, m.startReload(msg.project)

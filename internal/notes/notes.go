@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/chriha/lanes/internal/app"
+	"github.com/chriha/lanes/internal/jsonfile"
 )
 
 type Note struct {
@@ -57,35 +58,7 @@ func (s Store) Set(id, text string) error {
 // Delete removes the item's note and writes the file.
 func (s Store) Delete(id string) error { return s.Set(id, "") }
 
-// save writes through a temp file and a rename, so a crash never leaves a half-written notes.json.
-// A corrupt notes.json is moved to notes.json.bak first, so the first save after it is not lossy.
+// save writes the file atomically; a corrupt notes.json is moved to notes.json.bak first, so the first save
+// after it is not lossy.
 // ponytail: last writer wins across lanes instances; re-read under a file lock if that ever bites.
-func (s Store) save() error {
-	dir := filepath.Dir(path())
-	if err := os.MkdirAll(dir, app.DirMode); err != nil {
-		return err
-	}
-	// Only a file that reads but doesn't decode is corrupt; a read error must not move a healthy file aside.
-	if b, err := os.ReadFile(path()); err == nil && json.Unmarshal(b, &Store{}) != nil {
-		if err := os.Rename(path(), path()+".bak"); err != nil {
-			return err
-		}
-	}
-	b, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dir, ".notes-*.json")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name()) // no-op after a successful rename
-	if _, err := f.Write(b); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), path())
-}
+func (s Store) save() error { return jsonfile.Write(path(), s, true) }

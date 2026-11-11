@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"github.com/chriha/lanes/internal/app"
+	"github.com/chriha/lanes/internal/jsonfile"
 )
 
 // Root is the project root of dir: the nearest directory at or above it containing .git (a directory, or a file in
@@ -199,28 +200,5 @@ func Untrust(root string) (bool, error) {
 	return true, nil
 }
 
-// save writes m to trust.json atomically, through a temp file renamed over it.
-func save(m map[string]string) error {
-	b, err := json.MarshalIndent(m, "", "  ")
-	if err != nil {
-		return err
-	}
-	dir := filepath.Dir(path())
-	if err := os.MkdirAll(dir, app.DirMode); err != nil {
-		return err
-	}
-	// CreateTemp makes the file 0600, which the rename keeps.
-	f, err := os.CreateTemp(dir, ".trust-*.json")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name()) // no-op after a successful rename
-	if _, err := f.Write(b); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), path())
-}
+// save writes m to trust.json atomically. A corrupt trust.json is not backed up: load already refused it.
+func save(m map[string]string) error { return jsonfile.Write(path(), m, false) }

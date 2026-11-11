@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/chriha/lanes/internal/app"
+	"github.com/chriha/lanes/internal/jsonfile"
 )
 
 // Entry is one snooze: until a time when Until is set, otherwise until the item's fingerprint differs.
@@ -108,36 +109,7 @@ func (s Store) Delete(ids ...string) error {
 	return s.save()
 }
 
-// save writes through a temp file and a rename, so a crash never leaves a half-written snoozes.json.
-// A corrupt snoozes.json is moved to snoozes.json.bak first, so the first save after it is not lossy.
-// ponytail: copy of notes.save; extract a shared atomic JSON writer if a third store appears.
+// save writes the file atomically; a corrupt snoozes.json is moved to snoozes.json.bak first, so the first save
+// after it is not lossy.
 // ponytail: last writer wins across lanes instances (same as notes).
-func (s Store) save() error {
-	dir := filepath.Dir(path())
-	if err := os.MkdirAll(dir, app.DirMode); err != nil {
-		return err
-	}
-	// Only a file that reads but doesn't decode is corrupt; a read error must not move a healthy file aside.
-	if b, err := os.ReadFile(path()); err == nil && json.Unmarshal(b, &Store{}) != nil {
-		if err := os.Rename(path(), path()+".bak"); err != nil {
-			return err
-		}
-	}
-	b, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dir, ".snoozes-*.json")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name()) // no-op after a successful rename
-	if _, err := f.Write(b); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), path())
-}
+func (s Store) save() error { return jsonfile.Write(path(), s, true) }

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/item"
@@ -210,5 +211,55 @@ func TestNewLinear(t *testing.T) {
 	}
 	if l, ok := p.(*Linear); !ok || l.Team != "ENG" || l.TokenEnv != "MY_KEY" {
 		t.Fatalf("New = %#v, want *Linear{Team: ENG, TokenEnv: MY_KEY}", p)
+	}
+}
+
+func TestLinearDetail(t *testing.T) {
+	// Comments arrive newest first and one has no user (an integration); the detail lists them oldest first.
+	const full = `{"data":{"issue":{"description":"Do the thing.","comments":{"nodes":[
+ {"body":"done?","createdAt":"2026-11-03T10:00:00Z","user":null},
+ {"body":"on it","createdAt":"2026-11-01T10:00:00Z","user":{"displayName":"alex"}}]}}}}`
+	want := item.Detail{Description: "Do the thing.", Comments: []item.Comment{
+		{Author: "alex", Body: "on it", Created: time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)},
+		{Body: "done?", Created: time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)},
+	}}
+	const key = "lin_api_secret"
+	for _, tc := range []struct {
+		name, token string
+		status      int
+		body        string
+		want        *item.Detail
+		wantErr     string
+	}{
+		{"issue with comments", key, http.StatusOK, full, &want, ""},
+		{"no description", key, http.StatusOK, `{"data":{"issue":{"description":null,"comments":{"nodes":[]}}}}`, &item.Detail{}, ""},
+		{"unset token", "", http.StatusOK, full, nil, "linear: LINEAR_API_KEY is not set"},
+		{"unauthorized", key, http.StatusUnauthorized, `{"errors":[{"message":"bad key"}]}`, nil, "linear: unauthorized (HTTP 401)"},
+		{"graphql error", key, http.StatusBadRequest, `{"errors":[{"message":"Entity not found: Issue"}]}`, nil, "linear: Entity not found"},
+		{"issue missing", key, http.StatusOK, `{"data":{"issue":null}}`, nil, "linear: issue ENG-1 not found"},
+		{"bad json", key, http.StatusOK, `nope`, nil, "linear: bad response"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("LINEAR_API_KEY", tc.token)
+			var auth string
+			var req map[string]any
+			srv := linearServer(t, tc.status, tc.body, &auth, &req)
+			got, err := (&Linear{Team: "ENG", Endpoint: srv.URL, Client: srv.Client()}).Detail(context.Background(), item.Item{ID: "ENG-1"})
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want containing %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, *tc.want) {
+				t.Errorf("detail =\n%+v\nwant\n%+v", got, *tc.want)
+			}
+			if vars, _ := req["variables"].(map[string]any); auth != key || vars["id"] != "ENG-1" {
+				t.Errorf("auth = %q, variables = %v, want the key and id ENG-1", auth, req["variables"])
+			}
+		})
 	}
 }

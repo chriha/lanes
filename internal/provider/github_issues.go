@@ -172,3 +172,46 @@ func ghPriority(labels []string) int {
 	}
 	return best
 }
+
+// ghIssueDetailQuery loads one issue's detail for the detail screen, never with the list poll.
+// ponytail: last 100 comments only, paginate if an issue ever exceeds that
+const ghIssueDetailQuery = `query($owner:String!,$name:String!,$number:Int!){
+  repository(owner:$owner,name:$name){ issue(number:$number){
+    body
+    comments(last:100){nodes{body createdAt author{login}}}
+  }}
+}`
+
+// Detail fetches an issue's body and comments.
+func (g *GitHubIssues) Detail(ctx context.Context, it item.Item) (item.Detail, error) {
+	num, ok := strings.CutPrefix(it.ID, "#")
+	if n, err := strconv.Atoi(num); !ok || err != nil || n <= 0 {
+		return item.Detail{}, fmt.Errorf("github-issues: bad issue number %q", it.ID)
+	}
+	out, err := ghGraphQL(ctx, "github-issues", &g.Project, g.Run, ghIssueDetailQuery, "-F", "number="+num)
+	if err != nil {
+		return item.Detail{}, err
+	}
+	var r struct {
+		Data struct {
+			Repository *struct {
+				Issue *struct {
+					Body     string
+					Comments nodes[ghComment]
+				}
+			}
+		}
+		Errors []struct{ Message string }
+	}
+	if err := json.Unmarshal(out, &r); err != nil {
+		return item.Detail{}, fmt.Errorf("github-issues: bad response: %w", err)
+	}
+	if len(r.Errors) > 0 {
+		return item.Detail{}, fmt.Errorf("github-issues: %s", r.Errors[0].Message)
+	}
+	if r.Data.Repository == nil || r.Data.Repository.Issue == nil {
+		return item.Detail{}, fmt.Errorf("github-issues: issue #%s not found in %q", num, g.Project)
+	}
+	is := r.Data.Repository.Issue
+	return item.Detail{Description: is.Body, Comments: ghComments(is.Comments.Nodes)}, nil
+}

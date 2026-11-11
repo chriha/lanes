@@ -329,6 +329,7 @@ func TestAgentTokensAndCalls(t *testing.T) {
 	const (
 		use1  = `{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":1,"output_tokens":2,"cache_read_input_tokens":500,"cache_creation_input_tokens":30}}}`
 		use1b = `{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":1,"output_tokens":40,"cache_read_input_tokens":500,"cache_creation_input_tokens":30}}}`
+		bare1 = `{"type":"assistant","message":{"id":"m1"}}`
 		use2  = `{"type":"assistant","message":{"id":"m2","usage":{"input_tokens":4,"output_tokens":6,"cache_creation_input_tokens":10}}}`
 		synth = `{"type":"assistant","message":{"id":"syn","model":"<synthetic>","usage":{"input_tokens":900}}}`
 		user  = `{"type":"user","message":{"content":"go"}}`
@@ -341,6 +342,8 @@ func TestAgentTokensAndCalls(t *testing.T) {
 		{"no assistant messages", []string{user}, 0, 0},
 		{"input, cache write and output count; cache reads don't", []string{use1}, 33, 0},
 		{"later usage of a message replaces the earlier", []string{use1, use1b}, 71, 0},
+		{"a later line without usage keeps the counted usage", []string{use1, bare1}, 33, 0},
+		{"a usage line after a usage-less one still replaces", []string{use1, bare1, use1b}, 71, 0},
 		{"messages sum", []string{use1b, use2}, 91, 0},
 		{"tool calls count over lines", []string{use2, toolLine("00:01", "Read", `{}`), toolLine("00:02", "Bash", `{}`)}, 20, 2},
 		{"synthetic messages are ignored", []string{use2, synth}, 20, 0},

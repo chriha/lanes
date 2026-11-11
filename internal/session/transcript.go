@@ -688,11 +688,15 @@ func (t *transcript) apply(line []byte, failed map[string]bool) {
 		t.userSince = false
 		// The newest line of a message has its newest usage: it replaces what earlier lines counted.
 		u, old := m.Usage, t.msgs[m.ID]
-		t.in += u.Input - old.Input
-		t.out += u.Output - old.Output
-		t.cache += u.CacheRead + u.CacheWrite - old.CacheRead - old.CacheWrite
-		t.tokens += u.Input + u.CacheWrite + u.Output - old.Input - old.CacheWrite - old.Output
-		t.msgs[m.ID] = u
+		_, known := t.msgs[m.ID]
+		// A line without usage carries nothing to count: a known message keeps what it has.
+		if !known || u != (usage{}) {
+			t.in += u.Input - old.Input
+			t.out += u.Output - old.Output
+			t.cache += u.CacheRead + u.CacheWrite - old.CacheRead - old.CacheWrite
+			t.tokens += u.Input + u.CacheWrite + u.Output - old.Input - old.CacheWrite - old.Output
+			t.msgs[m.ID] = u
+		}
 		if c := u.Input + u.CacheRead + u.CacheWrite; c > 0 { // a line without usage keeps the last known context
 			t.ctxTokens = c
 		}

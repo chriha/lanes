@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -68,7 +69,7 @@ func busyModel(t *testing.T) (*Model, *fakeProv) {
 	return m, fp
 }
 
-// runAll runs cmd and the commands of any batch it returns.
+// runAll runs cmd and the commands of any batch or sequence it returns, a sequence's in order.
 func runAll(cmd tea.Cmd) []tea.Msg {
 	if cmd == nil {
 		return nil
@@ -78,6 +79,15 @@ func runAll(cmd tea.Cmd) []tea.Msg {
 		var out []tea.Msg
 		for _, c := range b {
 			out = append(out, runAll(c)...)
+		}
+		return out
+	}
+	if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice { // a tea.Sequence: its commands in order
+		var out []tea.Msg
+		for i := 0; i < v.Len(); i++ {
+			if c, ok := v.Index(i).Interface().(tea.Cmd); ok {
+				out = append(out, runAll(c)...)
+			}
 		}
 		return out
 	}

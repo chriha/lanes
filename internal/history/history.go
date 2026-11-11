@@ -21,6 +21,16 @@ type Event struct {
 	Dur int64 `json:"dur,omitempty"`
 	// ClaudeSession is the Claude Code session id of a session's end event, when Claude ran in it.
 	ClaudeSession string `json:"claude_session,omitempty"`
+	// Tokens are the token counts of a Claude session's end event, when its transcript was readable.
+	Tokens *Tokens `json:"tokens,omitempty"`
+}
+
+// Tokens are the token counts of a Claude session's assistant messages, each kind on its own.
+type Tokens struct {
+	Input      int `json:"input"`
+	CacheWrite int `json:"cache_write"`
+	CacheRead  int `json:"cache_read"`
+	Output     int `json:"output"`
 }
 
 func path() string { return filepath.Join(app.StateDir(), "history.jsonl") }

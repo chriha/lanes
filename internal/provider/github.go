@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 	"os/exec"
@@ -193,7 +192,7 @@ func (g *GitHub) lookupAuthors(ctx context.Context, ids []string) bool {
 
 // Detail fetches a PR's body, head-commit checks, review threads and comments.
 func (g *GitHub) Detail(ctx context.Context, it item.Item) (item.Detail, error) {
-	return item.Detail{}, errors.New("github: detail not implemented")
+	return item.Detail{}, ErrNoDetail // ponytail: stub until the query lands
 }
 
 // ghRunner returns run, or a runner of the real gh binary when run is nil.

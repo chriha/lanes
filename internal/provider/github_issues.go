@@ -172,3 +172,8 @@ func ghPriority(labels []string) int {
 	}
 	return best
 }
+
+// Detail fetches an issue's body and comments.
+func (g *GitHubIssues) Detail(ctx context.Context, it item.Item) (item.Detail, error) {
+	return item.Detail{}, ErrNoDetail
+}

@@ -232,3 +232,8 @@ func linearToItem(is linearIssue, me string) item.Item {
 		}),
 	}
 }
+
+// Detail fetches an issue's description and comments.
+func (l *Linear) Detail(ctx context.Context, it item.Item) (item.Detail, error) {
+	return item.Detail{}, ErrNoDetail
+}

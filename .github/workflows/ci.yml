@@ -27,3 +27,37 @@ jobs:
       - uses: golangci/golangci-lint-action@v8
         with:
           version: v2.15.0
+  bench:
+    # The startup gate (docs/design.md § Startup): the head may be at most 2x the base, both measured on this runner.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      BENCH_ARGS: -run '^$' -bench TimeToFirstList -count=6 ./internal/ui
+      BENCH_FILE: internal/ui/startup_bench_test.go
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: benchmark head
+        run: eval "go test $BENCH_ARGS" | tee "$RUNNER_TEMP/head.txt"
+      - name: benchmark base
+        # The head's benchmark file runs against the base's code; when it does not compile or run there, the
+        # check reports "no comparison" instead of failing.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
+          cp "$BENCH_FILE" "$RUNNER_TEMP/base/$BENCH_FILE"
+          cd "$RUNNER_TEMP/base"
+          if ! eval "go test $BENCH_ARGS" > "$RUNNER_TEMP/base.txt" 2>&1; then
+            echo "the benchmark did not run on the base:"
+          fi
+          cat "$RUNNER_TEMP/base.txt"
+      - name: compare
+        run: scripts/bench-check.sh "$RUNNER_TEMP/base.txt" "$RUNNER_TEMP/head.txt" | tee -a "$GITHUB_STEP_SUMMARY"

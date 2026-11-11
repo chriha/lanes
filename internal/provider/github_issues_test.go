@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/filter"
@@ -193,6 +194,57 @@ func TestGHPriority(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := ghPriority(tt.labels); got != tt.want {
 				t.Errorf("ghPriority(%v) = %d, want %d", tt.labels, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGitHubIssuesDetail(t *testing.T) {
+	const full = `{"data":{"repository":{"issue":{"body":"Steps to reproduce.","comments":{"nodes":[
+ {"body":"me too","createdAt":"2026-11-01T10:00:00Z","author":{"login":"alex"}},
+ {"body":"fixed?","createdAt":"2026-11-02T10:00:00Z","author":null}]}}}}}`
+	want := item.Detail{Description: "Steps to reproduce.", Comments: []item.Comment{
+		{Author: "alex", Body: "me too", Created: time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)},
+		{Body: "fixed?", Created: time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)},
+	}}
+	for _, tc := range []struct {
+		name    string
+		id      string
+		resp    string
+		runErr  error
+		want    *item.Detail
+		wantErr string
+	}{
+		{"issue with comments", "#7", full, nil, &want, ""},
+		{"no body or comments", "#8", `{"data":{"repository":{"issue":{"body":"","comments":{"nodes":[]}}}}}`, nil, &item.Detail{}, ""},
+		{"bad number", "7", full, nil, nil, "bad issue number"},
+		{"run fails", "#7", "", errors.New("boom"), nil, "gh: boom"},
+		{"graphql error", "#7", `{"errors":[{"message":"nope"}]}`, nil, nil, "github-issues: nope"},
+		{"issue missing", "#7", `{"data":{"repository":{"issue":null}}}`, nil, nil, "not found"},
+		{"repo missing", "#7", `{"data":{"repository":null}}`, nil, nil, "not found"},
+		{"bad json", "#7", `nope`, nil, nil, "bad response"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls [][]string
+			g := &GitHubIssues{Project: "o/r", Run: func(_ context.Context, args ...string) ([]byte, error) {
+				calls = append(calls, args)
+				return []byte(tc.resp), tc.runErr
+			}}
+			got, err := g.Detail(context.Background(), item.Item{ID: tc.id})
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want containing %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, *tc.want) {
+				t.Errorf("detail =\n%+v\nwant\n%+v", got, *tc.want)
+			}
+			if num := "number=" + strings.TrimPrefix(tc.id, "#"); len(calls) != 1 || !strings.Contains(strings.Join(calls[0], " "), num) {
+				t.Errorf("calls = %v, want one with %s", calls, num)
 			}
 		})
 	}

@@ -433,7 +433,10 @@ func TestDetailSections(t *testing.T) {
 	inOrder("pipeline title", "Pipeline #42 · failed · 4m0s")
 	inOrder("jobs grouped by stage", "build", "✓ build", "30s", "✓ image", "5s", "test", "✗ lint", "10s", "✓ unit", "1m30s")
 	inOrder("open thread", "open · main.go:12 · ann · 2h", "why?", "bob", "because")
-	inOrder("resolved thread", "resolved · cy · 2h", "done")
+	inOrder("resolved thread collapsed", "resolved · cy · 2h · 0 replies", "Comments")
+	if strings.Contains(s, "done") {
+		t.Errorf("collapsed resolved thread shows its body:\n%s", s)
+	}
 	inOrder("comments newest last", "Comments", "early", "first", "late", "second")
 
 	// GitHub checks have no stage and may have no duration; a comment may lack an author
@@ -452,5 +455,101 @@ func TestDetailSections(t *testing.T) {
 		if strings.HasPrefix(l, "·") {
 			t.Errorf("dangling separator in %q", l)
 		}
+	}
+}
+
+// TestDetailThreads checks the thread cursor and folding: open threads start expanded, resolved ones collapsed,
+// J/K move the cursor, enter/space toggle the thread under it, za/zA fold/unfold all.
+func TestDetailThreads(t *testing.T) {
+	d := item.Detail{Threads: []item.Thread{
+		{File: "a.go", Line: 1, Comments: []item.Comment{{Author: "ann", Body: "open-body"}, {Author: "bob", Body: "open-reply"}}},
+		{File: "b.go", Line: 2, Resolved: true, Comments: []item.Comment{{Author: "cy", Body: "res-body"}, {Author: "dee", Body: "res-reply"}}},
+	}}
+	tests := []struct {
+		name   string
+		keys   []string
+		want   []string // substrings of the screen
+		absent []string
+		cursor string // substring of the line marked with the cursor
+	}{
+		{"defaults", nil, []string{"open-body", "open-reply", "resolved · b.go:2 · cy · 1 reply"}, []string{"res-body", "res-reply"}, "open · a.go:1"},
+		{"enter folds the open thread", []string{"enter"}, []string{"open · a.go:1 · ann · 1 reply"}, []string{"open-body", "open-reply", "res-body"}, "open · a.go:1"},
+		{"J moves, enter unfolds the resolved thread", []string{"J", "enter"}, []string{"open-body", "res-body", "res-reply"}, nil, "resolved · b.go:2"},
+		{"space toggles too", []string{"J", " "}, []string{"res-body"}, nil, "resolved · b.go:2"},
+		{"J stops at the last thread", []string{"J", "J", "J"}, nil, nil, "resolved · b.go:2"},
+		{"K moves back", []string{"J", "K", "enter"}, nil, []string{"open-body", "res-body"}, "open · a.go:1"},
+		{"za folds all", []string{"z", "a"}, nil, []string{"open-body", "res-body"}, "open · a.go:1"},
+		{"zA unfolds all", []string{"z", "A"}, []string{"open-body", "open-reply", "res-body", "res-reply"}, nil, "open · a.go:1"},
+		{"z then another key does not fold", []string{"z", "j", "a"}, []string{"open-body"}, nil, "open · a.go:1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := detailModel(t, &detailProv{d: d})
+			_, cmd := m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+			m.Update(cmd())
+			for _, k := range tt.keys {
+				if k == "enter" {
+					m.key(tea.KeyMsg{Type: tea.KeyEnter})
+					continue
+				}
+				nav(m, k)
+			}
+			if m.mode != modeDetail {
+				t.Fatalf("mode = %d, want detail", m.mode)
+			}
+			s := screenText(m)
+			for _, w := range tt.want {
+				if !strings.Contains(s, w) {
+					t.Errorf("no %q in:\n%s", w, s)
+				}
+			}
+			for _, a := range tt.absent {
+				if strings.Contains(s, a) {
+					t.Errorf("%q present in:\n%s", a, s)
+				}
+			}
+			var marked []string
+			for _, l := range strings.Split(s, "\n") {
+				if strings.HasPrefix(l, "›") {
+					marked = append(marked, l)
+				}
+			}
+			if len(marked) != 1 || !strings.Contains(marked[0], tt.cursor) {
+				t.Errorf("cursor lines = %q, want one with %q", marked, tt.cursor)
+			}
+		})
+	}
+}
+
+// TestDetailThreadsKeep checks that folding survives a refetched detail of the changed item and that J scrolls
+// the thread under the cursor into view.
+func TestDetailThreadsKeep(t *testing.T) {
+	th := func(body string) item.Detail {
+		return item.Detail{Description: strings.Repeat("desc\n", 20) + "end", Threads: []item.Thread{
+			{File: "a.go", Line: 1, Comments: []item.Comment{{Author: "ann", Body: "open-body"}}},
+			{File: "b.go", Line: 2, Resolved: true, Comments: []item.Comment{{Author: "cy", Body: body}}},
+		}}
+	}
+	p := &detailProv{d: th("res-body")}
+	m := detailModel(t, p)
+	m.height = 8
+	_, cmd := m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	m.Update(cmd())
+	nav(m, "J")
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "resolved · b.go:2") {
+		t.Errorf("J did not scroll the thread into view:\n%s", v)
+	}
+	m.key(tea.KeyMsg{Type: tea.KeyEnter})
+	nav(m, "q")
+	m.data["p"] = []item.Item{{ID: "a", Title: "new title", URL: "https://x/7", Author: "me", Fields: map[string]any{"iid": 7}}}
+	m.rebuild()
+	p.d = th("res-body-2")
+	_, cmd = m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	if cmd == nil {
+		t.Fatal("d on a changed item did not refetch")
+	}
+	m.Update(cmd())
+	if s := screenText(m); !strings.Contains(s, "res-body-2") || !strings.Contains(s, "open-body") {
+		t.Errorf("folding lost on refresh, want the resolved thread still unfolded:\n%s", s)
 	}
 }

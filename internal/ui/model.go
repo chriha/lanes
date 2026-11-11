@@ -168,6 +168,13 @@ type Model struct {
 	details map[string]*detailEntry
 	// detailKey is the details key of the item the detail screen shows, "" when its provider fetches none
 	detailKey string
+	// thread is the thread cursor of the detail screen, an index into the shown detail's threads
+	thread int
+	// folded holds the threads folded (true) or unfolded by hand, by foldKey, in memory only; the others are
+	// folded when resolved
+	folded map[string]bool
+	// pendingZ is set after z on the detail screen, for za/zA
+	pendingZ bool
 
 	width, height int
 }
@@ -880,8 +887,10 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyCommand(k)
 	case modeConfirm:
 		return m.keyConfirm(k)
-	case modeHelp, modeDetail:
+	case modeHelp:
 		return m.keyHelp(k)
+	case modeDetail:
+		return m.keyDetail(k)
 	case modeHistory:
 		m.mode = modeNormal
 		return m, nil
@@ -1465,7 +1474,7 @@ func (m *Model) helpLines() []string {
 		{"t", "shell for the cursor item: jump into it (started, or restarted if finished)"},
 		{"gr", "resume the cursor item's newest finished Claude session (actions with resume)"},
 		{"i", "item history"},
-		{"d", "item details: every field untruncated, the failed CI jobs one per line (j/k scroll, q close)"},
+		{"d", "item details: fields, description, pipeline, threads, comments (j/k scroll, J/K thread, enter/space fold it, za/zA fold/unfold all, q close)"},
 		{"N", "edit the item's note in $EDITOR (save empty to delete)"},
 		{"z", "snooze item(s): 2h, 3d, mon, 2026-11-03, empty = until it changes; on a snoozed one: unsnooze"},
 		{"n", "jump into the next session that is asking or waiting"},

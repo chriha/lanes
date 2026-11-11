@@ -41,7 +41,7 @@ func (m *Model) showDetail() tea.Cmd {
 	}
 	it := its[m.cursor]
 	m.detail, m.detailKey = it, ""
-	m.mode, m.helpOff = modeDetail, 0
+	m.mode, m.helpOff, m.thread, m.pendingZ = modeDetail, 0, 0, false
 	name := m.views[m.cur].cfg.Provider
 	p, ok := m.providers[name].(provider.Detailer)
 	if !ok {
@@ -69,6 +69,80 @@ func (m *Model) onDetail(msg detailMsg) {
 	if e := m.details[msg.key]; e != nil && e.fp == msg.fp {
 		*e = detailEntry{fp: msg.fp, d: msg.d, err: msg.err}
 	}
+}
+
+// threads is the threads of the shown item's fetched detail; nil while none are fetched.
+func (m *Model) threads() []item.Thread {
+	e := m.details[m.detailKey]
+	if m.detailKey == "" || e == nil || e.loading || e.err != nil {
+		return nil
+	}
+	return e.d.Threads
+}
+
+// foldKey identifies a thread of the shown item across refetches: its place and its first comment.
+// ponytail: two threads on one line opened by one author at one time share their folding.
+func (m *Model) foldKey(th item.Thread) string {
+	k := fmt.Sprintf("%s\x00%s:%d", m.detailKey, th.File, th.Line)
+	if len(th.Comments) > 0 {
+		k += "\x00" + th.Comments[0].Author + "\x00" + th.Comments[0].Created.String()
+	}
+	return k
+}
+
+// isFolded reports whether a thread shows as one line: as folded by hand, else when it is resolved.
+func (m *Model) isFolded(th item.Thread) bool {
+	if f, ok := m.folded[m.foldKey(th)]; ok {
+		return f
+	}
+	return th.Resolved
+}
+
+func (m *Model) setFold(th item.Thread, f bool) {
+	if m.folded == nil {
+		m.folded = map[string]bool{}
+	}
+	m.folded[m.foldKey(th)] = f
+}
+
+// keyDetail handles the thread keys of the detail screen (J/K move the thread cursor, enter/space fold the thread
+// under it, za/zA fold/unfold all) and leaves the rest to keyHelp.
+func (m *Model) keyDetail(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	ths := m.threads()
+	s, z := k.String(), m.pendingZ
+	m.pendingZ = false
+	if len(ths) == 0 {
+		return m.keyHelp(k)
+	}
+	m.thread = min(max(m.thread, 0), len(ths)-1)
+	switch {
+	case z && (s == "a" || s == "A"):
+		for _, th := range ths {
+			m.setFold(th, s == "a")
+		}
+	case s == "z":
+		m.pendingZ = true
+	case s == "J" || s == "K":
+		if s == "J" {
+			m.thread = min(m.thread+1, len(ths)-1)
+		} else {
+			m.thread = max(m.thread-1, 0)
+		}
+		// scroll the thread under the cursor to the top when it is off screen
+		for i, l := range m.detailLines() {
+			if strings.HasPrefix(ansi.Strip(l), "›") {
+				if i < m.helpOff || i >= m.helpOff+max(m.height-1, 3) {
+					m.helpOff = i
+				}
+				break
+			}
+		}
+	case s == "enter" || s == " ":
+		m.setFold(ths[m.thread], !m.isFolded(ths[m.thread]))
+	default:
+		return m.keyHelp(k)
+	}
+	return m, nil
 }
 
 // jobIcons marks a pipeline job's status; any other status gets "·".
@@ -144,7 +218,8 @@ func (m *Model) detailSections(w int) []string {
 	}
 	if len(d.Threads) > 0 {
 		title(fmt.Sprintf("Threads (%d)", len(d.Threads)))
-		for _, th := range d.Threads {
+		cur := min(m.thread, len(d.Threads)-1)
+		for i, th := range d.Threads {
 			head := "● open"
 			if th.Resolved {
 				head = "✓ resolved"
@@ -155,9 +230,22 @@ func (m *Model) detailSections(w int) []string {
 			if len(th.Comments) > 0 {
 				head += " · " + by(th.Comments[0])
 			}
+			folded := m.isFolded(th)
+			if n := max(len(th.Comments)-1, 0); folded && n == 1 {
+				head += " · 1 reply"
+			} else if folded {
+				head += fmt.Sprintf(" · %d replies", n)
+			}
+			at := len(out)
 			add(1, head, sText)
-			for i, c := range th.Comments {
-				if i > 0 {
+			if i == cur {
+				out[at] = sMark.Render("›") + out[at][1:] // the pad's first space
+			}
+			if folded {
+				continue
+			}
+			for j, c := range th.Comments {
+				if j > 0 {
 					add(5, by(c), sDim)
 					add(5, c.Body, sText)
 				} else {

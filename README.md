@@ -350,7 +350,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
 | `gr`                | resume the item's newest finished Claude session (see [Resuming a Claude session](#resuming-a-claude-session)) |
 | `i`                 | show the item's history                            |
-| `d`                 | item details: every field untruncated, failed CI jobs one per line (scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; close with `q`/`esc`) |
+| `d`                 | item details: every field untruncated, description, pipeline, threads and comments (scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; `J`/`K` move between threads, `enter`/`space` fold the one under the cursor, `za`/`zA` fold/unfold all; close with `q`/`esc`) |
 | `N`                 | edit the item's note in `$VISUAL` / `$EDITOR` (save it empty to delete it) |
 | `z`                 | [snooze](#snoozing) the item (all marked items, if any are marked); on a snoozed item: unsnooze it |
 | `n`                 | jump into the next session that is asking or waiting (any view) |
@@ -439,8 +439,14 @@ it open.
 `d` opens the item's **details** on a full screen, in stacked sections: a header with the id, title, URL, author
 and the pipeline (`ci`) and draft state, then **Fields** with your note and every remaining field untruncated, the
 CI jobs (`ci_jobs`) one per line, so a failed job stays readable when the preview has to cut it short. The values
-line up in one column after the longest key, and a long value wraps under its value column.
-Scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; `q` or `esc` returns to the list.
+line up in one column after the longest key, and a long value wraps under its value column. For GitLab MRs, GitHub
+PRs and issues, Linear and a `command` provider with a [`detail`](#command) command, pressing `d` also
+fetches in the background, once per item version, the **Description**, the **Pipeline** (every job grouped by stage),
+the review **Threads** and the **Comments** (newest last); the fields show at once and the sections fill in.
+Scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; `q` or `esc` returns to the list. Open threads start expanded,
+resolved ones collapsed to one line (`✓ resolved · file:line · author · n replies`): `J`/`K` move the thread cursor
+(`›`), `enter`/`space` fold or unfold the thread under it, `za` folds all, `zA` unfolds all. Folding is kept while
+lanes runs, also when the details are fetched again.
 
 `i` shows the item's **history**: every action started on it, and how it ended (`finished`, `failed (exit n)`,
 `killed`). History is stored per project and survives restarts.

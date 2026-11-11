@@ -166,3 +166,23 @@ func TestAutoDetail(t *testing.T) {
 		})
 	}
 }
+
+// A command provider fetches details only with a detail command, so the detail screen starts no fetch without one.
+func TestNewCommandDetailer(t *testing.T) {
+	tests := []struct {
+		detail string
+		want   bool
+	}{
+		{"", false},
+		{"my-tool show", true},
+	}
+	for _, tt := range tests {
+		p, err := New(config.Provider{Type: "command", Command: "true", Detail: tt.detail})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := p.(Detailer); ok != tt.want {
+			t.Errorf("detail %q: Detailer = %v, want %v", tt.detail, ok, tt.want)
+		}
+	}
+}

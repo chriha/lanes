@@ -103,6 +103,7 @@ const projectTail = `
 # [provider.todos]
 # type = "command"
 # command = "my-todo-exporter --json"
+# detail = 'my-todo-exporter --json --show "$LANES_ITEM_ID"'  # optional: one item's detail for d (see README)
 
 # ---------------------------------------------------------------------------------------------------------
 # Settings (merged per field with the global ones).

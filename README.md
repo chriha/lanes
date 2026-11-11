@@ -1234,7 +1234,7 @@ opus = "#FF4FE3"            # also: sonnet, haiku, text, dim, accent, track, ok,
 `lanes` ships an adaptive light/dark palette. Override any of `accent`, `ok`, `warn`, `bad`, `info`, `text` (body), `dim`
 (secondary text) and `selection` (selected row and tab background) with a hex color under `[theme]`. Changes apply live.
 
-The selected row and the active tab are painted with a muted `selection` background (a soft violet tint in both modes).
+The selected row and the active tab are painted with a medium-strength violet `selection` background (dark `#404872`, light `#CFC4F0`).
 Set `selection` (flat, or per mode under `[theme.light]` / `[theme.dark]`) to change it.
 
 The footer draws errors in the `bad` color and warnings (a request that was not fully carried out, such as

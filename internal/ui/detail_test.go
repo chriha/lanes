@@ -1,9 +1,12 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -228,4 +231,208 @@ func TestDetailAlign(t *testing.T) {
 			})
 		}
 	}
+}
+
+// detailProv lists nothing and returns d or err as the detail of any item, counting the calls.
+type detailProv struct {
+	d     item.Detail
+	err   error
+	calls int
+}
+
+func (p *detailProv) Fetch(context.Context) ([]item.Item, error) { return nil, nil }
+func (p *detailProv) Detail(context.Context, item.Item) (item.Detail, error) {
+	p.calls++
+	return p.d, p.err
+}
+
+// screenText is the detail screen's lines, ANSI stripped and trimmed, one per line.
+func screenText(m *Model) string {
+	var b strings.Builder
+	for _, l := range m.detailLines() {
+		b.WriteString(strings.TrimSpace(ansi.Strip(l)) + "\n")
+	}
+	return b.String()
+}
+
+func detailModel(t *testing.T, p *detailProv) *Model {
+	t.Helper()
+	m := newNotesModel(t)
+	m.width, m.height = 100, 40
+	if p != nil {
+		m.providers["p"] = p
+	}
+	m.data["p"] = []item.Item{{ID: "a", Title: "t-title", URL: "https://x/7", Author: "me", Fields: map[string]any{"iid": 7}}}
+	m.rebuild()
+	return m
+}
+
+func TestDetailFetch(t *testing.T) {
+	tests := []struct {
+		name    string
+		prov    *detailProv
+		want    []string // substrings of the screen once the fetch landed
+		absent  []string
+		fetches int
+	}{
+		{
+			name:    "sections fill in",
+			prov:    &detailProv{d: item.Detail{Description: "the body", Comments: []item.Comment{{Author: "ann", Body: "lgtm"}}}},
+			want:    []string{"t-title", "iid  7", "Description", "the body", "Comments", "ann", "lgtm"},
+			absent:  []string{"loading"},
+			fetches: 1,
+		},
+		{
+			name:    "error shows inline",
+			prov:    &detailProv{err: errors.New("boom 500")},
+			want:    []string{"t-title", "iid  7", "boom 500"},
+			absent:  []string{"loading", "Description"},
+			fetches: 1,
+		},
+		{
+			name:    "provider without details shows the plain fields",
+			want:    []string{"t-title", "iid  7"},
+			absent:  []string{"loading", "Description", "Comments"},
+			fetches: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := detailModel(t, tt.prov)
+			_, cmd := m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+			if m.mode != modeDetail {
+				t.Fatalf("mode = %d, want detail", m.mode)
+			}
+			if tt.prov == nil {
+				if cmd != nil {
+					t.Fatal("d returned a fetch for a provider without details")
+				}
+			} else {
+				if cmd == nil {
+					t.Fatal("d started no fetch")
+				}
+				if s := screenText(m); !strings.Contains(s, "t-title") || !strings.Contains(s, "loading") {
+					t.Errorf("before the fetch landed, want the known fields and a loading line:\n%s", s)
+				}
+				if tt.prov.calls != 0 {
+					t.Fatal("the fetch ran on the UI goroutine")
+				}
+				m.Update(cmd())
+			}
+			s := screenText(m)
+			for _, w := range tt.want {
+				if !strings.Contains(s, w) {
+					t.Errorf("no %q in:\n%s", w, s)
+				}
+			}
+			for _, a := range tt.absent {
+				if strings.Contains(s, a) {
+					t.Errorf("%q present in:\n%s", a, s)
+				}
+			}
+			if tt.prov != nil && tt.prov.calls != tt.fetches {
+				t.Errorf("%d fetches, want %d", tt.prov.calls, tt.fetches)
+			}
+		})
+	}
+}
+
+// TestDetailCache checks that a fetched detail is reused while the item is unchanged and refetched once its
+// fingerprint changed, and that a fetch for an older version of the item is dropped.
+func TestDetailCache(t *testing.T) {
+	press := func(m *Model) tea.Cmd {
+		_, cmd := m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+		m.mode = modeNormal
+		return cmd
+	}
+	change := func(m *Model) {
+		m.data["p"] = []item.Item{{ID: "a", Title: "new title", URL: "https://x/7", Author: "me", Fields: map[string]any{"iid": 7}}}
+		m.rebuild()
+	}
+	t.Run("unchanged item reuses the detail", func(t *testing.T) {
+		p := &detailProv{d: item.Detail{Description: "the body"}}
+		m := detailModel(t, p)
+		m.Update(press(m)())
+		if cmd := press(m); cmd != nil {
+			t.Error("d on an unchanged item fetched again")
+		}
+		m.showDetail()
+		if s := screenText(m); !strings.Contains(s, "the body") {
+			t.Errorf("cached detail not shown:\n%s", s)
+		}
+	})
+	t.Run("changed item refetches", func(t *testing.T) {
+		p := &detailProv{d: item.Detail{Description: "the body"}}
+		m := detailModel(t, p)
+		m.Update(press(m)())
+		change(m)
+		cmd := press(m)
+		if cmd == nil {
+			t.Fatal("d on a changed item did not refetch")
+		}
+		p.d.Description = "new body"
+		m.Update(cmd())
+		m.showDetail()
+		if s := screenText(m); !strings.Contains(s, "new body") || strings.Contains(s, "the body") {
+			t.Errorf("want the refetched detail only:\n%s", s)
+		}
+	})
+	t.Run("a fetch for the old item is dropped", func(t *testing.T) {
+		p := &detailProv{d: item.Detail{Description: "old body"}}
+		m := detailModel(t, p)
+		old := press(m)
+		change(m)
+		cur := press(m)
+		if cur == nil {
+			t.Fatal("d on a changed item did not refetch")
+		}
+		m.Update(old())
+		m.showDetail()
+		if s := screenText(m); strings.Contains(s, "old body") || !strings.Contains(s, "loading") {
+			t.Errorf("a stale fetch filled the detail:\n%s", s)
+		}
+	})
+}
+
+func TestDetailSections(t *testing.T) {
+	ago := time.Now().Add(-150 * time.Minute)
+	d := item.Detail{
+		Description: "line one\nline two",
+		Pipeline: &item.Pipeline{ID: "42", Status: "failed", Duration: 4 * time.Minute, Jobs: []item.Job{
+			{Name: "build", Stage: "build", Status: "success", Duration: 30 * time.Second},
+			{Name: "lint", Stage: "test", Status: "failed", Duration: 10 * time.Second},
+			{Name: "unit", Stage: "test", Status: "success", Duration: 90 * time.Second},
+			{Name: "image", Stage: "build", Status: "success", Duration: 5 * time.Second},
+		}},
+		Threads: []item.Thread{
+			{File: "main.go", Line: 12, Comments: []item.Comment{{Author: "ann", Body: "why?", Created: ago}, {Author: "bob", Body: "because", Created: ago}}},
+			{Resolved: true, Comments: []item.Comment{{Author: "cy", Body: "done", Created: ago}}},
+		},
+		Comments: []item.Comment{
+			{Author: "late", Body: "second", Created: ago.Add(time.Hour)},
+			{Author: "early", Body: "first", Created: ago},
+		},
+	}
+	m := detailModel(t, &detailProv{d: d})
+	_, cmd := m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	m.Update(cmd())
+	s := screenText(m)
+	inOrder := func(name string, subs ...string) {
+		t.Helper()
+		at := 0
+		for _, sub := range subs {
+			i := strings.Index(s[at:], sub)
+			if i < 0 {
+				t.Errorf("%s: no %q after offset %d in:\n%s", name, sub, at, s)
+				return
+			}
+			at += i + len(sub)
+		}
+	}
+	inOrder("description", "Description", "line one", "line two")
+	inOrder("pipeline title", "Pipeline #42 · failed · 4m0s")
+	inOrder("jobs grouped by stage", "build", "✓ build", "30s", "✓ image", "5s", "test", "✗ lint", "10s", "✓ unit", "1m30s")
+	inOrder("open thread", "open · main.go:12 · ann · 2h", "why?", "bob", "because")
+	inOrder("resolved thread", "resolved · cy · 2h", "done")
+	inOrder("comments newest last", "Comments", "early", "first", "late", "second")
 }

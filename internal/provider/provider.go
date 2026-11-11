@@ -108,7 +108,15 @@ func (a *auto) Quick(ctx context.Context) ([]item.Item, error) {
 
 // Detail fetches the item's detail from the forge provider, or returns ErrNoDetail when it has none.
 func (a *auto) Detail(ctx context.Context, it item.Item) (item.Detail, error) {
-	return item.Detail{}, errors.New("not implemented")
+	p, err := a.resolve()
+	if err != nil {
+		return item.Detail{}, err
+	}
+	d, ok := p.(Detailer)
+	if !ok {
+		return item.Detail{}, ErrNoDetail
+	}
+	return d.Detail(ctx, it)
 }
 
 // Forge returns the provider type and the repo path (owner/repo, group/project) for a git remote URL

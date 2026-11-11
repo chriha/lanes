@@ -166,6 +166,8 @@ type Model struct {
 	// details caches the fetched details by detailKey, in memory only; an entry is reused while its item's
 	// fingerprint is unchanged
 	details map[string]*detailEntry
+	// detailKey is the details key of the item the detail screen shows, "" when its provider fetches none
+	detailKey string
 
 	width, height int
 }

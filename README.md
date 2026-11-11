@@ -1132,7 +1132,9 @@ A `.lanes.toml` can run shell commands (`command` providers, actions), so `lanes
 not been told to trust. Before it runs git, loads any config or starts a provider, it finds the project root (the
 nearest directory with a `.git` directory or file, found without running git, so worktrees count; otherwise the
 current directory) and checks it against its trust list. It asks in every new project, even one without a
-`.lanes.toml`, since a later pull could add one.
+`.lanes.toml`, since a later pull could add one. The trust hash covers every `.lanes.toml` under that root and any
+in a parent directory up to your home directory, since `lanes` loads those too: editing one makes the project
+untrusted again.
 
 The TUI checks in the background behind a `checking whether <root> is trusted…` frame, since hashing every
 `.lanes.toml` under a large root can take seconds (`ctrl-c` quits it). If the root is not trusted, the TUI,

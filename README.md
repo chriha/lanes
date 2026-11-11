@@ -994,6 +994,38 @@ filter = 'priority == "high"'
 of a badge is one of `ok`, `warn`, `bad`, `info`, `dim`. Everything under `fields` becomes available to filters
 and templates.
 
+For the [details](#preview-pane-and-item-history) screen (`d`), add an optional `detail` command. It runs through
+`$SHELL -c` when you press `d`, never with the list refresh, gets the item's `id` in `$LANES_ITEM_ID` and must print
+one JSON object; every key is optional:
+
+```toml
+[provider.todos]
+type = "command"
+command = "my-todo-exporter --json"
+detail = 'my-todo-exporter --json --show "$LANES_ITEM_ID"'
+```
+
+```json
+{
+  "description": "Explain install, config and keys.",
+  "jobs": [{ "name": "lint", "stage": "test", "status": "success", "duration": 42 }],
+  "threads": [
+    {
+      "file": "README.md",
+      "line": 12,
+      "resolved": false,
+      "comments": [{ "author": "sam", "body": "Mention brew?", "created": "2026-11-01T10:00:00Z" }]
+    }
+  ],
+  "comments": [{ "author": "chris", "body": "Draft is up.", "created": "2026-11-02T09:30:00Z" }]
+}
+```
+
+`jobs` fill the Pipeline section, grouped by `stage`; `status` is one of `success`, `failed`, `warning`, `running`,
+`pending`, `skipped`, `canceled`, `manual`, and `duration` is in seconds. A thread's first comment opens it, the
+rest are replies; `created` is an RFC 3339 time. Without `detail` the screen shows the item's fields only; a
+failing command or invalid JSON shows an error line under them.
+
 ## Configuration
 
 ### Global and project config

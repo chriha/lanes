@@ -45,7 +45,10 @@ func newProvider(c config.Provider, origin func() (string, error)) (Provider, er
 	case "linear":
 		return &Linear{Team: c.Team, TokenEnv: c.TokenEnv}, nil
 	case "command":
-		return &Command{Cmd: c.Command}, nil
+		if c.Detail == "" {
+			return struct{ Provider }{&Command{Cmd: c.Command}}, nil // hides Detail: no detail fetch without the command
+		}
+		return &Command{Cmd: c.Command, DetailCmd: c.Detail}, nil
 	}
 	return nil, fmt.Errorf("unknown provider type %q", c.Type)
 }

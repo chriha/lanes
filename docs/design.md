@@ -33,7 +33,9 @@ an env var).
   `assignees`, `labels`, `blocked`/`blocked_by` from issue dependencies, `status`, `priority`); `linear` (a team's
   open Linear issues with the same ticket fields, `key` instead of `number`); `auto`, resolved
   on its first fetch after start or a config reload (in the background, so building it runs no `git`): `github` for a `github.com` origin, `gitlab` for any other host, so the global default config works in both kinds of
-  repo; or `command` provider: any shell command printing a JSON array of items. Items are generic: `{id, title, url, fields{...}}`.
+  repo; or `command` provider: any shell command printing a JSON array of items, plus an optional `detail` command that
+  prints one item's `{description, jobs, threads, comments}` for the details screen (item id in `$LANES_ITEM_ID`,
+  run on `d` only, never with the list poll). Items are generic: `{id, title, url, fields{...}}`.
 - **View** — name + provider + filter expression + columns + optional keymap overrides. Switch views with
   `tab`/`shift-tab`, `1-9`, or `:view <name>`.
 - **Filter** — `expr` expression evaluated client-side over item fields, e.g.

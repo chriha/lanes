@@ -125,6 +125,9 @@ func query(f *os.File, termName, tmuxEnv string, wait time.Duration) (reply stri
 
 // ask writes the query q to w and returns the reply read from f, or ok=false when none arrives within wait.
 func ask(f *os.File, w io.Writer, q string, wait time.Duration) (reply string, ok bool) {
+	// Whatever is still queued once we stop reading (the rest of an overlong or garbled reply) would reach the
+	// TUI as keystrokes. ponytail: a reply that arrives after this point cannot be told from typing and still leaks.
+	defer drain(f)
 	if _, err := io.WriteString(w, q); err != nil {
 		return "", false
 	}
@@ -144,4 +147,13 @@ func ask(f *os.File, w io.Writer, q string, wait time.Duration) (reply string, o
 		}
 	}
 	return "", false
+}
+
+// drain discards the input already queued on f, waiting at most a millisecond for the first byte.
+func drain(f *os.File) {
+	for {
+		if _, ok := readByte(f, time.Millisecond); !ok {
+			return
+		}
+	}
 }

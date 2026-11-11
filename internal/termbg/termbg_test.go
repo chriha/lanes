@@ -3,6 +3,7 @@ package termbg
 import (
 	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -143,6 +144,25 @@ func TestAsk(t *testing.T) {
 			t.Errorf("ask took %v, want about the 100ms wait", d)
 		}
 	})
+}
+
+func TestAskLeavesNoInputBehind(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+	// a reply that never ends overruns the read limit: what is left in the queue would reach the TUI as keystrokes
+	if _, err := w.WriteString("\x1b]11;rgb:" + strings.Repeat("f", 100)); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := ask(r, io.Discard, queryOSC11, time.Second); ok {
+		t.Fatalf("ask = %q, true; want no reply", got)
+	}
+	if b, ok := readByte(r, 10*time.Millisecond); ok {
+		t.Errorf("input queue still holds %q after ask", b)
+	}
 }
 
 func TestQueryFor(t *testing.T) {

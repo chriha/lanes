@@ -107,12 +107,22 @@ func (m *Model) setFold(th item.Thread, f bool) {
 }
 
 // keyDetail handles the thread keys of the detail screen (J/K move the thread cursor, n/N move it to the
-// next/previous unresolved thread and unfold that, enter/space fold the thread under it, za/zA fold/unfold all) and
-// leaves the rest to keyHelp.
+// next/previous unresolved thread and unfold that, enter/space fold the thread under it, za/zA fold/unfold all, o
+// opens the thread under it, else the item) and leaves the rest to keyHelp.
 func (m *Model) keyDetail(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	ths := m.threads()
 	s, z := k.String(), m.pendingZ
 	m.pendingZ = false
+	if s == "o" {
+		u := m.detail.URL
+		if len(ths) > 0 {
+			if th := ths[min(max(m.thread, 0), len(ths)-1)]; th.URL != "" {
+				u = th.URL
+			}
+		}
+		m.openItemURL(u)
+		return m, nil
+	}
 	if len(ths) == 0 {
 		return m.keyHelp(k)
 	}

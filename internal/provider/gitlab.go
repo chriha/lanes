@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -274,6 +275,11 @@ func (g *GitLab) threads(ctx context.Context, proj, me string, iids []string) (m
 		info[mr.IID] = ti
 	}
 	return info, nil
+}
+
+// Detail fetches an MR's description, head pipeline with all jobs, threads and comments.
+func (g *GitLab) Detail(ctx context.Context, it item.Item) (item.Detail, error) {
+	return item.Detail{}, errors.New("gitlab: detail not implemented")
 }
 
 type gqlThreadsResp struct {

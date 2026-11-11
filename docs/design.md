@@ -90,6 +90,10 @@ an env var).
   dot sweeping back and forth, `scanFrames`) at one frame per 100 ms of the fetch; a `spinTickMsg` loop redraws it.
   `Update` starts that loop (`armSpin`) when a fetch runs and none does, and the loop ends at the first tick that
   finds every provider idle, so at most one runs and none while idle. The 1 s tick advances the elapsed text.
+- Startup: the TUI's first model is the trust gate `ui.Startup`; `trust.Check` (the tree walk) runs in a `tea.Cmd`
+  behind a checking frame, the trust dialog runs in the same program, and `initApp`, `config.Load` and `ui.New` run
+  only after the trusted result. `status`, `hook`, `version`, `doctor`, `init` and a start without a terminal check
+  synchronously in `run`.
 - Reload: trust check, `config.Load` and provider construction run in a `tea.Cmd`; the old config stays active
   until its `reloadedMsg` lands, which cancels the old config's in-flight fetches (their results are dropped by
   fetch generation) and fetches every provider at once.

@@ -70,16 +70,23 @@ func main() {
 	}))
 }
 
-func runTUI(updates update.Checker, upgrade string) int {
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)
-		return 1
-	}
+// runTUI runs the TUI behind its startup trust gate: ready (initApp) and the config load run only once root is trusted.
+func runTUI(root string, ready func() (update.Checker, string)) int {
 	termbg.Settle()
-	m := ui.New(cfg, ui.WithUpdateCheck(updates, upgrade))
-	defer m.Close() // cancels the fetches still running, which stops their provider subprocesses
-	if _, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus()).Run(); err != nil {
+	s := ui.NewStartup(root, func() (*ui.Model, error) {
+		updates, upgrade := ready()
+		cfg, err := config.Load()
+		if err != nil {
+			return nil, err
+		}
+		return ui.New(cfg, ui.WithUpdateCheck(updates, upgrade)), nil
+	})
+	defer s.Close() // cancels the fetches still running, which stops their provider subprocesses
+	_, err := tea.NewProgram(s, tea.WithAltScreen(), tea.WithReportFocus()).Run()
+	if err == nil {
+		err = s.Err()
+	}
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", app.Name, err)
 		return 1
 	}
@@ -119,8 +126,14 @@ type env struct {
 	hook           func(event string)
 	status         func()
 	doctor         func() int
-	init           func() int                                       // writes .lanes.toml
-	tui            func(updates update.Checker, upgrade string) int // loads the config and runs the TUI
+	init           func() int                                                   // writes .lanes.toml
+	tui            func(root string, ready func() (update.Checker, string)) int // checks trust, then ready, loads the config and runs the TUI
+}
+
+// ready runs once the project is trusted: initApp, then the project's release checker and the upgrade command.
+func (e env) ready() (update.Checker, string) {
+	e.initApp(e.wd)
+	return e.updates(), e.upgrade()
 }
 
 // updates is the release checker of the current project; call it after initApp, which scopes the cache dir.
@@ -144,6 +157,9 @@ func run(args []string, e env) int {
 	}
 	// Nothing below may run git, load the config or start a provider before the project is trusted.
 	root := trust.Root(e.wd)
+	if cmd == "" && e.isTTY { // the TUI checks trust behind its first frame: the walk can take seconds
+		return e.tui(root, e.ready)
+	}
 	trusted, hash, err := trust.Check(root)
 	switch cmd {
 	case "version", "--version": // never prompts; the update hint reads the project's cache, so only when trusted
@@ -193,11 +209,12 @@ func run(args []string, e env) int {
 			return 1
 		}
 	}
-	e.initApp(e.wd)
 	switch cmd {
 	case "doctor":
+		e.initApp(e.wd)
 		return e.doctor()
 	case "init":
+		e.initApp(e.wd)
 		code := e.init()
 		// the user wrote .lanes.toml through lanes: trust its new content
 		if hash, err := trust.HashRoot(root); err != nil {
@@ -207,7 +224,8 @@ func run(args []string, e env) int {
 		}
 		return code
 	}
-	return e.tui(e.updates(), e.upgrade())
+	// ponytail: no terminal but trusted: the TUI's gate checks (walks) again; one walk if non-TTY starts ever matter
+	return e.tui(root, e.ready)
 }
 
 // printUpdateHint prints the newer release the last check found, from the cache only: it never asks the network.

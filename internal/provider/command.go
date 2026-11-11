@@ -12,8 +12,8 @@ import (
 	"github.com/chriha/lanes/internal/item"
 )
 
-// Command runs a shell command that prints a JSON array of items.
-type Command struct{ Cmd string }
+// Command runs a shell command that prints a JSON array of items, and DetailCmd, when set, for an item's detail.
+type Command struct{ Cmd, DetailCmd string }
 
 func (c *Command) Fetch(ctx context.Context) ([]item.Item, error) {
 	sh := os.Getenv("SHELL")
@@ -33,4 +33,9 @@ func (c *Command) Fetch(ctx context.Context) ([]item.Item, error) {
 		return nil, fmt.Errorf("command provider: bad JSON: %w", err)
 	}
 	return items, nil
+}
+
+// Detail runs DetailCmd for the item; ErrNoDetail when none is configured.
+func (c *Command) Detail(ctx context.Context, it item.Item) (item.Detail, error) {
+	return item.Detail{}, ErrNoDetail
 }

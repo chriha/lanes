@@ -115,10 +115,10 @@ func TestRunGate(t *testing.T) {
 		wantStderr string // substring; "" = stderr must be empty
 		wantStored bool   // trust.json trusts the project afterwards
 	}{
-		{"tui untrusted, yes", nil, false, true, true, 0, "ask initApp tui", "", true},
-		{"tui untrusted, no", nil, false, true, false, 1, "ask", "not trusted", false},
+		{"tui untrusted: the TUI's gate asks", nil, false, true, true, 0, "tui", "", false},
 		{"tui untrusted, no tty", nil, false, false, true, 1, "", "%ROOT% is not trusted; run lanes in a terminal to trust it\n", false},
-		{"tui trusted", nil, true, true, true, 0, "initApp tui", "", true},
+		{"tui trusted", nil, true, true, true, 0, "tui", "", true},
+		{"tui trusted, no tty", nil, true, false, true, 0, "tui", "", true},
 		{"doctor untrusted, yes", []string{"doctor"}, false, true, true, 0, "ask initApp doctor", "", true},
 		{"doctor untrusted, no", []string{"doctor"}, false, true, false, 1, "ask", "not trusted", false},
 		{"init untrusted, no", []string{"init"}, false, true, false, 1, "ask", "not trusted", false},
@@ -202,8 +202,8 @@ func TestRunStoresAlways(t *testing.T) {
 		wantHash   bool // trust.json trusts the current hash afterwards
 		wantAlways bool // trust.json trusts the root whatever the hash
 	}{
-		{"yes, unchecked stores the hash", true, false, 0, "ask initApp tui", true, false},
-		{"yes, checked stores always", true, true, 0, "ask initApp tui", true, true},
+		{"yes, unchecked stores the hash", true, false, 0, "ask initApp doctor", true, false},
+		{"yes, checked stores always", true, true, 0, "ask initApp doctor", true, true},
 		{"no, unchecked stores nothing", false, false, 1, "ask", false, false},
 		{"no, checked stores nothing", false, true, 1, "ask", false, false},
 	}
@@ -217,7 +217,7 @@ func TestRunStoresAlways(t *testing.T) {
 				calls = append(calls, "ask")
 				return tt.yes, tt.always, nil
 			}
-			if code := run(nil, e); code != tt.wantCode {
+			if code := run([]string{"doctor"}, e); code != tt.wantCode {
 				t.Errorf("exit code = %d, want %d", code, tt.wantCode)
 			}
 			if got := strings.Join(calls, " "); got != tt.wantCalls {
@@ -244,8 +244,8 @@ func TestRunAlwaysTrustedRootIgnoresChanges(t *testing.T) {
 		tty       bool
 		wantCalls string
 	}{
-		{"tui", nil, true, "initApp tui"},
-		{"tui without tty", nil, false, "initApp tui"},
+		{"tui", nil, true, "tui"},
+		{"tui without tty", nil, false, "tui"},
 		{"doctor", []string{"doctor"}, true, "initApp doctor"},
 		{"status", []string{"status"}, false, "initApp status"},
 		{"hook", []string{"hook", "Stop"}, false, "hook"},
@@ -262,7 +262,7 @@ func TestRunAlwaysTrustedRootIgnoresChanges(t *testing.T) {
 				return true, true, nil
 			}
 			e.isTTY = true
-			run(nil, e) // trust it always through the dialog
+			run([]string{"doctor"}, e) // trust it always through the dialog
 			e.isTTY = tt.tty
 			if err := os.WriteFile(filepath.Join(dir, config.ProjectFile), []byte("# changed\n"), 0o644); err != nil {
 				t.Fatal(err)
@@ -294,11 +294,12 @@ func TestRunGateWalksOnlyHashTrustedRoots(t *testing.T) {
 		wantCalls  string
 		wantStderr string // substring; "" = stderr must be empty
 	}{
-		{"always: tui", true, nil, 0, "initApp tui", ""},
+		{"always: tui", true, nil, 0, "tui", ""},
 		{"always: status", true, []string{"status"}, 0, "initApp status", ""},
 		{"always: hook", true, []string{"hook", "Stop"}, 0, "hook", ""},
 		{"always: version", true, []string{"version"}, 0, "initApp", ""},
-		{"hash: tui walks and asks", false, nil, 0, "ask initApp tui", "permission denied"},
+		{"hash: tui leaves the walk to the TUI", false, nil, 0, "tui", ""},
+		{"hash: doctor walks and asks", false, []string{"doctor"}, 0, "ask initApp doctor", "permission denied"},
 		{"hash: status walks and stays quiet", false, []string{"status"}, 0, "", ""},
 	}
 	for _, tt := range tests {
@@ -407,7 +408,7 @@ func TestRunUntrust(t *testing.T) {
 			}
 			calls = nil
 			e.isTTY = true
-			run(nil, e)
+			run([]string{"doctor"}, e)
 			if len(calls) == 0 || calls[0] != "ask" {
 				t.Errorf("the next start ran %q, want the dialog first", calls)
 			}
@@ -444,10 +445,10 @@ func TestRunReasksWhenProjectFileChanges(t *testing.T) {
 			write(tt.before)
 			var calls []string
 			e, _, _ := fakeEnv(dir, true, true, &calls)
-			run(nil, e)
+			run([]string{"doctor"}, e)
 			write(tt.after)
 			calls = nil
-			run(nil, e)
+			run([]string{"doctor"}, e)
 			if asked := len(calls) > 0 && calls[0] == "ask"; asked != tt.asks {
 				t.Errorf("asked = %v, want %v (calls %q)", asked, tt.asks, calls)
 			}
@@ -471,8 +472,8 @@ func TestRunInitRerecordsHash(t *testing.T) {
 		t.Fatalf("init exit code = %d", code)
 	}
 	calls = nil
-	run(nil, e)
-	if strings.Join(calls, " ") != "initApp tui" {
+	run([]string{"doctor"}, e)
+	if strings.Join(calls, " ") != "initApp doctor" {
 		t.Errorf("after init the next start ran %q, want no prompt", calls)
 	}
 }
@@ -489,11 +490,11 @@ func TestRunCorruptStore(t *testing.T) {
 	}
 	var calls []string
 	e, _, stderr := fakeEnv(t.TempDir(), true, true, &calls)
-	if code := run(nil, e); code != 1 {
+	if code := run([]string{"doctor"}, e); code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
-	if strings.Contains(strings.Join(calls, " "), "tui") {
-		t.Errorf("calls = %q, the TUI must not start", calls)
+	if strings.Contains(strings.Join(calls, " "), "doctor") {
+		t.Errorf("calls = %q, doctor must not run", calls)
 	}
 	if !strings.Contains(stderr.String(), "trust.json") {
 		t.Errorf("stderr = %q, want the trust.json error", stderr.String())
@@ -601,9 +602,10 @@ func TestRunChecksUpdatesOnlyInTUI(t *testing.T) {
 			e, _, _ := fakeEnv(dir, true, true, &calls)
 			e.version = "v1.0.0"
 			var got *update.Checker
-			var upgrade string
-			e.tui = func(_ string, ready func() (update.Checker, string)) int {
+			var upgrade, gotRoot string
+			e.tui = func(r string, ready func() (update.Checker, string)) int {
 				calls = append(calls, "tui")
+				gotRoot = r
 				c, u := ready()
 				got, upgrade = &c, u
 				return 0
@@ -623,6 +625,9 @@ func TestRunChecksUpdatesOnlyInTUI(t *testing.T) {
 			}
 			if got == nil {
 				t.Fatal("the TUI got no checker")
+			}
+			if gotRoot != root {
+				t.Errorf("the TUI checks trust of %q, want %q", gotRoot, root)
 			}
 			if got.Current != "v1.0.0" || upgrade != update.Brew {
 				t.Errorf("checker for %q with %q, want v1.0.0 with %q", got.Current, upgrade, update.Brew)

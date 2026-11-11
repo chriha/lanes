@@ -1092,7 +1092,9 @@ nearest directory with a `.git` directory or file, found without running git, so
 current directory) and checks it against its trust list. It asks in every new project, even one without a
 `.lanes.toml`, since a later pull could add one.
 
-If the root is not trusted, the TUI, `lanes init` and `lanes doctor` show a dialog:
+The TUI checks in the background behind a `checking whether <root> is trusted…` frame, since hashing every
+`.lanes.toml` under a large root can take seconds (`ctrl-c` quits it). If the root is not trusted, the TUI,
+`lanes init` and `lanes doctor` show a dialog:
 
 ```
 Do you trust /home/you/src/payments?

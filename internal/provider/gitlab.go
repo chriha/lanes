@@ -3,13 +3,13 @@ package provider
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/chriha/lanes/internal/item"
 )
@@ -277,9 +277,119 @@ func (g *GitLab) threads(ctx context.Context, proj, me string, iids []string) (m
 	return info, nil
 }
 
-// Detail fetches an MR's description, head pipeline with all jobs, threads and comments.
+// gqlDetailFmt loads one MR's detail for the detail screen, never with the list poll; %s is the quoted iid.
+const gqlDetailFmt = `query($p:ID!){
+  project(fullPath:$p){ mergeRequest(iid:%s){
+    description
+    headPipeline{id status duration jobs(first:100){nodes{name status duration allowFailure stage{name}}}}
+    discussions(first:100){nodes{resolvable resolved
+      notes(first:100){nodes{body system createdAt author{username} position{filePath newLine oldLine}}}}}
+  }}
+}`
+
+type gqlNote struct {
+	Body      string
+	System    bool
+	CreatedAt time.Time
+	Author    user
+	Position  *struct {
+		FilePath         string
+		NewLine, OldLine int
+	}
+}
+
+type gqlDetailResp struct {
+	Data struct {
+		Project *struct {
+			MergeRequest *struct {
+				Description  string
+				HeadPipeline *struct {
+					ID       string
+					Status   string
+					Duration int
+					Jobs     nodes[struct {
+						Name         string
+						Status       string
+						Duration     int
+						AllowFailure bool
+						Stage        struct{ Name string }
+					}]
+				}
+				Discussions nodes[struct {
+					Resolvable bool
+					Resolved   bool
+					Notes      nodes[gqlNote]
+				}]
+			}
+		}
+	}
+	Errors []struct{ Message string }
+}
+
+// Detail fetches an MR's description, head pipeline with all jobs, threads and comments. Resolvable discussions
+// are threads; the other non-system notes are comments.
 func (g *GitLab) Detail(ctx context.Context, it item.Item) (item.Detail, error) {
-	return item.Detail{}, errors.New("gitlab: detail not implemented")
+	proj, err := g.project()
+	if err != nil {
+		return item.Detail{}, err
+	}
+	iid, _ := it.Fields["iid"].(string)
+	if iid == "" {
+		iid = strings.TrimPrefix(it.ID, "!")
+	}
+	if _, err := strconv.ParseUint(iid, 10, 64); err != nil {
+		return item.Detail{}, fmt.Errorf("gitlab: bad merge request iid %q", iid)
+	}
+	var r gqlDetailResp
+	if err := g.graphql(ctx, fmt.Sprintf(gqlDetailFmt, strconv.Quote(iid)), proj, &r); err != nil {
+		return item.Detail{}, err
+	}
+	if len(r.Errors) > 0 {
+		return item.Detail{}, fmt.Errorf("gitlab: %s", r.Errors[0].Message)
+	}
+	if r.Data.Project == nil || r.Data.Project.MergeRequest == nil {
+		return item.Detail{}, fmt.Errorf("gitlab: merge request !%s not found in %q", iid, proj)
+	}
+	mr := r.Data.Project.MergeRequest
+	d := item.Detail{Description: mr.Description}
+	if p := mr.HeadPipeline; p != nil {
+		pl := &item.Pipeline{
+			ID:       p.ID[strings.LastIndex(p.ID, "/")+1:], // gid://gitlab/Ci::Pipeline/123
+			Status:   strings.ToLower(p.Status),
+			Duration: time.Duration(p.Duration) * time.Second,
+		}
+		// ponytail: first 100 jobs only, paginate if a pipeline ever exceeds that
+		for _, j := range p.Jobs.Nodes {
+			status := strings.ToLower(j.Status)
+			if status == "failed" && j.AllowFailure {
+				status = "warning"
+			}
+			pl.Jobs = append(pl.Jobs, item.Job{Name: j.Name, Stage: j.Stage.Name, Status: status, Duration: time.Duration(j.Duration) * time.Second})
+		}
+		d.Pipeline = pl
+	}
+	for _, disc := range mr.Discussions.Nodes {
+		var cs []item.Comment
+		for _, n := range disc.Notes.Nodes {
+			if !n.System {
+				cs = append(cs, item.Comment{Author: n.Author.Username, Body: n.Body, Created: n.CreatedAt})
+			}
+		}
+		if !disc.Resolvable {
+			d.Comments = append(d.Comments, cs...)
+			continue
+		}
+		th := item.Thread{Resolved: disc.Resolved, Comments: cs}
+		if ns := disc.Notes.Nodes; len(ns) > 0 && ns[0].Position != nil {
+			pos := ns[0].Position
+			th.File, th.Line = pos.FilePath, pos.NewLine
+			if th.Line == 0 {
+				th.Line = pos.OldLine
+			}
+		}
+		d.Threads = append(d.Threads, th)
+	}
+	return d, nil
 }
 
 type gqlThreadsResp struct {

@@ -74,7 +74,7 @@ func readState(name string) string {
 // fails loudly: it must not disturb claude.
 func RunHook(event string) {
 	name := os.Getenv("LANES_SESSION")
-	if name == "" {
+	if name == "" || os.Getenv("LANES_STATE_DIR") == "" { // an empty dir would make the state paths relative to cwd
 		return
 	}
 	var in struct {

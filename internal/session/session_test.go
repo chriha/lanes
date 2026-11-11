@@ -274,6 +274,41 @@ func TestHookNoSessionWritesNothing(t *testing.T) {
 	}
 }
 
+func TestHookEmptyStateDirWritesNothing(t *testing.T) {
+	for _, event := range []string{"Stop", "SessionEnd"} {
+		t.Run(event, func(t *testing.T) {
+			cwd := t.TempDir()
+			old, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chdir(cwd); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chdir(old) })
+			sessions := filepath.Join(cwd, "sessions")
+			if err := os.Mkdir(sessions, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			stale := filepath.Join(sessions, "fix~1.json")
+			if err := os.WriteFile(stale, []byte("{}"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("LANES_SESSION", "fix~1")
+			t.Setenv("LANES_STATE_DIR", "")
+			feedStdin(t, `{"session_id":"abc"}`)
+			RunHook(event)
+			got, _ := filepath.Glob(filepath.Join(sessions, "*"))
+			if len(got) != 1 || got[0] != stale {
+				t.Errorf("files in cwd sessions/: %q, want only the untouched %q", got, stale)
+			}
+			if b, _ := os.ReadFile(stale); string(b) != "{}" {
+				t.Errorf("stale file changed: %q", b)
+			}
+		})
+	}
+}
+
 func TestListIgnoresStateOfDeadSession(t *testing.T) {
 	stateEnv(t)
 	t.Setenv("LANES_SESSION", "fix~1")

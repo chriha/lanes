@@ -105,8 +105,9 @@ func (m *Model) setFold(th item.Thread, f bool) {
 	m.folded[m.foldKey(th)] = f
 }
 
-// keyDetail handles the thread keys of the detail screen (J/K move the thread cursor, enter/space fold the thread
-// under it, za/zA fold/unfold all) and leaves the rest to keyHelp.
+// keyDetail handles the thread keys of the detail screen (J/K move the thread cursor, n/N move it to the
+// next/previous unresolved thread and unfold that, enter/space fold the thread under it, za/zA fold/unfold all) and
+// leaves the rest to keyHelp.
 func (m *Model) keyDetail(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	ths := m.threads()
 	s, z := k.String(), m.pendingZ
@@ -128,12 +129,17 @@ func (m *Model) keyDetail(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.thread = max(m.thread-1, 0)
 		}
-		// scroll the thread under the cursor to the top when it is off screen
-		for i, l := range m.detailLines() {
-			if strings.HasPrefix(ansi.Strip(l), "›") {
-				if i < m.helpOff || i >= m.helpOff+max(m.height-1, 3) {
-					m.helpOff = i
-				}
+		m.scrollToThread()
+	case s == "n" || s == "N":
+		step := 1
+		if s == "N" {
+			step = -1
+		}
+		for i := m.thread + step; i >= 0 && i < len(ths); i += step {
+			if !ths[i].Resolved {
+				m.thread = i
+				m.setFold(ths[i], false)
+				m.scrollToThread()
 				break
 			}
 		}
@@ -143,6 +149,18 @@ func (m *Model) keyDetail(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyHelp(k)
 	}
 	return m, nil
+}
+
+// scrollToThread scrolls the thread under the cursor to the top when it is off screen.
+func (m *Model) scrollToThread() {
+	for i, l := range m.detailLines() {
+		if strings.HasPrefix(ansi.Strip(l), "›") {
+			if i < m.helpOff || i >= m.helpOff+max(m.height-1, 3) {
+				m.helpOff = i
+			}
+			return
+		}
+	}
 }
 
 // jobIcons marks a pipeline job's status; any other status gets "·".

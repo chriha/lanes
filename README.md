@@ -351,7 +351,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
 | `gr`                | resume the item's newest finished Claude session (see [Resuming a Claude session](#resuming-a-claude-session)) |
 | `i`                 | show the item's history                            |
-| `d`                 | item details: every field untruncated, description, pipeline, threads and comments (scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; `J`/`K` move between threads, `enter`/`space` fold the one under the cursor, `za`/`zA` fold/unfold all; close with `q`/`esc`) |
+| `d`                 | item details: every field untruncated, description, pipeline, threads and comments (scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; `J`/`K` move between threads, `n`/`N` jump to the next/previous open thread, `enter`/`space` fold the one under the cursor, `za`/`zA` fold/unfold all; close with `q`/`esc`) |
 | `N`                 | edit the item's note in `$VISUAL` / `$EDITOR` (save it empty to delete it) |
 | `m`                 | mark the item unread (all marked items, if any are marked); when all of them are unread: mark them read (see [Row badges](#row-badges)) |
 | `z`                 | [snooze](#snoozing) the item (all marked items, if any are marked); on a snoozed item: unsnooze it |
@@ -460,8 +460,9 @@ fetches in the background, once per item version, the **Description**, the **Pip
 the review **Threads** and the **Comments** (newest last); the fields show at once and the sections fill in.
 Scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; `q` or `esc` returns to the list. Open threads start expanded,
 resolved ones collapsed to one line (`✓ resolved · file:line · author · n replies`): `J`/`K` move the thread cursor
-(`›`), `enter`/`space` fold or unfold the thread under it, `za` folds all, `zA` unfolds all. Folding is kept while
-lanes runs, also when the details are fetched again.
+(`›`), `n`/`N` jump to the next/previous open thread and unfold it (they stop at the last/first one),
+`enter`/`space` fold or unfold the thread under it, `za` folds all, `zA` unfolds all. Folding is kept while lanes
+runs, also when the details are fetched again.
 
 `i` shows the item's **history**: every action started on it, and how it ended (`finished`, `failed (exit n)`,
 `killed`). History is stored per project and survives restarts.

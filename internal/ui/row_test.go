@@ -13,7 +13,7 @@ func TestRowPrefix(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(0) // termenv.TrueColor: render the colors the test compares
 	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
-	bg := regexp.MustCompile(`48;[0-9;]+`).FindString(lipgloss.NewStyle().Background(cSelBg).Render("x"))
+	bg := regexp.MustCompile(`48;[0-9;]+`).FindString(lipgloss.NewStyle().Background(lipgloss.Color("#112233")).Render("x"))
 	if bg == "" {
 		t.Fatal("test needs a color profile: styles rendered plain")
 	}
@@ -31,6 +31,7 @@ func TestRowPrefix(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newBackoffModel(t)
+			useSelection(t, "#112233")
 			its := mkItems("!1948")
 			if tt.marked {
 				m.marks[its[0].ID] = true

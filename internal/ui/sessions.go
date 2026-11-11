@@ -132,7 +132,7 @@ func (m *Model) sessionsView() string {
 		// every segment carries its own background: a nested style's reset would otherwise end the highlight
 		st := func(s lipgloss.Style) lipgloss.Style {
 			if i == m.sessCursor {
-				return s.Background(cSelBg)
+				return selectStyle(s, false)
 			}
 			return s
 		}

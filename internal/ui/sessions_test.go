@@ -347,8 +347,9 @@ func TestSessionsViewHighlightsCursorRow(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(0) // termenv.TrueColor: render the colors the test compares
 	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+	useSelection(t, "#112233")
 	bgRe := regexp.MustCompile(`48;[0-9;]+`)
-	bg := bgRe.FindString(lipgloss.NewStyle().Background(cSelBg).Render("x"))
+	bg := bgRe.FindString(lipgloss.NewStyle().Background(lipgloss.Color("#112233")).Render("x"))
 	if bg == "" {
 		t.Fatal("test needs a color profile: styles rendered plain")
 	}

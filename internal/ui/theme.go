@@ -19,7 +19,8 @@ var (
 	cOrange = lipgloss.AdaptiveColor{Light: "#C05621", Dark: "#FB923C"}
 	cBad    = lipgloss.AdaptiveColor{Light: "#C53030", Dark: "#F87171"}
 	cInfo   = lipgloss.AdaptiveColor{Light: "#2B6CB0", Dark: "#60A5FA"}
-	cSelBg  = lipgloss.AdaptiveColor{Light: "#DDD6F5", Dark: "#3A3560"}
+	// cSelBg is the configured selection background; a side left empty means "follow the terminal" (reverse video).
+	cSelBg = lipgloss.AdaptiveColor{}
 
 	sTitle, sTab, sTabOn, sDim, sText, sID, sMark, sErr, sRule, sKey, sWarn lipgloss.Style
 )
@@ -43,7 +44,7 @@ func init() {
 func buildStyles() {
 	sTitle = lipgloss.NewStyle().Bold(true).Foreground(cAccent)
 	sTab = lipgloss.NewStyle().Foreground(cDim).Padding(0, 1)
-	sTabOn = lipgloss.NewStyle().Bold(true).Foreground(cText).Background(cSelBg).Padding(0, 1)
+	sTabOn = selectStyle(lipgloss.NewStyle().Bold(true).Padding(0, 1), true)
 	sDim = lipgloss.NewStyle().Foreground(cDim)
 	sText = lipgloss.NewStyle().Foreground(cText)
 	sID = lipgloss.NewStyle().Foreground(cInfo)
@@ -52,6 +53,23 @@ func buildStyles() {
 	sRule = lipgloss.NewStyle().Foreground(cDim)
 	sKey = lipgloss.NewStyle().Foreground(cAccent).Bold(true)
 	sWarn = lipgloss.NewStyle().Foreground(cWarn).Bold(true)
+}
+
+// selectStyle marks s as part of the selected row or active tab: with a configured selection color for the current
+// background it paints that background, otherwise it swaps the terminal's own foreground and background. withText
+// also sets the text color on the configured side; on the reverse side the terminal's foreground is what gets swapped.
+func selectStyle(s lipgloss.Style, withText bool) lipgloss.Style {
+	c := cSelBg.Dark
+	if !lipgloss.HasDarkBackground() {
+		c = cSelBg.Light
+	}
+	if c == "" {
+		return s.Reverse(true)
+	}
+	if withText {
+		s = s.Foreground(cText)
+	}
+	return s.Background(lipgloss.Color(c))
 }
 
 // applyTheme resolves the palette from config: per color and side, the [theme.light] / [theme.dark] value wins

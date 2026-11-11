@@ -337,6 +337,36 @@ func TestDetailFetch(t *testing.T) {
 	}
 }
 
+// TestDetailFetchSanitized checks that escape sequences in a fetched detail never reach the rendered screen.
+func TestDetailFetchSanitized(t *testing.T) {
+	const osc52, osc8 = "\x1b]52;c;aGk=\x07", "\x1b]8;;http://evil\x1b\\"
+	dirty := func(s string) string { return osc52 + s + osc8 + "\x9b" }
+	p := &detailProv{d: item.Detail{
+		Description: dirty("the body") + "\nsecond line",
+		Pipeline:    &item.Pipeline{ID: dirty("77"), Status: "failed", Jobs: []item.Job{{Name: dirty("lint"), Stage: "test", Status: "failed"}}},
+		Threads:     []item.Thread{{File: dirty("a.go"), Line: 3, Comments: []item.Comment{{Author: dirty("ann"), Body: dirty("thread text")}}}},
+		Comments:    []item.Comment{{Author: dirty("bob"), Body: dirty("lgtm")}},
+	}}
+	m := detailModel(t, p)
+	_, cmd := m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	if cmd == nil {
+		t.Fatal("d started no fetch")
+	}
+	m.Update(cmd())
+	raw := strings.Join(m.detailLines(), "\n")
+	for _, bad := range []string{"\x1b]", "\x07", "\x9b", "\x1b\\"} {
+		if strings.Contains(raw, bad) {
+			t.Errorf("rendered screen contains %q:\n%q", bad, raw)
+		}
+	}
+	s := screenText(m)
+	for _, w := range []string{"the body", "second line", "lint", "ann", "thread text", "bob", "lgtm"} {
+		if !strings.Contains(s, w) {
+			t.Errorf("no %q in:\n%s", w, s)
+		}
+	}
+}
+
 // TestDetailCache checks that a fetched detail is reused while the item is unchanged and refetched once its
 // fingerprint changed, and that a fetch for an older version of the item is dropped.
 func TestDetailCache(t *testing.T) {

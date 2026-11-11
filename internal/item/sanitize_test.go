@@ -67,3 +67,75 @@ func TestSanitize(t *testing.T) {
 		t.Error("Sanitize(nil) is not nil")
 	}
 }
+
+func TestSanitizeDetailText(t *testing.T) {
+	tests := []struct{ name, in, want string }{
+		{"plain", "fix the thing", "fix the thing"},
+		{"newlines kept", "a\nb\n\nc", "a\nb\n\nc"},
+		{"tab becomes a space", "a\tb", "a b"},
+		{"carriage return dropped", "a\r\nb", "a\nb"},
+		{"osc 52 clipboard", "a\x1b]52;c;aGk=\x07b", "a]52;c;aGk=b"},
+		{"osc 8 hyperlink", "\x1b]8;;http://x\x1b\\link\x1b]8;;\x1b\\", "]8;;http://x\\link]8;;\\"},
+		{"csi cursor move", "a\x1b[2;3Hb", "a[2;3Hb"},
+		{"raw 0x9b byte", "a\x9bb", "ab"},
+		{"c1 csi rune", "a\u009bb", "ab"},
+		{"del and nul", "a\x7f\x00b", "ab"},
+		{"non-ascii intact", "Größe 日本語 😀", "Größe 日本語 😀"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := Detail{
+				Description: tt.in,
+				Threads:     []Thread{{Comments: []Comment{{Body: tt.in}}}},
+				Comments:    []Comment{{Body: tt.in}},
+			}
+			got := SanitizeDetail(d)
+			for field, g := range map[string]string{
+				"description": got.Description, "thread body": got.Threads[0].Comments[0].Body, "comment body": got.Comments[0].Body,
+			} {
+				if g != tt.want {
+					t.Errorf("%s = %q, want %q", field, g, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func TestSanitizeDetail(t *testing.T) {
+	const dirty = "x\x1b]52;c;aGk=\x07\x9by"
+	const clean = "x]52;c;aGk=y"
+	in := Detail{
+		Description: "d\n" + dirty,
+		Pipeline: &Pipeline{
+			ID: dirty, Status: dirty, Duration: 3,
+			Jobs: []Job{{Name: dirty, Stage: dirty, Status: dirty, Duration: 5}},
+		},
+		Threads: []Thread{{
+			File: dirty + "\n", Line: 4, Resolved: true,
+			Comments: []Comment{{Author: dirty + "\t", Body: "b\n" + dirty}},
+		}},
+		Comments: []Comment{{Author: dirty, Body: dirty}},
+	}
+	want := Detail{
+		Description: "d\n" + clean,
+		Pipeline: &Pipeline{
+			ID: clean, Status: clean, Duration: 3,
+			Jobs: []Job{{Name: clean, Stage: clean, Status: clean, Duration: 5}},
+		},
+		Threads: []Thread{{
+			File: clean + " ", Line: 4, Resolved: true,
+			Comments: []Comment{{Author: clean + " ", Body: "b\n" + clean}},
+		}},
+		Comments: []Comment{{Author: clean, Body: clean}},
+	}
+	got := SanitizeDetail(in)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("SanitizeDetail =\n%+v\nwant\n%+v", got, want)
+	}
+	if in.Pipeline.ID != dirty || in.Threads[0].Comments[0].Body != "b\n"+dirty {
+		t.Error("SanitizeDetail changed its argument")
+	}
+	if z := SanitizeDetail(Detail{}); !reflect.DeepEqual(z, Detail{}) {
+		t.Errorf("zero Detail = %+v, want zero", z)
+	}
+}

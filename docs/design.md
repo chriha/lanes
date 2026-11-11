@@ -71,7 +71,7 @@ an env var).
 
 - Vim keys: `h j k l`, `gg G`, `ctrl-d/u`, `space` mark, `V` mark all, `esc` clear.
 - `/` fuzzy filter, `:` command line, `?` help, `enter` open session/jump in, `o` open URL, `x` close session
-  (always confirms), `X` interrupt the session's command and keep its output (confirm; again: SIGKILL), `R` refresh, `i` item history, `d` item details (every field untruncated, CI jobs one per line), `n` jump to the next session asking/waiting (asking first, oldest
+  (always confirms), `X` interrupt the session's command and keep its output (confirm; again: SIGKILL), `R` refresh, `i` item history, `d` item details (every field untruncated, CI jobs one per line, plus description, pipeline, threads and comments fetched on demand; `J`/`K` thread cursor, `enter`/`space` fold one, `za`/`zA` fold/unfold all), `n` jump to the next session asking/waiting (asking first, oldest
   first, cycles), `S` sessions screen (every session, also of items no longer listed; jump / close), `A` agent view
   (below), `q` quit.
 - Live: background poll (default 30s) diffs into the list, preserving cursor + marks. First paint from disk

@@ -197,7 +197,7 @@ const ghDetailQuery = `query($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){ pullRequest(number:$number){
     body
     comments(last:100){nodes{body createdAt author{login}}}
-    reviewThreads(first:100){nodes{isResolved path line originalLine comments(first:100){nodes{body createdAt author{login}}}}}
+    reviewThreads(first:100){nodes{isResolved path line originalLine comments(first:100){nodes{body url createdAt author{login}}}}}
     commits(last:1){nodes{commit{abbreviatedOid statusCheckRollup{state contexts(first:100){nodes{__typename
       ... on CheckRun{name status conclusion startedAt completedAt checkSuite{workflowRun{workflow{name}}}}
       ... on StatusContext{context state}}}}}}}
@@ -206,6 +206,7 @@ const ghDetailQuery = `query($owner:String!,$name:String!,$number:Int!){
 
 type ghComment struct {
 	Body      string
+	URL       string // only queried for review thread comments
 	CreatedAt time.Time
 	Author    ghUser
 }
@@ -285,6 +286,9 @@ func (g *GitHub) Detail(ctx context.Context, it item.Item) (item.Detail, error) 
 		th := item.Thread{File: t.Path, Line: t.Line, Resolved: t.IsResolved, Comments: ghComments(t.Comments.Nodes)}
 		if th.Line == 0 {
 			th.Line = t.OriginalLine // outdated thread: its line is gone from the diff
+		}
+		if c := t.Comments.Nodes; len(c) > 0 {
+			th.URL = c[0].URL
 		}
 		d.Threads = append(d.Threads, th)
 	}

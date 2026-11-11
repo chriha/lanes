@@ -321,15 +321,22 @@ func (m *Model) rebuild() {
 	selected := m.selectedID()
 	q := strings.ToLower(m.query)
 	m.unread = map[string]bool{}
+	stacks := map[string][]item.StackInfo{} // per provider, over its whole list: a base the view hides still counts
 	for i, v := range m.views {
 		v.items, v.heads, v.snoozed = v.items[:0], nil, 0
 		if v.err != nil {
 			continue
 		}
-		for _, it := range m.data[v.cfg.Provider] {
+		its := m.data[v.cfg.Provider]
+		stack, ok := stacks[v.cfg.Provider]
+		if !ok {
+			stack = item.Stack(its)
+			stacks[v.cfg.Provider] = stack
+		}
+		for j, it := range its {
 			it = m.withSnooze(m.withNote(it))
 			unread := m.isUnread(v.cfg.Provider, it)
-			it = withUnread(it, unread)
+			it = withStack(withUnread(it, unread), stack[j])
 			ok, err := v.filter.Match(it.Env())
 			if err != nil {
 				v.err = err
@@ -1386,7 +1393,16 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	if snoozed {
 		snoozeW = 2 // a space, then the snooze marker
 	}
-	titleW := cellW - authCellW - noteW - snoozeW
+	base := stackBase(it)
+	baseText := ""
+	if base != "" {
+		baseText = ansi.Truncate("↑ "+base, idW+2, "…")
+	}
+	baseW := 0
+	if baseText != "" {
+		baseW = 1 + ansi.StringWidth(baseText) // a space, then the stack marker
+	}
+	titleW := cellW - authCellW - noteW - snoozeW - baseW
 	if titleW < 10 {
 		titleW = 10
 	}
@@ -1394,12 +1410,18 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	if m.unread[it.ID] {
 		ts = ts.Bold(true)
 	}
-	if it.Draft || len(b.refetch) > 0 || snoozed {
-		ts = sDim // drafts, snoozed items (:snoozed), and items whose refresh run's result is not fetched yet
+	if it.Draft || len(b.refetch) > 0 || snoozed || base != "" {
+		// drafts, snoozed items (:snoozed), items whose base is not merged yet, and items whose refresh run's
+		// result is not fetched yet
+		ts = sDim
 	}
 	titleText := ansi.Truncate(it.Title, titleW, "…")
 	used := ansi.StringWidth(titleText)
 	title := st(ts).Render(titleText)
+	if baseText != "" {
+		title += plain.Render(" ") + st(sDim).Render(baseText)
+		used += baseW
+	}
 	if authText != "" {
 		title += plain.Render("  ") + st(sDim).Render(authText)
 	}

@@ -347,10 +347,10 @@ const ghDetailResponse = `{"data":{"repository":{"pullRequest":{
  "comments":{"nodes":[{"body":"looks good","createdAt":"2026-11-04T10:00:00Z","author":{"login":"kim"}}]},
  "reviewThreads":{"nodes":[
   {"isResolved":false,"path":"a.go","line":12,"originalLine":10,"comments":{"nodes":[
-   {"body":"why?","createdAt":"2026-11-01T10:00:00Z","author":{"login":"alex"}},
-   {"body":"because","createdAt":"2026-11-01T11:00:00Z","author":{"login":"me"}}]}},
+   {"body":"why?","url":"https://github.com/o/r/pull/7#discussion_r1","createdAt":"2026-11-01T10:00:00Z","author":{"login":"alex"}},
+   {"body":"because","url":"https://github.com/o/r/pull/7#discussion_r2","createdAt":"2026-11-01T11:00:00Z","author":{"login":"me"}}]}},
   {"isResolved":true,"path":"b.go","line":null,"originalLine":7,"comments":{"nodes":[
-   {"body":"removed line","createdAt":"2026-11-02T10:00:00Z","author":{"login":"alex"}}]}}]},
+   {"body":"removed line","url":"https://github.com/o/r/pull/7#discussion_r3","createdAt":"2026-11-02T10:00:00Z","author":{"login":"alex"}}]}}]},
  "commits":{"nodes":[{"commit":{"abbreviatedOid":"abc1234","statusCheckRollup":{"state":"FAILURE","contexts":{"nodes":[
   {"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"SUCCESS","startedAt":"2026-11-01T10:00:00Z","completedAt":"2026-11-01T10:00:30Z","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},
   {"__typename":"CheckRun","name":"lint","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2026-11-01T10:00:05Z","completedAt":"2026-11-01T10:02:05Z","checkSuite":{"workflowRun":{"workflow":{"name":"CI"}}}},
@@ -377,11 +377,11 @@ func TestGitHubDetail(t *testing.T) {
 			{Name: "ci/jenkins", Stage: "checks", Status: "pending"},
 		}},
 		Threads: []item.Thread{
-			{File: "a.go", Line: 12, Comments: []item.Comment{
+			{File: "a.go", Line: 12, URL: "https://github.com/o/r/pull/7#discussion_r1", Comments: []item.Comment{
 				{Author: "alex", Body: "why?", Created: at("2026-11-01T10:00:00Z")},
 				{Author: "me", Body: "because", Created: at("2026-11-01T11:00:00Z")},
 			}},
-			{File: "b.go", Line: 7, Resolved: true, Comments: []item.Comment{
+			{File: "b.go", Line: 7, Resolved: true, URL: "https://github.com/o/r/pull/7#discussion_r3", Comments: []item.Comment{
 				{Author: "alex", Body: "removed line", Created: at("2026-11-02T10:00:00Z")},
 			}},
 		},
@@ -427,6 +427,9 @@ func TestGitHubDetail(t *testing.T) {
 			}
 			if len(calls) != 1 || !slices.Contains(calls[0], tc.wantNumber) {
 				t.Errorf("calls = %v, want one with %s", calls, tc.wantNumber)
+			}
+			if q := strings.Join(calls[0], " "); !strings.Contains(q, "url") {
+				t.Errorf("query %q does not ask for the comment url", q)
 			}
 		})
 	}

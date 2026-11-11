@@ -19,6 +19,10 @@ func TestFingerprint(t *testing.T) {
 		{"note is injected, not data", func(i *Item) { i.Fields["note"] = "later" }, true},
 		{"snoozed is injected, not data", func(i *Item) { i.Fields["snoozed"] = true }, true},
 		{"unread is injected, not data", func(i *Item) { i.Fields["unread"] = true }, true},
+		{"stack fields are injected, not data", func(i *Item) {
+			i.Fields["base"], i.Fields["stack_pos"], i.Fields["stack_size"] = "!0", 2, 2
+			i.Fields["stacked_by"] = []string{"!2"}
+		}, true},
 		{"url and author are not part of it", func(i *Item) { i.URL, i.Author = "v", "b" }, true},
 		{"title", func(i *Item) { i.Title = "fix it now" }, false},
 		{"draft", func(i *Item) { i.Draft = true }, false},

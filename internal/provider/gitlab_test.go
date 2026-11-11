@@ -288,10 +288,10 @@ const glDetailResponse = `{"data":{"project":{"mergeRequest":{
   {"name":"e2e","status":"FAILED","duration":null,"allowFailure":true,"stage":{"name":"test"}}]}},
  "discussions":{"nodes":[
   {"resolvable":true,"resolved":false,"notes":{"nodes":[
-   {"body":"why?","system":false,"createdAt":"2026-11-01T10:00:00Z","author":{"username":"alex"},"position":{"filePath":"a.go","newLine":12,"oldLine":10}},
-   {"body":"because","system":false,"createdAt":"2026-11-01T11:00:00Z","author":{"username":"me"},"position":{"filePath":"a.go","newLine":12,"oldLine":10}}]}},
+   {"body":"why?","system":false,"url":"https://gl/g/p/-/merge_requests/7#note_1","createdAt":"2026-11-01T10:00:00Z","author":{"username":"alex"},"position":{"filePath":"a.go","newLine":12,"oldLine":10}},
+   {"body":"because","system":false,"url":"https://gl/g/p/-/merge_requests/7#note_2","createdAt":"2026-11-01T11:00:00Z","author":{"username":"me"},"position":{"filePath":"a.go","newLine":12,"oldLine":10}}]}},
   {"resolvable":true,"resolved":true,"notes":{"nodes":[
-   {"body":"removed line","system":false,"createdAt":"2026-11-02T10:00:00Z","author":{"username":"alex"},"position":{"filePath":"b.go","newLine":null,"oldLine":7}}]}},
+   {"body":"removed line","system":false,"url":"https://gl/g/p/-/merge_requests/7#note_3","createdAt":"2026-11-02T10:00:00Z","author":{"username":"alex"},"position":{"filePath":"b.go","newLine":null,"oldLine":7}}]}},
   {"resolvable":true,"resolved":false,"notes":{"nodes":[
    {"body":"general thread","system":false,"createdAt":"2026-11-03T10:00:00Z","author":{"username":"kim"},"position":null}]}},
   {"resolvable":false,"resolved":false,"notes":{"nodes":[
@@ -316,11 +316,11 @@ func TestGitLabDetail(t *testing.T) {
 			{Name: "e2e", Stage: "test", Status: "warning"},
 		}},
 		Threads: []item.Thread{
-			{File: "a.go", Line: 12, Comments: []item.Comment{
+			{File: "a.go", Line: 12, URL: "https://gl/g/p/-/merge_requests/7#note_1", Comments: []item.Comment{
 				{Author: "alex", Body: "why?", Created: at("2026-11-01T10:00:00Z")},
 				{Author: "me", Body: "because", Created: at("2026-11-01T11:00:00Z")},
 			}},
-			{File: "b.go", Line: 7, Resolved: true, Comments: []item.Comment{
+			{File: "b.go", Line: 7, Resolved: true, URL: "https://gl/g/p/-/merge_requests/7#note_3", Comments: []item.Comment{
 				{Author: "alex", Body: "removed line", Created: at("2026-11-02T10:00:00Z")},
 			}},
 			{Comments: []item.Comment{{Author: "kim", Body: "general thread", Created: at("2026-11-03T10:00:00Z")}}},
@@ -367,6 +367,9 @@ func TestGitLabDetail(t *testing.T) {
 			}
 			if len(c.queries) != 1 || !strings.Contains(c.queries[0], tc.wantIID) {
 				t.Errorf("queries = %v, want one for %s", c.queries, tc.wantIID)
+			}
+			if !strings.Contains(c.queries[0], "url") {
+				t.Errorf("query %q does not ask for the note url", c.queries[0])
 			}
 		})
 	}

@@ -21,8 +21,12 @@ test:
 lint:
 	golangci-lint run
 
+# Time to first list, the startup goal (docs/design.md § Startup); CI's bench job compares it against the base.
+bench:
+	go test -run '^$$' -bench TimeToFirstList -count=6 ./internal/ui
+
 # Tag the next release from the Conventional Commits since the last tag (see README § Development).
 version:
 	@scripts/version.sh
 
-.PHONY: build install dev test lint version
+.PHONY: build install dev test lint bench version

@@ -19,8 +19,9 @@ var (
 	cOrange = lipgloss.AdaptiveColor{Light: "#C05621", Dark: "#FB923C"}
 	cBad    = lipgloss.AdaptiveColor{Light: "#C53030", Dark: "#F87171"}
 	cInfo   = lipgloss.AdaptiveColor{Light: "#2B6CB0", Dark: "#60A5FA"}
-	// cSelBg is the configured selection background; a side left empty means "follow the terminal" (reverse video).
-	cSelBg = lipgloss.AdaptiveColor{}
+	// cSelBg is the selection background: a muted tint per side, so the highlight never flips to a bright block on
+	// dark terminals. A side configured empty falls back to the terminal's reverse video.
+	cSelBg = lipgloss.AdaptiveColor{Light: "#E4DEF7", Dark: "#2E3350"}
 
 	sTitle, sTab, sTabOn, sDim, sText, sID, sMark, sErr, sRule, sKey, sWarn lipgloss.Style
 )

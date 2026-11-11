@@ -1233,9 +1233,8 @@ opus = "#FF4FE3"            # also: sonnet, haiku, text, dim, accent, track, ok,
 `lanes` ships an adaptive light/dark palette. Override any of `accent`, `ok`, `warn`, `bad`, `info`, `text` (body), `dim`
 (secondary text) and `selection` (selected row and tab background) with a hex color under `[theme]`. Changes apply live.
 
-Without a `selection` color the selected row and the active tab follow your terminal: they are drawn in reverse video,
-swapping the terminal's own foreground and background, so they match whatever terminal theme you use. Set `selection`
-(flat, or per mode under `[theme.light]` / `[theme.dark]`) to paint that background instead.
+The selected row and the active tab are painted with a muted `selection` background (a soft violet tint in both modes).
+Set `selection` (flat, or per mode under `[theme.light]` / `[theme.dark]`) to change it.
 
 The footer draws errors in the `bad` color and warnings (a request that was not fully carried out, such as
 `tmux unavailable` or a skipped item) in `warn`; other messages stay plain.

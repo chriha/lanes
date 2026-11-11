@@ -388,13 +388,19 @@ func useSelection(t *testing.T, hex string) {
 	t.Cleanup(func() { applyTheme(config.Theme{}) })
 }
 
-// TestSelectionHighlight covers the default (muted background, no reverse video) against a configured selection
+// TestSelectionHighlight covers the default (medium-strength background, no reverse video) against a configured selection
 // for the list row, the session row, the active tab and its attention badge.
 func TestSelectionHighlight(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(0) // termenv.TrueColor: render the colors the test compares
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+	prevDark := lipgloss.HasDarkBackground()
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prev)
+		lipgloss.SetHasDarkBackground(prevDark)
+		applyTheme(config.Theme{}) // selectStyle resolves the side when styles are built
+	})
 	const reverse, hexBg = "\x1b[7", "48;2;17;34;51"
+	defaults := map[bool]string{true: "48;2;64;72;113", false: "48;2;207;195;240"} // #404872 dark, #CFC4F0 light, as the renderer rounds them
 	surfaces := map[string]func(t *testing.T, sel string) string{
 		"list row": func(t *testing.T, sel string) string {
 			m := newNotesModel(t)
@@ -424,13 +430,17 @@ func TestSelectionHighlight(t *testing.T) {
 	for name, render := range surfaces {
 		for _, sel := range []string{"", "#112233"} {
 			t.Run(name+"/selection="+sel, func(t *testing.T) {
-				got := render(t, sel)
 				if sel == "" {
-					if !strings.Contains(got, "48;") || strings.Contains(got, reverse) {
-						t.Errorf("default = %q, want a muted background and no reverse video", got)
+					for dark, want := range defaults {
+						lipgloss.SetHasDarkBackground(dark)
+						got := render(t, sel)
+						if !strings.Contains(got, want) || strings.Contains(got, reverse) {
+							t.Errorf("default (dark=%v) = %q, want background %s and no reverse video", dark, got, want)
+						}
 					}
 					return
 				}
+				got := render(t, sel)
 				if !strings.Contains(got, hexBg) || strings.Contains(got, reverse) {
 					t.Errorf("configured = %q, want background %s and no reverse video", got, hexBg)
 				}

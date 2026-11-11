@@ -353,7 +353,10 @@ func TestHashRootCoversAncestors(t *testing.T) {
 	root := filepath.Join(above, "repo")
 	mustMkdir(t, filepath.Join(root, ".git"))
 	mustWrite(t, filepath.Join(root, ".lanes.toml"), "a = 1\n")
-	before, _ := HashRoot(root)
+	before, err := HashRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, tc := range []struct {
 		name, path string

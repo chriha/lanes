@@ -79,3 +79,32 @@ func (m *Model) dwelled(msg dwellMsg) {
 	m.markRead(m.items()[m.cursor])
 	m.rebuild()
 }
+
+// toggleRead is the m key: it marks the targets read when all of them are unread, otherwise unread. The cursor
+// item counts as dwelled on, so resting on it doesn't undo the choice.
+func (m *Model) toggleRead() {
+	ts := m.targets()
+	if len(ts) == 0 || m.seen == nil {
+		return
+	}
+	ids := make([]string, len(ts))
+	allUnread := true
+	for i, it := range ts {
+		ids[i] = it.ID
+		allUnread = allUnread && m.unread[it.ID]
+	}
+	if allUnread {
+		m.markRead(ts...)
+		m.say(lvInfo, "read "+targetsLabel(ids))
+	} else {
+		if err := m.seen.MarkUnread(ids...); err != nil {
+			m.say(lvErr, "saving seen items: "+err.Error())
+		} else {
+			m.say(lvInfo, "unread "+targetsLabel(ids))
+		}
+	}
+	m.marks = map[string]bool{}
+	m.rebuild()
+	m.dwellID = m.selectedID()
+	m.dwellGen++ // drops a tick armed before
+}

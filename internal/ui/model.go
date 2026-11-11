@@ -790,7 +790,7 @@ func (m *Model) fetchStale(interval time.Duration) tea.Cmd {
 }
 
 // builtinKeys cannot be rebound through [keymap].
-const builtinKeys = "jkgGhlVqRoidxXtpnNFSyzA/:? "
+const builtinKeys = "jkgGhlVqRoidxXtpnNFSyzmA/:? "
 
 // level is how severe a footer notice is: it picks the notice's colour.
 type level int
@@ -1023,6 +1023,8 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cmdline.CursorEnd()
 			return m, m.cmdline.Focus()
 		}
+	case "m":
+		m.toggleRead()
 	case "N":
 		if n > 0 {
 			return m, m.editNote(m.items()[m.cursor].ID)
@@ -1476,6 +1478,7 @@ func (m *Model) helpLines() []string {
 		{"i", "item history"},
 		{"d", "item details: fields, description, pipeline, threads, comments (j/k scroll, J/K thread, enter/space fold it, za/zA fold/unfold all, q close)"},
 		{"N", "edit the item's note in $EDITOR (save empty to delete)"},
+		{"m", "mark item(s) unread; when all of them are unread: read"},
 		{"z", "snooze item(s): 2h, 3d, mon, 2026-11-03, empty = until it changes; on a snoozed one: unsnooze"},
 		{"n", "jump into the next session that is asking or waiting"},
 		{"A", "agent view of the item's newest Claude session: agents, tools, context (esc / q / A back)"},

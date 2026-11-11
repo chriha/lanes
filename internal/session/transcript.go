@@ -693,7 +693,9 @@ func (t *transcript) apply(line []byte, failed map[string]bool) {
 		t.cache += u.CacheRead + u.CacheWrite - old.CacheRead - old.CacheWrite
 		t.tokens += u.Input + u.CacheWrite + u.Output - old.Input - old.CacheWrite - old.Output
 		t.msgs[m.ID] = u
-		t.ctxTokens = u.Input + u.CacheRead + u.CacheWrite
+		if c := u.Input + u.CacheRead + u.CacheWrite; c > 0 { // a line without usage keeps the last known context
+			t.ctxTokens = c
+		}
 	}
 	for _, c := range blocks {
 		switch c.Type {

@@ -248,3 +248,56 @@ func TestManualQueue(t *testing.T) {
 		})
 	}
 }
+
+// In the queue view r starts the entry under the cursor, or the marked ones, past max_claude_sessions and removes
+// them from the queue; an entry whose when no longer matches or whose item is busy is reported and dropped.
+func TestQueueRunNow(t *testing.T) {
+	tests := []struct {
+		name       string
+		steps      []autoStep
+		wantStarts []string
+	}{
+		{name: "starts the on_enter entry under the cursor past the limit and removes it",
+			steps: []autoStep{full("1"), full("1", "2", "3"), pressKeys("Q", "r"), queueIs("3"),
+				footerHas("started queued review on 2", true)},
+			wantStarts: []string{"review~2"}},
+		{name: "starts every marked entry",
+			steps:      []autoStep{full("1"), full("1", "2", "3", "4"), pressKeys("Q", " ", "j", "j", " ", "r"), queueIs("3")},
+			wantStarts: []string{"review~2", "review~4"}},
+		{name: "starts a manual entry",
+			steps: []autoStep{full("1"), pressKeys("2"), colon("run review"), queueIs("1"), pressKeys("Q", "r"),
+				queueIs()},
+			wantStarts: []string{"review~1"}},
+		{name: "an entry whose when no longer matches is reported and dropped",
+			steps: []autoStep{full("1"), pressKeys("2"), colon("run review"), queueIs("1"), whenLabel,
+				pressKeys("Q", "r"), queueIs(), footerHas("skipped 1 item(s) (when)", true)}},
+		{name: "a busy entry is reported and dropped",
+			steps: []autoStep{full("1"), full("1", "2"),
+				func(_ *testing.T, m *Model, _ *time.Time) { m.busy[session.Key("2")] = busyState{action: "fix"} },
+				pressKeys("Q", "r"), queueIs(), footerHas("2 busy (fix)", true)}},
+		{name: "an empty queue runs nothing",
+			steps: []autoStep{pressKeys("Q", "r"), footerHas("nothing to run", true)}},
+		{name: "outside the queue view r stays an action key",
+			steps: []autoStep{full("1"), func(_ *testing.T, m *Model, _ *time.Time) {
+				m.cfg.Keymap = map[string]string{"r": "review"}
+			}, pressKeys("2", "r"), queueIs("1")}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, log := queueModel(t)
+			now := clock()
+			for _, step := range tt.steps {
+				step(t, m, &now)
+				if m.mode == modeConfirm {
+					t.Fatalf("asked %q, want no prompt", m.confirm.prompt)
+				}
+			}
+			if got := started(t, log); !reflect.DeepEqual(got, tt.wantStarts) {
+				t.Errorf("started %v, want %v (notice %q)", got, tt.wantStarts, m.notice)
+			}
+			if raw, _ := os.ReadFile(log); strings.Contains(string(raw), "kill-session") {
+				t.Errorf("a session was closed: %s", raw)
+			}
+		})
+	}
+}

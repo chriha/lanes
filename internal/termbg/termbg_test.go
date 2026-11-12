@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestParse(t *testing.T) {
+func TestParseDark(t *testing.T) {
 	tests := []struct {
 		name     string
 		reply    string
@@ -25,9 +25,9 @@ func TestParse(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dark, ok := parse(tt.reply)
+			dark, ok := ParseDark(tt.reply)
 			if dark != tt.dark || ok != tt.ok {
-				t.Errorf("parse(%q) = %v, %v; want %v, %v", tt.reply, dark, ok, tt.dark, tt.ok)
+				t.Errorf("ParseDark(%q) = %v, %v; want %v, %v", tt.reply, dark, ok, tt.dark, tt.ok)
 			}
 		})
 	}
@@ -165,7 +165,7 @@ func TestAskLeavesNoInputBehind(t *testing.T) {
 	}
 }
 
-func TestQueryFor(t *testing.T) {
+func TestQuery(t *testing.T) {
 	tests := []struct {
 		name     string
 		term     string
@@ -184,9 +184,9 @@ func TestQueryFor(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := queryFor(tt.term, tt.tmux)
+			got, ok := Query(tt.term, tt.tmux)
 			if ok != tt.wantSent || got != tt.want {
-				t.Errorf("queryFor(%q, %q) = %q, %v; want %q, %v", tt.term, tt.tmux, got, ok, tt.want, tt.wantSent)
+				t.Errorf("Query(%q, %q) = %q, %v; want %q, %v", tt.term, tt.tmux, got, ok, tt.want, tt.wantSent)
 			}
 		})
 	}

@@ -22,9 +22,9 @@ const queryOSC11 = "\x1b]11;?\x1b\\"
 
 var once sync.Once
 
-// queryFor returns the bytes that ask the terminal for its background given TERM and $TMUX; ok is false when the
+// Query returns the bytes that ask the terminal for its background given TERM and $TMUX; ok is false when the
 // terminal must not be asked. Inside tmux the query is wrapped in tmux's passthrough.
-func queryFor(termName, tmuxEnv string) (q string, ok bool) {
+func Query(termName, tmuxEnv string) (q string, ok bool) {
 	if strings.HasPrefix(termName, "dumb") {
 		return "", false
 	}
@@ -52,7 +52,7 @@ func Settle() {
 // pick decides dark or light from the terminal's reply, else from COLORFGBG, else dark.
 func pick(reply string, replied bool, colorFGBG string) bool {
 	if replied {
-		if dark, ok := parse(reply); ok {
+		if dark, ok := ParseDark(reply); ok {
 			return dark
 		}
 	}
@@ -62,8 +62,8 @@ func pick(reply string, replied bool, colorFGBG string) bool {
 	return true
 }
 
-// parse reads the background's lightness out of an OSC 11 reply; ok is false for anything else.
-func parse(reply string) (dark, ok bool) {
+// ParseDark reads the background's lightness out of an OSC 11 reply; ok is false for anything else.
+func ParseDark(reply string) (dark, ok bool) {
 	_, rest, found := strings.Cut(reply, "rgb:")
 	if !found {
 		return false, false
@@ -103,7 +103,7 @@ func fromEnv(colorFGBG string) (dark, ok bool) {
 
 // query asks the terminal on f for its background; ok is false when f is no terminal we may talk to, or it stays silent.
 func query(f *os.File, termName, tmuxEnv string, wait time.Duration) (reply string, ok bool) {
-	q, ok := queryFor(termName, tmuxEnv)
+	q, ok := Query(termName, tmuxEnv)
 	if !ok {
 		return "", false
 	}

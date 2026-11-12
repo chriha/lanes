@@ -74,6 +74,8 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 		m.newView(arg)
 	case "delview":
 		m.delView(arg)
+	case "auto":
+		return m, m.autoCommand(arg)
 	case "sessions":
 		m.openSessions()
 	case "prune":

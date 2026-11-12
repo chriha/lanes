@@ -51,6 +51,8 @@ type view struct {
 	heads  []head           // non-empty groups, in items order; nil without groups
 	// snoozed counts the snoozed items the filter matches (hidden unless showSnoozed)
 	snoozed int
+	// members are the items the filter matches, snoozed or not and whatever the search: the items on_enter sees
+	members []item.Item
 }
 
 // head is a group header in the list: items[at:at+n] belong to the group name.
@@ -102,6 +104,7 @@ type Model struct {
 	// refetchAfter marks providers whose in-flight fetch started before a refresh run ended: when it lands, fetch again
 	refetchAfter map[string]bool
 	busy         map[string]busyState // by session.Key of the item
+	auto         autoState            // the views' on_enter actions
 
 	views  []*view
 	cur    int
@@ -280,6 +283,7 @@ func (m *Model) applyBuilt(cfg *config.Config, provs map[string]provider.Provide
 	}
 	m.views = m.views[:0]
 	m.cur = 0
+	m.auto.seen, m.auto.left = nil, nil // the next full fetch of each view seeds them again
 	all := append([]config.View{}, cfg.View...)
 	seen := map[string]bool{}
 	for _, vc := range all {
@@ -323,7 +327,7 @@ func (m *Model) rebuild() {
 	m.unread = map[string]bool{}
 	stacks := map[string][]item.StackInfo{} // per provider, over its whole list: a base the view hides still counts
 	for i, v := range m.views {
-		v.items, v.heads, v.snoozed = v.items[:0], nil, 0
+		v.items, v.heads, v.snoozed, v.members = v.items[:0], nil, 0, nil
 		if v.err != nil {
 			continue
 		}
@@ -345,6 +349,7 @@ func (m *Model) rebuild() {
 			if !ok {
 				continue
 			}
+			v.members = append(v.members, it)
 			if _, snoozed := m.snoozes[it.ID]; snoozed {
 				v.snoozed++
 				if !m.showSnoozed {
@@ -617,7 +622,11 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			v.err = nil // filter errors may have been transient (stale data shape)
 		}
 		m.rebuild()
-		return m, tea.Batch(save, again)
+		var auto tea.Cmd
+		if !msg.partial {
+			auto = m.autoFetched(msg.name) // a partial result may lack items: only a full one tells who arrived or left
+		}
+		return m, tea.Batch(save, again, auto)
 	case tea.BlurMsg:
 		m.blurred = true
 	case tea.FocusMsg:
@@ -646,7 +655,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err == nil {
 			m.syncAgents()
 		}
-		return m, chains
+		return m, tea.Batch(chains, m.drainAuto()) // a session that ended frees room for a queued on_enter start
 	case agentPollMsg:
 		return m, m.onAgentPoll(msg)
 	case agentSnapMsg:
@@ -1353,6 +1362,9 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	if busy {
 		all = append(all, item.Badge{Text: "⋯ " + b.action, Kind: "info"})
 	}
+	if a := m.queued(it.ID); a != "" {
+		all = append(all, item.Badge{Text: "queued " + a, Kind: "warn"})
+	}
 	rightW := 0
 	for _, b := range all {
 		badges = append(badges, st(badgeStyle(b.Kind)).Render(b.Text))
@@ -1475,12 +1487,18 @@ func (m *Model) footer() string {
 	case m.usage.text != "":
 		left = sDim.Render(" " + m.usageText(time.Now()))
 	}
-	if n := m.views[m.cur].snoozed; n > 0 {
+	for _, seg := range []struct {
+		n      int
+		format string
+	}{{m.views[m.cur].snoozed, "%d snoozed"}, {len(m.auto.queue), "queued %d"}} {
+		if seg.n == 0 {
+			continue
+		}
 		sep := " · "
 		if left == "" {
 			sep = " "
 		}
-		left += sDim.Render(fmt.Sprintf("%s%d snoozed", sep, n))
+		left += sDim.Render(sep + fmt.Sprintf(seg.format, seg.n))
 	}
 	hint := sDim.Render("j/k move · h/l view · space mark · enter jump · x close · p preview · ? help")
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(hint) - 1
@@ -1563,6 +1581,7 @@ func (m *Model) helpLines() []string {
 		{":snooze [when]", "snooze marked items / cursor item until when (empty: until it changes)"},
 		{":snoozed", "show / hide snoozed items (dimmed, marked z)"},
 		{":run <action>", "run an action by name"},
+		{":auto [on|off]", "pause / resume the views' on_enter actions (show their state)"},
 		{":resume", "resume the cursor item's newest finished Claude session (same as gr)"},
 		{":sessions", "list every session (same as S)"},
 		{":prune [failed]", "kill every finished session (only failed ones)"},

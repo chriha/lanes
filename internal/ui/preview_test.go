@@ -179,6 +179,8 @@ func TestPreviewLastRunLine(t *testing.T) {
 	m.rebuild()
 	history.Append(history.Event{Item: session.Key("a"), Action: "work", Event: "started"})
 	history.Append(history.Event{Item: session.Key("a"), Action: "work", Event: "finished", Dur: 840, Tokens: &history.Tokens{Input: 12_000, Output: 500}})
+	// a queued on_enter start is no run: the last run stays the finished one
+	history.Append(history.Event{Item: session.Key("a"), Action: "review", Event: "auto"})
 	for _, l := range strings.Split(ansi.Strip(m.preview()), "\n") {
 		if l = strings.TrimSpace(l); strings.HasPrefix(l, "last run") {
 			if want := "last run    work · 14m · 12k tok · ✓"; l != want {

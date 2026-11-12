@@ -162,8 +162,12 @@ func (m *Model) previewSessions(it item.Item) []string {
 		out = append(out, " "+sDim.Render(fmt.Sprintf("%-12s", "session"))+badgeStyle(b.Kind).Render(b.Text)+sDim.Render("  since "+s.Created.Format("15:04")))
 	}
 	evs := history.For(session.Key(it.ID))
-	if n := len(evs); n > 0 {
-		out = append(out, " "+sDim.Render(fmt.Sprintf("%-12s", "last run"))+sText.Render(lastRun(evs[n-1])))
+	for i := len(evs) - 1; i >= 0; i-- {
+		if evs[i].Event == autoEvent {
+			continue // marks an on_enter start, not a run
+		}
+		out = append(out, " "+sDim.Render(fmt.Sprintf("%-12s", "last run"))+sText.Render(lastRun(evs[i])))
+		break
 	}
 	return out
 }

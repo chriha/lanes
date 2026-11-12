@@ -15,7 +15,7 @@ type Event struct {
 	Time   time.Time `json:"time"`
 	Item   string    `json:"item"`
 	Action string    `json:"action"`
-	Event  string    `json:"event"` // started | finished | failed | killed
+	Event  string    `json:"event"` // started | finished | failed | killed | interrupted | auto (an on_enter start)
 	Exit   int       `json:"exit,omitempty"`
 	// Dur is how long the session or run lasted, in seconds, on end events.
 	Dur int64 `json:"dur,omitempty"`

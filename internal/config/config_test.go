@@ -1123,3 +1123,59 @@ provider = "gl"
 		}
 	}
 }
+
+// [settings] max_claude_sessions: unset gives 3, 0 turns the limit off, a negative value is an error naming the
+// key; the project overlay overrides the global value.
+func TestMaxClaudeSessions(t *testing.T) {
+	const base = `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+`
+	tests := []struct {
+		name            string
+		global, project string // [settings] lines; project "" = no .lanes.toml
+		want            int
+		wantErr         bool
+	}{
+		{name: "unset defaults to 3", want: 3},
+		{name: "global value is kept", global: "max_claude_sessions = 5", want: 5},
+		{name: "0 means no limit", global: "max_claude_sessions = 0", want: 0},
+		{name: "negative global is an error", global: "max_claude_sessions = -1", wantErr: true},
+		{name: "project overrides global", global: "max_claude_sessions = 5", project: "max_claude_sessions = 1", want: 1},
+		{name: "project 0 turns the global limit off", global: "max_claude_sessions = 5", project: "max_claude_sessions = 0", want: 0},
+		{name: "project without the key keeps global", global: "max_claude_sessions = 5", project: `poll_interval = "1m"`, want: 5},
+		{name: "negative project is an error", project: "max_claude_sessions = -2", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+			t.Setenv("HOME", tmp)
+			old, _ := os.Getwd()
+			defer os.Chdir(old)
+			if err := os.Chdir(tmp); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), base+"[settings]\n"+tt.global+"\n")
+			if tt.project != "" {
+				write(t, filepath.Join(tmp, ".lanes.toml"), "[settings]\n"+tt.project+"\n")
+			}
+			c, err := Load()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil {
+				if !strings.Contains(err.Error(), "max_claude_sessions") {
+					t.Errorf("error %q does not name the key", err)
+				}
+				return
+			}
+			if got := c.Settings.SessionLimit(); got != tt.want {
+				t.Errorf("SessionLimit() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

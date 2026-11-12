@@ -147,7 +147,8 @@ func (m *Model) chain(action, key string, exit int) tea.Cmd {
 	nact := m.cfg.Action[next]
 	nact.Jump = false // lanes never pulls the user into a session out of the blue
 	marks := m.marks
-	cmd := m.runActionOn(next, nact, []item.Item{*target})
+	// no limit check: no one is there to answer its prompt
+	cmd := m.startAction(next, nact, []item.Item{*target}, false)
 	m.marks = marks // the follow-up runs on its item alone; the user's marks stay
 	if cmd != nil {
 		m.notice = prefix + "starting " + next
@@ -320,7 +321,13 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 }
 
 // runActionOn starts action name on targets: when, busy and already-running items are skipped with a notice.
+// Over the session limit it asks first.
 func (m *Model) runActionOn(name string, act config.Action, targets []item.Item) tea.Cmd {
+	return m.startAction(name, act, targets, true)
+}
+
+// startAction is runActionOn; limit false skips the session limit check (chain follow-ups start unattended).
+func (m *Model) startAction(name string, act config.Action, targets []item.Item, limit bool) tea.Cmd {
 	if m.sess == nil {
 		m.say(lvWarn, "tmux unavailable")
 		return nil
@@ -421,15 +428,54 @@ func (m *Model) runActionOn(name string, act config.Action, targets []item.Item)
 		}
 		return cmd
 	}
-	if len(all) > 1 || act.Confirm == "single" {
+	over := ""
+	if limit && !headless {
+		over = m.overLimit(len(jobs))
+	}
+	if len(all) > 1 || act.Confirm == "single" || over != "" {
 		what := ts[0].ID
 		if len(ts) > 1 {
 			what = fmt.Sprintf("%d items (%s)", len(ts), ids(ts))
 		}
-		m.ask(fmt.Sprintf("Run %q on %s?", name, what), start)
+		if over != "" {
+			m.ask(fmt.Sprintf("%s. Run %q on %s anyway?", over, name, what), start)
+		} else {
+			m.ask(fmt.Sprintf("Run %q on %s?", name, what), start)
+		}
 		return nil
 	}
 	return start()
+}
+
+// overLimit says, when starting n more sessions would take the live action sessions above max_claude_sessions,
+// "Limit of N reached (K live)"; "" when within the limit or there is none (0).
+func (m *Model) overLimit(n int) string {
+	limit := m.cfg.Settings.SessionLimit()
+	if limit == 0 {
+		return ""
+	}
+	live := m.liveSessions()
+	if live+n <= limit {
+		return ""
+	}
+	return fmt.Sprintf("Limit of %d reached (%d live)", limit, live)
+}
+
+// liveSessions counts the action sessions that are alive in the last poll or starting right now (busy with a
+// session action, which the poll may not show yet). Dead sessions and headless runs do not count.
+func (m *Model) liveSessions() int {
+	names := map[string]bool{}
+	for _, s := range m.sessions {
+		if !s.Dead {
+			names[s.Name] = true
+		}
+	}
+	for key, b := range m.busy {
+		if a, ok := m.cfg.Action[b.action]; !ok || a.Type != "run" { // not configured: the built-in shell
+			names[session.Name(b.action, key)] = true
+		}
+	}
+	return len(names)
 }
 
 // resume starts, in its action's session, the resume template of the action whose Claude session ended last on it
@@ -492,11 +538,18 @@ func (m *Model) resume(it item.Item) tea.Cmd {
 	if act.Jump {
 		attach = sname
 	}
-	marks := m.marks
-	m.lock(name, jobs)
-	start := m.execute(name, jobs, 0, 0, "", attach)
-	m.marks = marks // execute consumes the marks; resume runs on the cursor item only
-	return start
+	start := func() tea.Cmd {
+		marks := m.marks
+		m.lock(name, jobs)
+		cmd := m.execute(name, jobs, 0, 0, "", attach)
+		m.marks = marks // execute consumes the marks; resume runs on the cursor item only
+		return cmd
+	}
+	if over := m.overLimit(len(jobs)); over != "" {
+		m.ask(fmt.Sprintf("%s. Resume %q on %s anyway?", over, name, it.ID), start)
+		return nil
+	}
+	return start()
 }
 
 // lock marks the jobs' items busy with action and says so in the footer; doneMsg releases them.

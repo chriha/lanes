@@ -11,6 +11,7 @@ import (
 
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/provider"
+	"github.com/chriha/lanes/internal/session"
 )
 
 // queueModel is a model with the views review (on_enter review) and other (after a divider), max_claude_sessions 1
@@ -185,6 +186,64 @@ func TestQueueView(t *testing.T) {
 			}
 			if m.mode == modeConfirm {
 				t.Errorf("a confirmation is open: %q", m.confirm.prompt)
+			}
+		})
+	}
+}
+
+// whenLabel makes the review action run only on items labelled auto-review.
+func whenLabel(t *testing.T, m *Model, _ *time.Time) {
+	t.Helper()
+	act := config.Action{Run: "echo review", When: `"auto-review" in labels`}
+	if err := act.CompileWhen(); err != nil {
+		t.Fatal(err)
+	}
+	m.cfg.Action["review"] = act
+}
+
+// A manual start over max_claude_sessions joins the queue and starts, first in first out with on_enter entries,
+// once there is room; also under :auto off and when its item has left the view. Its when is checked again.
+func TestManualQueue(t *testing.T) {
+	tests := []struct {
+		name       string
+		steps      []autoStep
+		wantStarts []string
+	}{
+		{name: "queued, shown, and started once a poll shows room",
+			steps: []autoStep{full("1"), pressKeys("2"), colon("run review"), queueIs("1"), footerHas("queued 1", true),
+				pressKeys("Q"), listHas("queued review", true), poll(), queueIs()},
+			wantStarts: []string{"review~1"}},
+		{name: "first in first out with on_enter entries",
+			steps: []autoStep{full("1"), full("1", "2"), pressKeys("2"), colon("run review"), queueIs("2", "1"),
+				poll(), queueIs("1"), poll(session.Info{Name: "review~2", Action: "review", ItemKey: "2"}), queueIs("1"),
+				poll(), queueIs()},
+			wantStarts: []string{"review~2", "review~1"}},
+		{name: ":auto off holds on_enter entries, manual ones still drain",
+			steps: []autoStep{full("1"), full("1", "2"), colon("auto off"), pressKeys("2"), colon("run review"),
+				queueIs("2", "1"), poll(), queueIs("2"), footerHas("started queued review on 1", true)},
+			wantStarts: []string{"review~1"}},
+		{name: "stays queued when its item leaves the view",
+			steps:      []autoStep{full("1"), pressKeys("2"), colon("run review"), full(), queueIs("1"), poll(), queueIs()},
+			wantStarts: []string{"review~1"}},
+		{name: "when is checked again before the start",
+			steps: []autoStep{full("1:auto-review"), whenLabel, pressKeys("2"), colon("run review"), queueIs("1"),
+				full("1"), poll(), queueIs()}},
+		{name: "a second start of a queued item says so and queues nothing more",
+			steps: []autoStep{full("1"), pressKeys("2"), colon("run review"), colon("run review"),
+				footerHas("1 already queued", true), queueIs("1")}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, log := queueModel(t)
+			now := clock()
+			for _, step := range tt.steps {
+				step(t, m, &now)
+				if m.mode == modeConfirm {
+					t.Fatalf("asked %q, want no prompt", m.confirm.prompt)
+				}
+			}
+			if got := started(t, log); !reflect.DeepEqual(got, tt.wantStarts) {
+				t.Errorf("started %v, want %v (notice %q)", got, tt.wantStarts, m.notice)
 			}
 		})
 	}

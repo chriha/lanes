@@ -19,22 +19,29 @@ const autoEvent = "auto"
 // autoState is the in-memory state of the views' on_enter actions. Only successful full fetches change seen and
 // left; a config change resets both, so the next full fetch of each view seeds seen again.
 type autoState struct {
-	off   bool                       // :auto off: nothing fires, the queue does not drain
+	off   bool                       // :auto off: nothing fires, on_enter entries in the queue do not drain
 	seen  map[string]map[string]bool // by view name: the item IDs the view listed since the config was applied
 	left  map[string]map[string]bool // by view name: seen items a later fetch found gone (on_enter_repeat views)
 	queue []autoEntry                // starts held back by max_claude_sessions, oldest first
 }
 
-// autoEntry is an on_enter start waiting in the queue for a free session.
-type autoEntry struct{ view, action, id string }
+// autoEntry is a start waiting in the queue for a free session: an on_enter start of view, or, with manual set, a
+// start the user asked for (an action key, :run, or with resume set gr) over max_claude_sessions.
+type autoEntry struct {
+	view, action, id string
+	manual, resume   bool
+	act              config.Action // manual: the action as started, for actions the config does not name (shell)
+	it               item.Item     // manual: the item as started, used while its provider no longer lists it
+	prov             string        // manual: the provider of the item
+}
 
-// autoFetched runs after a successful full fetch of provider prov: it drops queued items that left their view,
-// drains the queue, then fires the on_enter action of each view of prov on its new arrivals.
+// autoFetched runs after a successful full fetch of provider prov: it drops queued on_enter items that left their
+// view, drains the queue, then fires the on_enter action of each view of prov on its new arrivals.
 func (m *Model) autoFetched(prov string) tea.Cmd {
 	defer m.refreshQueue()
 	keep := m.auto.queue[:0]
 	for _, e := range m.auto.queue {
-		if _, ok := m.autoLookup(e); ok {
+		if _, ok := m.autoLookup(e); ok || e.manual {
 			keep = append(keep, e)
 		}
 	}
@@ -167,59 +174,112 @@ func (m *Model) autoRun(action string, act config.Action, its []item.Item) tea.C
 	marks := m.marks
 	cmd := m.startAction(action, act, its, false, true)
 	m.marks = marks
-	if cmd == nil {
-		return nil
-	}
 	what := its[0].ID
 	if len(its) > 1 {
 		what = fmt.Sprintf("%d items", len(its))
 	}
-	isSession := act.Type != "run"
+	return startedNotice(cmd, act.Type != "run", fmt.Sprintf("auto-started %s on %s", action, what), "auto: ")
+}
+
+// startedNotice rewrites the footer notice of an unattended start cmd: ok for a session start that succeeded,
+// otherwise the start's own notice behind prefix.
+func startedNotice(cmd tea.Cmd, isSession bool, ok, prefix string) tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
 	return func() tea.Msg {
 		msg := cmd()
-		d, ok := msg.(doneMsg)
-		if !ok {
+		d, done := msg.(doneMsg)
+		if !done {
 			return msg
 		}
 		if d.ok && isSession {
-			d.notice = fmt.Sprintf("auto-started %s on %s", action, what)
+			d.notice = ok
 		} else {
-			d.notice = "auto: " + d.notice
+			d.notice = prefix + d.notice
 		}
 		return d
 	}
 }
 
-// drainAuto starts queued entries, oldest first, while :auto is on and max_claude_sessions has room. An entry
-// whose item left its view, no longer matches the action's when, is busy or already runs it is dropped.
+// queuedRun starts a manual queue entry on it unattended: no prompt, no jump, the user's marks kept.
+func (m *Model) queuedRun(e autoEntry, act config.Action, it item.Item) tea.Cmd {
+	if e.resume {
+		return startedNotice(m.resumeItem(it, false), true, fmt.Sprintf("resumed queued %s on %s", e.action, it.ID), "queued: ")
+	}
+	marks := m.marks
+	cmd := m.startAction(e.action, act, []item.Item{it}, false, true)
+	m.marks = marks
+	return startedNotice(cmd, act.Type != "run", fmt.Sprintf("started queued %s on %s", e.action, it.ID), "queued: ")
+}
+
+// drainAuto starts queued entries, oldest first, while max_claude_sessions has room; :auto off holds the on_enter
+// entries, manual ones still drain. An entry whose item left its view (on_enter entries), no longer matches the
+// action's when, is busy or already runs it is dropped.
 func (m *Model) drainAuto() tea.Cmd {
 	defer m.refreshQueue()
-	if m.auto.off {
-		return nil
-	}
 	var cmds []tea.Cmd
-	for len(m.auto.queue) > 0 {
-		e := m.auto.queue[0]
+	for i := 0; i < len(m.auto.queue); {
+		e := m.auto.queue[i]
+		if m.auto.off && !e.manual {
+			i++
+			continue
+		}
 		it, ok := m.autoLookup(e)
-		act := m.cfg.Action[e.action]
-		if ok {
+		act := m.entryAction(e)
+		if ok && !e.resume {
 			match, _, _ := matchWhen(act, []item.Item{it})
 			ok = len(match) == 1 && !m.autoBlocked(e.action, act, it)
 		}
 		if ok && m.autoRoom(act, 1) == 0 {
 			break
 		}
-		m.auto.queue = m.auto.queue[1:]
-		if ok {
+		m.auto.queue = append(m.auto.queue[:i], m.auto.queue[i+1:]...)
+		switch {
+		case !ok:
+		case e.manual:
+			cmds = append(cmds, m.queuedRun(e, act, it))
+		default:
 			cmds = append(cmds, m.autoRun(e.action, act, []item.Item{it}))
 		}
 	}
 	return tea.Batch(cmds...)
 }
 
-// autoLookup finds the item of a queue entry in its view; false when the view is gone, no longer names the
-// entry's action as on_enter, or does not list the item.
+// entryAction is the action a queue entry starts: the configured one, else the one a manual entry was started with.
+func (m *Model) entryAction(e autoEntry) config.Action {
+	if act, ok := m.cfg.Action[e.action]; ok || !e.manual {
+		return act
+	}
+	return e.act
+}
+
+// enqueue queues a manual start of action act on it, unless the item is queued already; it says which.
+func (m *Model) enqueue(action string, act config.Action, it item.Item, resume bool) {
+	if m.queued(it.ID) != "" {
+		return
+	}
+	prov := m.views[m.cur].cfg.Provider
+	if m.onQueue() {
+		prov = m.queueProvider(it)
+	}
+	m.auto.queue = append(m.auto.queue, autoEntry{view: m.views[m.cur].cfg.Name, action: action, id: it.ID,
+		manual: true, resume: resume, act: act, it: it, prov: prov})
+	m.refreshQueue()
+}
+
+// autoLookup finds the item of a queue entry: for a manual entry as its provider lists it now, else as it was
+// queued; for an on_enter entry in its view, false when the view is gone, no longer names the entry's action as
+// on_enter, or does not list the item.
 func (m *Model) autoLookup(e autoEntry) (item.Item, bool) {
+	if e.manual {
+		for _, it := range m.data[e.prov] {
+			if it.ID == e.id {
+				return it, true
+			}
+		}
+		return e.it, true
+	}
 	for _, v := range m.views {
 		if v.cfg.Name != e.view || v.cfg.OnEnter != e.action {
 			continue

@@ -19,7 +19,7 @@ func newQueueView() *view { return &view{cfg: config.View{Name: queueName}, queu
 func (m *Model) onQueue() bool { return m.cur < len(m.views) && m.views[m.cur].queue }
 
 // syncQueue lists the entries of the auto queue in the queue view, oldest first. On the queue view the search
-// applies; entries whose item is no longer listed by their view are left out (autoFetched drops them).
+// applies; on_enter entries whose item is no longer listed by their view are left out (autoFetched drops them).
 func (m *Model) syncQueue() {
 	for i, v := range m.views {
 		if !v.queue {
@@ -83,6 +83,9 @@ func (m *Model) queueProvider(it item.Item) string {
 	for _, e := range m.auto.queue {
 		if e.id != it.ID {
 			continue
+		}
+		if e.manual {
+			return e.prov
 		}
 		for _, v := range m.views {
 			if !v.queue && v.cfg.Name == e.view {

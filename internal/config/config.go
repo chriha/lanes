@@ -174,6 +174,20 @@ type View struct {
 	Sort     string  `toml:"sort"`    // comma-separated fields, "-" prefix = descending; empty = provider order
 	Groups   []Group `toml:"groups"`  // named filters; an item goes into the first group it matches, the rest stay ungrouped
 	Divider  bool    `toml:"divider"` // draw a dim separator before this tab
+	// OnEnter names an action started on items that newly appear in this view; empty = none.
+	OnEnter string `toml:"on_enter"`
+	// OnEnterRepeat lets an item that left and re-joined the view fire OnEnter again once its last auto-run is older
+	// than this cooldown (a Go duration such as "24h"); nil = unset (see OnEnterCooldown).
+	OnEnterRepeat *time.Duration `toml:"on_enter_repeat"`
+}
+
+// OnEnterCooldown is how long after its last auto-run an item that re-joined the view fires OnEnter again; 0 = never
+// (on_enter_repeat unset: OnEnter fires once per item).
+func (v View) OnEnterCooldown() time.Duration {
+	if v.OnEnterRepeat == nil {
+		return 0
+	}
+	return *v.OnEnterRepeat
 }
 
 // Group is a named filter inside a view.
@@ -412,6 +426,17 @@ func Load() (*Config, error) {
 			}
 			if _, err := filter.Compile(g.Filter); err != nil {
 				return nil, fmt.Errorf("%s: view %q: group %q: %w", p, v.Name, g.Name, err)
+			}
+		}
+		if _, ok := c.Action[v.OnEnter]; v.OnEnter != "" && !ok {
+			return nil, fmt.Errorf("%s: view %q: on_enter: unknown action %q", p, v.Name, v.OnEnter)
+		}
+		if v.OnEnterRepeat != nil {
+			if v.OnEnter == "" {
+				return nil, fmt.Errorf("%s: view %q: on_enter_repeat needs on_enter", p, v.Name)
+			}
+			if *v.OnEnterRepeat <= 0 {
+				return nil, fmt.Errorf("%s: view %q: on_enter_repeat = %s: must be a positive duration such as \"24h\"", p, v.Name, *v.OnEnterRepeat)
 			}
 		}
 	}

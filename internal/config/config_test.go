@@ -1179,3 +1179,73 @@ provider = "gl"
 		})
 	}
 }
+
+// [[view]] on_enter names an existing action; on_enter_repeat is a positive Go duration and needs on_enter.
+func TestViewOnEnter(t *testing.T) {
+	const base = `
+[provider.gl]
+type = "gitlab"
+[action.review]
+run = "echo {{.iid}}"
+[[view]]
+name = "a"
+provider = "gl"
+`
+	tests := []struct {
+		name       string
+		view       string // extra lines of view "a"
+		project    string // .lanes.toml body; "" = none
+		wantAction string
+		wantRepeat time.Duration
+		wantErr    []string // substrings the error must contain; nil = no error
+	}{
+		{name: "no keys", wantAction: "", wantRepeat: 0},
+		{name: "on_enter only", view: `on_enter = "review"`, wantAction: "review"},
+		{name: "on_enter with repeat", view: "on_enter = \"review\"\non_enter_repeat = \"24h\"", wantAction: "review", wantRepeat: 24 * time.Hour},
+		{name: "unknown action", view: `on_enter = "nope"`, wantErr: []string{`view "a"`, "on_enter", `"nope"`}},
+		{name: "built-in shell is not an action", view: `on_enter = "shell"`, wantErr: []string{"on_enter", `"shell"`}},
+		{name: "invalid duration", view: "on_enter = \"review\"\non_enter_repeat = \"soon\"", wantErr: []string{"on_enter_repeat"}},
+		{name: "zero duration", view: "on_enter = \"review\"\non_enter_repeat = \"0s\"", wantErr: []string{`view "a"`, "on_enter_repeat"}},
+		{name: "negative duration", view: "on_enter = \"review\"\non_enter_repeat = \"-1h\"", wantErr: []string{`view "a"`, "on_enter_repeat"}},
+		{name: "repeat without on_enter", view: `on_enter_repeat = "24h"`, wantErr: []string{`view "a"`, "on_enter_repeat", "on_enter"}},
+		{name: "project view naming a global action", project: "[[view]]\nname = \"b\"\nprovider = \"gl\"\non_enter = \"review\"\non_enter_repeat = \"2h\"\n",
+			wantAction: "review", wantRepeat: 2 * time.Hour},
+		{name: "project view naming an unknown action", project: "[[view]]\nname = \"b\"\nprovider = \"gl\"\non_enter = \"gone\"\n",
+			wantErr: []string{`view "b"`, "on_enter", `"gone"`}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+			t.Setenv("HOME", tmp)
+			old, _ := os.Getwd()
+			defer os.Chdir(old)
+			if err := os.Chdir(tmp); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), base+tt.view+"\n")
+			if tt.project != "" {
+				write(t, filepath.Join(tmp, ProjectFile), tt.project)
+			}
+			c, err := Load()
+			if tt.wantErr != nil {
+				if err == nil {
+					t.Fatal("Load() succeeded, want an error")
+				}
+				for _, s := range tt.wantErr {
+					if !strings.Contains(err.Error(), s) {
+						t.Errorf("error %q does not contain %q", err, s)
+					}
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			v := c.View[len(c.View)-1] // the view under test: a, or the project's b appended after it
+			if v.OnEnter != tt.wantAction || v.OnEnterCooldown() != tt.wantRepeat {
+				t.Errorf("view %s: OnEnter = %q, OnEnterCooldown() = %v; want %q, %v", v.Name, v.OnEnter, v.OnEnterCooldown(), tt.wantAction, tt.wantRepeat)
+			}
+		})
+	}
+}

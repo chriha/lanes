@@ -46,6 +46,7 @@ you what each session is doing (running, working, asking a question, waiting for
   - [Running on many items](#running-on-many-items)
   - [Restricting actions (`when`)](#restricting-actions-when)
   - [Chaining actions (`on_success`, `on_failure`)](#chaining-actions-on_success-on_failure)
+  - [Running on arrival (`on_enter`)](#running-on-arrival-on_enter)
   - [Sessions: jump, close, status](#sessions-jump-close-status)
   - [Claude Code integration](#claude-code-integration)
   - [Agent view](#agent-view)
@@ -88,6 +89,7 @@ look at a list, press a key, and the work starts in the background in a session 
 - **Vim navigation** — `h j k l`, `gg`/`G`, `ctrl-d`/`ctrl-u`, `/` search, `:` command line.
 - **One-key actions** — bind any shell command to a key; templated with the item's fields.
 - **Multi-select** — mark items with `space`, run an action on all of them, with a confirmation.
+- **Auto-run on arrival** — a view can start an action by itself on each item that newly enters it (`on_enter`).
 - **Interactive sessions** — actions run in detached tmux sessions on a private tmux server; jump in, interact,
   detach. Your shell, your environment.
 - **Live session status** — running / working / asking / waiting / finished / failed, per item, in the list.
@@ -396,6 +398,7 @@ narrows the view; it does not change its filter.
 | `:snooze [when]`          | snooze the selected / marked items until `when` (empty: until they change) |
 | `:snoozed`                | show / hide snoozed items                                             |
 | `:run <action>`           | run an action by name, even if it has no key                          |
+| `:auto [on\|off]`         | pause / resume the views' [`on_enter`](#running-on-arrival-on_enter) actions; bare: show their state |
 | `:resume`                 | resume the selected item's newest finished Claude session (same as `gr`) |
 | `:sessions`               | open the sessions screen (same as `S`)                                |
 | `:prune`                  | kill every finished session; running ones are never touched           |
@@ -427,6 +430,7 @@ you last saw it. The cursor resting on it for a second marks it read; `m` toggle
 | `⚑ 3`          | three unresolved discussions                                  |
 | `✔ approved`   | has approvals                                                 |
 | `▶ review`     | the `review` action is running in a session                   |
+| `queued review` | an [`on_enter`](#running-on-arrival-on_enter) start of `review` waits for a free session |
 | `◐ review: working`  | a Claude session is working                             |
 | `? review: asking`   | a Claude session asks a question / needs permission     |
 | `● review: waiting`  | a Claude session finished its turn and waits for you    |
@@ -635,7 +639,8 @@ Limit of 3 reached (2 live). Run "review" on 3 items (!1948, !1957, !1961) anywa
 ```
 
 Yes starts the whole batch, no starts nothing. [Chained](#chaining-actions-on_success-on_failure) follow-ups
-start without asking. A negative value fails the config load.
+start without asking. [`on_enter`](#running-on-arrival-on_enter) starts never ask: over the limit they wait in a
+queue instead. A negative value fails the config load.
 
 ### Restricting actions (`when`)
 
@@ -687,6 +692,67 @@ on_failure = "fix"
   the follow-up's `started` as usual.
 - Config load fails on an action name that does not exist, on a follow-up with `confirm = "single"` (lanes never
   asks out of the blue) and on a chain that loops back (`work → review → work`).
+
+### Running on arrival (`on_enter`)
+
+`on_enter` on a view names an action that lanes starts by itself on every item that **newly enters** the view, for
+example a Claude review for each MR that shows up in `review`:
+
+```toml
+[[view]]
+name     = "review"
+provider = "gitlab"
+filter   = '"waiting-for-review" in labels && !draft && !approved_by_me'
+on_enter = "review"
+
+[action.review]
+run  = 'claude --settings {{.settings}} "/local-code-review {{.url}}"'
+when = '"auto-review" in labels'   # optional gate: only items with this label are started
+```
+
+- **Only new arrivals.** The first fetch after lanes starts (and after a config reload) only records what the view
+  lists; nothing already there fires. An item fires the first time a later fetch shows it in the view.
+- **Once per item.** Each start writes an `auto` event to the item history before it runs, so the action never
+  fires on that item again, not after a restart either. An item that leaves and re-joins the view does not fire
+  again unless the view sets `on_enter_repeat`.
+- **Normal start path, unattended.** The action's `when` is honoured, so a label in `when` works as an opt-in gate
+  (it applies to the action key too); an item that does not match counts as seen and does not fire later. Items
+  that are busy or already run the action are skipped. Auto-starts never ask, whatever `confirm` says, never jump
+  into the session, whatever `jump` says, and leave your marks alone.
+- **Session limit.** A start that would go over [`max_claude_sessions`](#running-on-many-items) waits in a queue
+  (first in, first out) instead of asking. The row shows `queued <action>` and the footer `queued N`. The queue
+  starts the next entry when a session ends or a fetch lands and there is room again, checking `when` once more;
+  an entry whose item left the view is dropped. The queue lives in memory only: on quit it is lost, and the
+  items stay handled; run the action by hand.
+- **Failures are not retried.** An auto-start that fails, or whose command exits non-zero, is recorded in the item
+  history like any run; later fetches do not start it again. Run it by hand to retry.
+- **Footer.** Each auto-start is reported, e.g. `auto-started review on !1961` or `auto-started review on 3 items`;
+  for run actions and failed starts the usual notice is prefixed with `auto:`.
+- **Only full fetches count.** A fetch that fails or returns a partial list never makes items look as if they left
+  or arrived.
+- **Pause.** `:auto off` pauses every view's `on_enter`: nothing starts and the queue stops draining (its entries
+  stay). Items that arrive meanwhile count as seen and do not fire after `:auto on`, which resumes the queue.
+  `:auto` alone shows the state and the queue length. The switch is not saved: lanes always starts with auto-runs on.
+
+**Re-entry (`on_enter_repeat`).** To handle items that come back to a view (an MR that went back to draft and is
+ready for review again), set a cooldown as a Go duration:
+
+```toml
+[[view]]
+name            = "review"
+provider        = "gitlab"
+on_enter        = "review"
+on_enter_repeat = "24h"
+```
+
+An item then fires again when lanes saw it leave the view and later come back, both while running, **and** its
+last `auto` start of this action is older than the cooldown. Re-entries inside the cooldown do not fire, so an item
+that flaps in and out starts at most one session per cooldown; pick hours, not seconds. An item that left while
+lanes was closed counts as already there at startup. Unlike a plain refetch, a re-entry after the cooldown also
+starts an item whose earlier auto-run failed.
+
+Config load fails when `on_enter` names an action that does not exist, and when `on_enter_repeat` is not a valid
+positive duration or is set without `on_enter`.
 
 ### Sessions: jump, close, status
 
@@ -1223,6 +1289,8 @@ provider = "<name>"
 filter   = '<expression>'   # empty = everything
 sort     = "-field,field"    # "-" = descending; empty = provider order
 groups   = [{ name = "<name>", filter = '<expression>' }]   # first match wins; the rest stay ungrouped below
+on_enter = "<action name>"   # start this action on items that newly enter the view (see Running on arrival)
+on_enter_repeat = "24h"      # optional: fire again on re-entry once the last auto-start is older than this
 
 [keymap]
 <key> = "<action name>"     # single character, e.g. r

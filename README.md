@@ -249,7 +249,8 @@ Useful building blocks:
 
 **Fields** are the item's own (`id`, `title`, `url`, `author`, `draft`), your [note](#preview-pane-and-item-history)
 (`note`, empty when there is none, e.g. `note != ""`), whether you [snoozed](#snoozing) it (`snoozed`), whether it changed since you last saw it
-(`unread`, see [Row badges](#row-badges)) plus whatever the provider adds. The `fields` section at the
+(`unread`, see [Row badges](#row-badges)), where it sits in a stack of MRs/PRs (`base`, `stack_pos`, `stack_size`,
+`stacked_by`, see [Stacks](#stacks)) plus whatever the provider adds. The `fields` section at the
 bottom of the help (`?`) lists every provider type's keys, and for each configured `command` provider the keys of its
 last fetched items. For GitLab (GitHub has the same fields, with `number` instead of `iid`):
 
@@ -296,6 +297,26 @@ hand-written TOML is never rewritten, and shows as `*` in the tab bar. `:filter 
 config's filter. The one exception is `:filter save`: it writes the edit into the config file that defines the
 view (`.lanes.toml` when the project defines it, else the global config), changing only that view's `filter`
 line, and drops the `*`. A filter written across several lines can't be saved this way; edit the file by hand.
+
+#### Stacks
+
+lanes relates the items of one provider's list by their branches: an item whose `target` is another item's `branch` is
+stacked on it (both set and non-empty; an item whose `branch` equals its own `target`, such as a fork PR from its
+`main` into `main`, is nobody's base). This works for GitLab MRs, GitHub PRs and `command` items that set `branch` and
+`target`; it needs no extra API calls. Only open items are listed, so once a base is merged, the items on it lose
+their `base`. The whole provider list counts, so a base hidden by the view's filter or snoozed still makes its items
+stacked. Branches match by name only: two items from different forks with the same branch name can pair up. A provider
+field of the same name wins.
+
+| Field        | Type   | Meaning                                                                        |
+|--------------|--------|--------------------------------------------------------------------------------|
+| `base`       | string | the id of the item it is stacked on, `""` when none                            |
+| `stack_pos`  | number | 1 for the bottom of a stack, 2 for an item on it, …; `0` when in no stack      |
+| `stack_size` | number | how many items the stack has; `0` when in no stack                             |
+| `stacked_by` | list   | the ids stacked directly on it                                                 |
+
+Every item has these fields (empty or `0` outside a stack, also on tickets), so filters, sorts and groups can use
+them, e.g. `base == ""` for items that can merge now or `sort = "stack_pos"`. They don't make an item unread.
 
 ### Sorting
 
@@ -423,6 +444,9 @@ you last saw it. The cursor resting on it for a second marks it read; `m` toggle
 (`true` / `false`). On the first run every listed item counts as read. Seen items are stored per project
 (`seen.json`, a corrupt file moves to `seen.json.bak` like notes).
 
+A **dimmed title** followed by `↑ !12` marks an MR/PR [stacked](#stacks) on `!12`, which is not merged yet; drafts
+are dimmed too.
+
 | Badge          | Meaning                                                       |
 |----------------|---------------------------------------------------------------|
 | `draft`        | MR is a draft                                                 |
@@ -445,6 +469,8 @@ The top right of the screen summarizes live sessions (`◐ 2  ? 1  ● 1`) and w
 
 `p` toggles a pane under the list with the selected item's title, URL, author, your note, the provider's fields
 (the identifier — `iid`, `number` or `key` — then branch, labels, reviewers, CI, …), its sessions and its last run.
+An MR/PR in a [stack](#stacks) gets its `base`, `stack_pos`, `stack_size` and `stacked_by` lines after the target
+branch; items in no stack get none.
 Tickets also get `blocked_by`, `blocking` and `related` lines after labels and assignees, listing the open ids
 followed by the closed ones dimmed with a `✓` (e.g. `blocked_by  #7, #9 ✓`); empty relations are skipped. Set `preview = true` under `[settings]` to start with
 it open.

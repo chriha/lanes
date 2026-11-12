@@ -191,3 +191,61 @@ func TestPreviewLastRunLine(t *testing.T) {
 	}
 	t.Fatal("preview has no last run line")
 }
+
+func TestPreviewStackFields(t *testing.T) {
+	stack := []item.Item{
+		{ID: "a", Fields: map[string]any{"number": 1, "branch": "feat/a", "target": "main"}},
+		{ID: "b", Fields: map[string]any{"number": 2, "branch": "feat/b", "target": "feat/a"}},
+		{ID: "c", Fields: map[string]any{"number": 3, "branch": "feat/c", "target": "main"}},
+	}
+	tests := []struct {
+		name string
+		id   string
+		want []string // the lines after target, in order; nil when the item is in no stack
+	}{
+		{"stacked item", "b", []string{"base        a", "stack_pos   2", "stack_size  2"}},
+		{"base of a stack", "a", []string{"stack_pos   1", "stack_size  2", "stacked_by  b"}},
+		{"in no stack", "c", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newNotesModel(t)
+			m.data["p"] = stack
+			m.rebuild()
+			m.cursor = -1
+			for i, it := range m.items() {
+				if it.ID == tt.id {
+					m.cursor = i
+				}
+			}
+			if m.cursor < 0 {
+				t.Fatalf("item %q not listed", tt.id)
+			}
+			var lines []string
+			for _, l := range strings.Split(ansi.Strip(m.preview()), "\n") {
+				lines = append(lines, strings.TrimSpace(l))
+			}
+			at := -1
+			for i, l := range lines {
+				if strings.HasPrefix(l, "target ") {
+					at = i
+				}
+			}
+			if at < 0 {
+				t.Fatalf("preview has no target line:\n%s", strings.Join(lines, "\n"))
+			}
+			for _, k := range []string{"base ", "stack_pos ", "stack_size ", "stacked_by "} {
+				for _, l := range lines {
+					if tt.want == nil && strings.HasPrefix(l, k) {
+						t.Fatalf("preview of an unstacked item has %q:\n%s", l, strings.Join(lines, "\n"))
+					}
+				}
+			}
+			for i, w := range tt.want {
+				if got := lines[at+1+i]; got != w {
+					t.Errorf("line %d after target = %q, want %q:\n%s", i+1, got, w, strings.Join(lines, "\n"))
+				}
+			}
+		})
+	}
+}

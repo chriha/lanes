@@ -174,6 +174,11 @@ type View struct {
 	Sort     string  `toml:"sort"`    // comma-separated fields, "-" prefix = descending; empty = provider order
 	Groups   []Group `toml:"groups"`  // named filters; an item goes into the first group it matches, the rest stay ungrouped
 	Divider  bool    `toml:"divider"` // draw a dim separator before this tab
+	// OnEnter names an action started on items that newly appear in this view; empty = none.
+	OnEnter string `toml:"on_enter"`
+	// OnEnterRepeat lets an item that left and re-joined the view fire OnEnter again once its last auto-run is older
+	// than this cooldown (a Go duration such as "24h"); 0 = fire once per item only.
+	OnEnterRepeat time.Duration `toml:"on_enter_repeat"`
 }
 
 // Group is a named filter inside a view.

@@ -1212,7 +1212,7 @@ func (m *Model) attention(items []item.Item) (n int) {
 func (m *Model) header() string {
 	var tabs []string
 	for i, v := range m.views {
-		if v.cfg.Divider && i > 0 {
+		if (v.cfg.Divider || v.queue) && i > 0 { // the built-in queue tab is always set apart
 			tabs = append(tabs, sDim.Render("¦"))
 		}
 		name := v.cfg.Name

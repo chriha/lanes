@@ -84,6 +84,34 @@ func TestHeaderDivider(t *testing.T) {
 	}
 }
 
+// the built-in queue tab is set apart by one divider, unless it is the only tab
+func TestHeaderDividerBeforeQueue(t *testing.T) {
+	tests := []struct {
+		name  string
+		views []config.View
+		want  string
+		count int
+	}{
+		{"after a view", []config.View{{Name: "a"}}, "a 0 ¦ queue", 1},
+		{"after a view with a divider", []config.View{{Name: "a"}, {Name: "b", Divider: true}}, "b 0 ¦ queue", 2},
+		{"only tab", nil, "lanes queue", 0},
+	}
+	for _, tt := range tests {
+		m := &Model{width: 200, fetchedAt: map[string]time.Time{}}
+		for _, v := range tt.views {
+			m.views = append(m.views, &view{cfg: v})
+		}
+		m.views = append(m.views, newQueueView())
+		got := strings.Join(strings.Fields(ansi.Strip(m.header())), " ")
+		if !strings.Contains(got, tt.want) {
+			t.Errorf("%s: header %q lacks %q", tt.name, got, tt.want)
+		}
+		if n := strings.Count(got, "¦"); n != tt.count {
+			t.Errorf("%s: header %q has %d dividers, want %d", tt.name, got, n, tt.count)
+		}
+	}
+}
+
 // dividers are not views: keys and numbering skip them
 func TestDividerDoesNotChangeViewSwitching(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
@@ -99,7 +127,7 @@ func TestDividerDoesNotChangeViewSwitching(t *testing.T) {
 	for _, tt := range []struct {
 		keys []string
 		want int
-	}{{[]string{"l"}, 1}, {[]string{"l", "l"}, 2}, {[]string{"3"}, 2}, {[]string{"2"}, 1}, {[]string{"3", "h"}, 1}} {
+	}{{[]string{"l"}, 1}, {[]string{"l", "l"}, 2}, {[]string{"3"}, 2}, {[]string{"2"}, 1}, {[]string{"3", "h"}, 1}, {[]string{"Q"}, 3}, {[]string{"Q", "h"}, 2}} {
 		m.cur = 0
 		nav(m, tt.keys...)
 		if m.cur != tt.want {

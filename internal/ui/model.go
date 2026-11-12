@@ -1222,7 +1222,7 @@ func (m *Model) header() string {
 		label := fmt.Sprintf("%s %d", name, len(v.items))
 		if v.queue {
 			label = name // muted, with a count only when entries wait
-			if len(v.items) > 0 {
+			if len(m.auto.queue) > 0 {
 				label = fmt.Sprintf("%s %d", name, len(m.auto.queue))
 			}
 		}

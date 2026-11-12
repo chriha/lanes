@@ -346,9 +346,8 @@ func (m *Model) startAction(name string, act config.Action, targets []item.Item,
 		return nil
 	}
 	// a busy item is starting or running an action: skip it, whatever the action
-	// a queued item waits for its start already
 	headless := act.Type == "run"
-	gate := limit && !headless
+	gate := limit && !headless // over max_claude_sessions the start queues
 	var ts []item.Item
 	var busy []string
 	var busyItems []item.Item
@@ -358,7 +357,7 @@ func (m *Model) startAction(name string, act config.Action, targets []item.Item,
 			busyItems = append(busyItems, it)
 			continue
 		}
-		if gate && m.queued(it.ID) != "" {
+		if gate && m.queued(it.ID) != "" { // a queued item waits for its start already
 			busy = append(busy, it.ID+" already queued")
 			busyItems = append(busyItems, it)
 			continue

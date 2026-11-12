@@ -44,6 +44,9 @@ an env var).
   - `session`: command run in a detached tmux session (user's `$SHELL -ic`), optional `cwd`.
   - `api`: provider mutation without a session (e.g. gitlab `ready`, `sync`).
   - `confirm`: `none | single | always`. Multi-select always confirms.
+  - `[settings] max_claude_sessions` (default 3, 0 = off): a session start (action key, `gr`) that would take the
+    live sessions (alive in the last poll, or busy starting a session action; not dead, not headless) above it
+    asks first, folded into the multi-item prompt. Chain follow-ups are not gated.
   - `when`: optional filter expression evaluated per item (compiled at config load); items that don't match are
     skipped with a notice, and the help screen lists only actions matching the cursor item. Items carry a `kind`
     field (`pr` from gitlab/github, `ticket` from github-issues/linear) to scope actions by item type.

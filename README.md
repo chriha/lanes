@@ -623,6 +623,20 @@ Run "review" on 3 items (!1948, !1957, !1961)?  y/enter yes · n/esc no
 
 Each item gets its own session; items that already have the action running are skipped.
 
+**Session limit.** `max_claude_sessions` under `[settings]` (default `3`, `0` = no limit) caps how many live
+sessions lanes' actions run before starting more asks first. Every live session lanes started counts, idle,
+waiting or a [shell](#shell-sessions) included, whatever its command; finished (dead) sessions and
+[run actions](#run-actions) do not, and restarting a finished session counts as a new one. When a start (an
+action key, `gr` / `:resume`) would take the count above the limit, lanes asks; on a multi-item run this is the
+one prompt it shows:
+
+```text
+Limit of 3 reached (2 live). Run "review" on 3 items (!1948, !1957, !1961) anyway?  y/enter yes · n/esc no
+```
+
+Yes starts the whole batch, no starts nothing. [Chained](#chaining-actions-on_success-on_failure) follow-ups
+start without asking. A negative value fails the config load.
+
 ### Restricting actions (`when`)
 
 Every action can run on every item unless you restrict it. `when` takes a [filter expression](#filters),
@@ -1194,6 +1208,7 @@ preview       = false   # open the preview pane at startup
 no_notify     = false   # disable desktop notifications
 no_update_check = false # never check GitHub for a newer lanes release (see Updates under Install)
 claude_dir    = "~/.claude"   # show this Claude profile's usage in the footer (see Claude Code integration)
+max_claude_sessions = 3 # live action sessions before starting more asks first; 0 = no limit (see Running on many items)
 
 [provider.<name>]
 type    = "gitlab"      # or "github", "github-issues", "linear", "auto" (github for a github.com origin, else gitlab), "command"

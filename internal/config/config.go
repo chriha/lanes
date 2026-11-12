@@ -32,7 +32,12 @@ type Settings struct {
 }
 
 // SessionLimit is how many live action sessions lanes starts without asking: 3 when unset, 0 = no limit.
-func (s Settings) SessionLimit() int { return 0 }
+func (s Settings) SessionLimit() int {
+	if s.MaxSessions == nil {
+		return 3
+	}
+	return *s.MaxSessions
+}
 
 // Colors are hex colors like "#A78BFA" overriding the default adaptive palette.
 type Colors struct {
@@ -388,6 +393,9 @@ func Load() (*Config, error) {
 		dropShadowedLabels(&c.Theme.Dark, pc.Theme.Dark)
 		p = pp + " (project) over " + p
 	}
+	if c.Settings.MaxSessions != nil && *c.Settings.MaxSessions < 0 {
+		return nil, fmt.Errorf("%s: settings.max_claude_sessions = %d: must be 0 (no limit) or more", p, *c.Settings.MaxSessions)
+	}
 	if len(c.View) == 0 {
 		return nil, fmt.Errorf("%s: no [[view]] defined", p)
 	}
@@ -535,6 +543,7 @@ poll_interval = "30s"
 # no_notify = true    # disable desktop notifications
 # no_update_check = true  # never check GitHub (once a day) for a newer lanes release
 # claude_dir = "~/.claude"  # show this Claude profile's usage in the footer (written by a Claude Code mod)
+# max_claude_sessions = 3  # live action sessions before starting more asks to confirm (0 = no limit)
 
 # type "auto" picks github for a github.com origin and gitlab otherwise, per project
 # (GitHub Enterprise: set type = "github"). project is detected from the git remote of the

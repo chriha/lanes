@@ -27,7 +27,12 @@ type Settings struct {
 	NoNotify      bool   `toml:"no_notify"`
 	NoUpdateCheck bool   `toml:"no_update_check"` // never ask GitHub whether a newer lanes release exists
 	ClaudeDir     string `toml:"claude_dir"`      // Claude config dir whose usage the footer shows, e.g. ~/.claude
+	// MaxSessions caps the live sessions actions start before lanes asks to confirm; nil = unset (see SessionLimit).
+	MaxSessions *int `toml:"max_claude_sessions"`
 }
+
+// SessionLimit is how many live action sessions lanes starts without asking: 3 when unset, 0 = no limit.
+func (s Settings) SessionLimit() int { return 0 }
 
 // Colors are hex colors like "#A78BFA" overriding the default adaptive palette.
 type Colors struct {

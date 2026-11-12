@@ -124,6 +124,10 @@ const projectTail = `
 # sort: comma-separated fields, "-" prefix = descending; empty = provider order.
 #   https://github.com/chriha/lanes#sorting
 # divider: true draws a dim ¦ before this tab to group views; it is not a view (default false).
+# on_enter: an action started once on each item that newly appears in this view after lanes started (items already
+#   there at startup do not fire); the action's when still applies (default: none).
+# on_enter_repeat: with on_enter, an item that left the view and came back fires again once its last auto-run is
+#   older than this Go duration; use hours, not seconds (default: once per item).
 # groups: named filters; each item is listed under the first group it matches, items matching none follow
 #   the groups without a header. Empty groups are hidden; sort applies inside each group.
 # ---------------------------------------------------------------------------------------------------------
@@ -133,6 +137,8 @@ const projectTail = `
 # filter = '"needs-review" in labels && author != me'
 # sort = "-open_threads,title"
 # divider = true
+# on_enter = "review"
+# on_enter_repeat = "24h"
 # groups = [{ name = "mine", filter = 'author == me' }, { name = "urgent", filter = '"urgent" in labels' }]
 
 # ---------------------------------------------------------------------------------------------------------

@@ -184,7 +184,10 @@ type View struct {
 // OnEnterCooldown is how long after its last auto-run an item that re-joined the view fires OnEnter again; 0 = never
 // (on_enter_repeat unset: OnEnter fires once per item).
 func (v View) OnEnterCooldown() time.Duration {
-	return 0
+	if v.OnEnterRepeat == nil {
+		return 0
+	}
+	return *v.OnEnterRepeat
 }
 
 // Group is a named filter inside a view.
@@ -423,6 +426,17 @@ func Load() (*Config, error) {
 			}
 			if _, err := filter.Compile(g.Filter); err != nil {
 				return nil, fmt.Errorf("%s: view %q: group %q: %w", p, v.Name, g.Name, err)
+			}
+		}
+		if _, ok := c.Action[v.OnEnter]; v.OnEnter != "" && !ok {
+			return nil, fmt.Errorf("%s: view %q: on_enter: unknown action %q", p, v.Name, v.OnEnter)
+		}
+		if v.OnEnterRepeat != nil {
+			if v.OnEnter == "" {
+				return nil, fmt.Errorf("%s: view %q: on_enter_repeat needs on_enter", p, v.Name)
+			}
+			if *v.OnEnterRepeat <= 0 {
+				return nil, fmt.Errorf("%s: view %q: on_enter_repeat = %s: must be a positive duration such as \"24h\"", p, v.Name, *v.OnEnterRepeat)
 			}
 		}
 	}

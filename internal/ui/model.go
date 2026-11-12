@@ -278,7 +278,7 @@ func (m *Model) applyBuilt(cfg *config.Config, provs map[string]provider.Provide
 			delete(m.busy, k)
 		}
 	}
-	prev := ""
+	prev, prevQueue := "", m.onQueue()
 	if m.cur < len(m.views) {
 		prev = m.views[m.cur].cfg.Name
 	}
@@ -314,9 +314,13 @@ func (m *Model) applyBuilt(cfg *config.Config, provs map[string]provider.Provide
 			groups = append(groups, gf)
 		}
 		m.views = append(m.views, &view{cfg: vc, filter: f, err: err, sort: keys, edited: edited, groups: groups})
-		if vc.Name == prev {
+		if vc.Name == prev && !prevQueue {
 			m.cur = i
 		}
+	}
+	m.views = append(m.views, newQueueView()) // always last
+	if prevQueue {
+		m.cur = len(m.views) - 1
 	}
 	m.rebuild()
 }
@@ -328,6 +332,9 @@ func (m *Model) rebuild() {
 	m.unread = map[string]bool{}
 	stacks := map[string][]item.StackInfo{} // per provider, over its whole list: a base the view hides still counts
 	for i, v := range m.views {
+		if v.queue {
+			continue // syncQueue fills it
+		}
 		v.items, v.heads, v.snoozed, v.members = v.items[:0], nil, 0, nil
 		if v.err != nil {
 			continue
@@ -372,6 +379,7 @@ func (m *Model) rebuild() {
 			}
 		}
 	}
+	m.syncQueue()
 	m.restoreCursor(selected)
 }
 
@@ -817,7 +825,7 @@ func (m *Model) fetchStale(interval time.Duration) tea.Cmd {
 }
 
 // builtinKeys cannot be rebound through [keymap].
-const builtinKeys = "jkgGhlVqRoidxXtpnNFSyzmA/:? "
+const builtinKeys = "jkgGhlVqRoidxXtpnNFSyzmAQ/:? "
 
 // level is how severe a footer notice is: it picks the notice's colour.
 type level int
@@ -897,7 +905,7 @@ func (m *Model) onReloaded(msg reloadedMsg) tea.Cmd {
 	}
 	m.cancelFetches() // their results belong to the old config; refreshAll below fetches at once
 	m.applyBuilt(msg.cfg, msg.providers, msg.buildErr)
-	m.say(lvInfo, fmt.Sprintf("config reloaded: %d views, %d actions", len(m.views), len(msg.cfg.Action)))
+	m.say(lvInfo, fmt.Sprintf("config reloaded: %d views, %d actions", len(m.views)-1, len(msg.cfg.Action)))
 	for k := range msg.cfg.Keymap {
 		if len(k) == 1 && strings.Contains(builtinKeys, k) {
 			m.say(lvWarn, m.notice+fmt.Sprintf(" · key %q is built in and ignored", k))
@@ -1027,8 +1035,12 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if n > 0 && m.sess != nil {
 			return m, m.jump(m.items()[m.cursor])
 		}
+	case "Q":
+		m.switchView(len(m.views) - 1)
 	case "x":
-		if m.sess != nil {
+		if m.onQueue() {
+			m.dropQueued()
+		} else if m.sess != nil {
 			return m, m.killTargets()
 		}
 	case "X":
@@ -1086,7 +1098,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if name, ok := m.cfg.Keymap[s]; ok {
 			return m, m.runAction(name, m.cfg.Action[name])
 		}
-		if len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
+		if len(s) == 1 && s[0] >= '1' && s[0] <= '9' && int(s[0]-'1') < len(m.views)-1 { // not the queue view: Q
 			m.switchView(int(s[0] - '1'))
 		}
 	}
@@ -1208,6 +1220,12 @@ func (m *Model) header() string {
 			name += "*"
 		}
 		label := fmt.Sprintf("%s %d", name, len(v.items))
+		if v.queue {
+			label = name // muted, with a count only when entries wait
+			if len(v.items) > 0 {
+				label = fmt.Sprintf("%s %d", name, len(m.auto.queue))
+			}
+		}
 		st := sTab
 		if i == m.cur {
 			st = sTabOn
@@ -1229,7 +1247,10 @@ func (m *Model) header() string {
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 1
 	if gap < 1 {
 		// too narrow for every provider: only the one of the current view
-		right = m.sessionSummary() + m.styledStatus(m.views[m.cur].cfg.Provider, now)
+		right = m.sessionSummary()
+		if !m.onQueue() {
+			right += m.styledStatus(m.views[m.cur].cfg.Provider, now)
+		}
 		gap = max(m.width-lipgloss.Width(left)-lipgloss.Width(right)-1, 1)
 	}
 	return left + strings.Repeat(" ", gap) + right
@@ -1293,6 +1314,9 @@ func (m *Model) list() string {
 	var rows []string
 	if len(items) == 0 {
 		msg := "nothing here"
+		if v.queue {
+			msg = "queue empty: starts held back by max_claude_sessions wait here"
+		}
 		switch {
 		case v.err != nil:
 			msg = "filter error: " + v.err.Error()
@@ -1516,6 +1540,7 @@ func (m *Model) helpLines() []string {
 		{"ctrl-d / ctrl-u", "half page down / up"},
 		{"h / l, tab", "previous / next view"},
 		{"1-9", "jump to view"},
+		{"Q", "queue view: starts waiting for a free session (x drops entries)"},
 		{"space", "mark item (and move down)"},
 		{"V", "mark / unmark all"},
 		{"esc", "clear marks and filter"},

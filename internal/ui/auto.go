@@ -31,6 +31,7 @@ type autoEntry struct{ view, action, id string }
 // autoFetched runs after a successful full fetch of provider prov: it drops queued items that left their view,
 // drains the queue, then fires the on_enter action of each view of prov on its new arrivals.
 func (m *Model) autoFetched(prov string) tea.Cmd {
+	defer m.refreshQueue()
 	keep := m.auto.queue[:0]
 	for _, e := range m.auto.queue {
 		if _, ok := m.autoLookup(e); ok {
@@ -192,6 +193,7 @@ func (m *Model) autoRun(action string, act config.Action, its []item.Item) tea.C
 // drainAuto starts queued entries, oldest first, while :auto is on and max_claude_sessions has room. An entry
 // whose item left its view, no longer matches the action's when, is busy or already runs it is dropped.
 func (m *Model) drainAuto() tea.Cmd {
+	defer m.refreshQueue()
 	if m.auto.off {
 		return nil
 	}

@@ -317,6 +317,10 @@ func identifierKey(data map[string]any) string {
 }
 
 func (m *Model) runAction(name string, act config.Action) tea.Cmd {
+	if m.onQueue() {
+		m.say(lvWarn, "the queue view runs no actions: switch to a view, or drop entries with x")
+		return nil
+	}
 	return m.runActionOn(name, act, m.targets())
 }
 

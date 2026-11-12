@@ -348,7 +348,8 @@ compile, is a config error. Groups are set in the config only (global or project
 | `enter`             | jump into the item's newest session (opens the URL if it has none) |
 | `o`                 | open the item's URL in the browser                 |
 | `y`                 | copy the item's ID to the clipboard (all marked IDs, space-separated, if any are marked) |
-| `x`                 | close the item's sessions (asks first)             |
+| `Q`                 | switch to the [queue view](#running-on-many-items) (the last tab) |
+| `x`                 | close the item's sessions (asks first); in the queue view: drop the entry from the queue             |
 | `X`                 | interrupt the item's running sessions and keep their output (asks first; again: `SIGKILL`) |
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
 | `gr`                | resume the item's newest finished Claude session (see [Resuming a Claude session](#resuming-a-claude-session)) |
@@ -369,7 +370,7 @@ compile, is a config error. Groups are set in the config only (global or project
 
 Any other key you bind in `[keymap]` runs its [action](#actions). Built-in keys cannot be rebound; if you try,
 the help marks the binding as shadowed and the reload message tells you. `X` became a built-in key with
-interrupt; an older `[keymap]` binding of `X` is now shadowed.
+interrupt, and `Q` for the queue view; an older `[keymap]` binding of either is now shadowed.
 
 ### Searching
 
@@ -724,6 +725,13 @@ when = '"auto-review" in labels'   # optional gate: only items with this label a
   starts the next entry when a session ends or a fetch lands and there is room again, checking `when` once more;
   an entry whose item left the view is dropped. The queue lives in memory only: on quit it is lost, and the
   items stay handled; run the action by hand.
+- **Queue view.** The last tab, `queue`, lists the queue: one row per entry, oldest first, each the normal item row
+  with `queued <action>`. `Q` jumps to it from anywhere (`1`-`9` address the configured views only). The tab is
+  muted and shows a count only while entries wait; it is always there, and an empty queue shows an empty-state line.
+  Navigation, marks, search, `o`, `y`, `enter` and `d` work as in other views; `x` drops the entry under the cursor
+  (or the marked ones) from the queue, without asking and without touching any session. The item stays handled and
+  is not queued again. Action keys and `:run` do nothing there, so nothing starts past the limit. The list follows
+  the queue live. It is built in: not in the config, and `:newview` / `:delview` do not touch it.
 - **Failures are not retried.** An auto-start that fails, or whose command exits non-zero, is recorded in the item
   history like any run; later fetches do not start it again. Run it by hand to retry.
 - **Footer.** Each auto-start is reported, e.g. `auto-started review on !1961` or `auto-started review on 3 items`;

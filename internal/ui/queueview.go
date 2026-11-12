@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/item"
 )
@@ -76,6 +78,42 @@ func (m *Model) dropQueued() {
 		return
 	}
 	m.say(lvInfo, fmt.Sprintf("dropped %d from the queue", n))
+}
+
+// runQueued starts the queue entries of the marked items, or of the item under the cursor, now: past
+// max_claude_sessions, without asking or jumping. Each entry leaves the queue; one whose item is busy, runs the
+// action already or no longer matches its when is reported by the start and not started.
+func (m *Model) runQueued() tea.Cmd {
+	run := map[string]bool{}
+	for _, it := range m.targets() {
+		run[it.ID] = true
+	}
+	var entries []autoEntry
+	keep := m.auto.queue[:0]
+	for _, e := range m.auto.queue {
+		if run[e.id] {
+			entries = append(entries, e)
+			delete(m.marks, e.id)
+			continue
+		}
+		keep = append(keep, e)
+	}
+	m.auto.queue = keep
+	m.refreshQueue()
+	if len(entries) == 0 {
+		m.say(lvWarn, "nothing to run")
+		return nil
+	}
+	var cmds []tea.Cmd
+	for _, e := range entries {
+		it, ok := m.autoLookup(e)
+		if !ok {
+			m.say(lvWarn, e.id+" is no longer listed by "+e.view)
+			continue
+		}
+		cmds = append(cmds, m.queuedRun(e, m.entryAction(e), it))
+	}
+	return tea.Batch(cmds...)
 }
 
 // queueProvider is the provider of the view that queued the item with id, "" when it is not queued.

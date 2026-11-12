@@ -1095,6 +1095,9 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+r":
 		return m, m.reload()
 	default:
+		if s == "r" && m.onQueue() { // in the queue view r runs entries now, over a keymap binding for r
+			return m, m.runQueued()
+		}
 		if name, ok := m.cfg.Keymap[s]; ok {
 			return m, m.runAction(name, m.cfg.Action[name])
 		}
@@ -1540,7 +1543,7 @@ func (m *Model) helpLines() []string {
 		{"ctrl-d / ctrl-u", "half page down / up"},
 		{"h / l, tab", "previous / next view"},
 		{"1-9", "jump to view"},
-		{"Q", "queue view: starts waiting for a free session (x drops entries)"},
+		{"Q", "queue view: starts waiting for a free session (r starts entries now, past the limit; x drops them)"},
 		{"space", "mark item (and move down)"},
 		{"V", "mark / unmark all"},
 		{"esc", "clear marks and filter"},

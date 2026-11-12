@@ -43,6 +43,9 @@ func (m *Model) showDetail() tea.Cmd {
 	m.detail, m.detailKey = it, ""
 	m.mode, m.helpOff, m.thread, m.pendingZ = modeDetail, 0, 0, false
 	name := m.views[m.cur].cfg.Provider
+	if m.onQueue() {
+		name = m.queueProvider(it)
+	}
 	p, ok := m.providers[name].(provider.Detailer)
 	if !ok {
 		return nil

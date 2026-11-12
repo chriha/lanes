@@ -164,6 +164,10 @@ func (m *Model) inConfig(name string) bool {
 
 func (m *Model) setFilter(arg string) tea.Cmd {
 	v := m.views[m.cur]
+	if v.queue {
+		m.say(lvWarn, "the queue view has no filter")
+		return nil
+	}
 	name := v.cfg.Name
 	switch arg {
 	case "":
@@ -246,6 +250,10 @@ func (m *Model) newView(arg string) {
 	}
 	if _, err := filter.Compile(expr); err != nil {
 		m.say(lvErr, "filter: "+err.Error())
+		return
+	}
+	if m.onQueue() {
+		m.say(lvWarn, "newview copies the current view's provider: switch to a view first")
 		return
 	}
 	m.ov.Views = append(m.ov.Views, config.View{Name: name, Provider: m.views[m.cur].cfg.Provider, Filter: expr})

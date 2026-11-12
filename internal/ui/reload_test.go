@@ -86,12 +86,12 @@ func TestStaleReloadIsDropped(t *testing.T) {
 
 	landReload(t, m, second)
 	m.Update(firstMsg) // the older reload lands last
-	if len(m.views) != 1 || m.views[0].cfg.Name != "only" {
+	if len(m.views) != 2 || m.views[0].cfg.Name != "only" || !m.views[1].queue {
 		names := []string{}
 		for _, v := range m.views {
 			names = append(names, v.cfg.Name)
 		}
-		t.Errorf("views = %v, want [only]: the older reload overwrote the newer one", names)
+		t.Errorf("views = %v, want [only queue]: the older reload overwrote the newer one", names)
 	}
 }
 

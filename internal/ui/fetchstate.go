@@ -137,7 +137,9 @@ func (m *Model) providerStatuses(now time.Time) []string {
 		add(name)
 	}
 	for _, v := range m.views {
-		add(v.cfg.Provider)
+		if !v.queue {
+			add(v.cfg.Provider)
+		}
 	}
 	sort.Strings(names)
 	out := make([]string, len(names))

@@ -324,14 +324,14 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 	return m.runActionOn(name, act, m.targets())
 }
 
-// runActionOn starts action name on targets: when, busy and already-running items are skipped with a notice.
-// Over the session limit it asks first.
+// runActionOn starts action name on targets: when, busy, queued and already-running items are skipped with a
+// notice. Over the session limit it starts what fits and queues the rest.
 func (m *Model) runActionOn(name string, act config.Action, targets []item.Item) tea.Cmd {
 	return m.startAction(name, act, targets, true, false)
 }
 
-// startAction is runActionOn; limit false skips the session limit check (chain follow-ups start unattended).
-// auto (on_enter starts) never prompts and never jumps.
+// startAction is runActionOn; limit false skips the session limit check and the queue (chain follow-ups and queued
+// starts). auto (on_enter and queued starts) never prompts and never jumps.
 func (m *Model) startAction(name string, act config.Action, targets []item.Item, limit, auto bool) tea.Cmd {
 	if m.sess == nil {
 		m.say(lvWarn, "tmux unavailable")
@@ -346,12 +346,19 @@ func (m *Model) startAction(name string, act config.Action, targets []item.Item,
 		return nil
 	}
 	// a busy item is starting or running an action: skip it, whatever the action
+	headless := act.Type == "run"
+	gate := limit && !headless // over max_claude_sessions the start queues
 	var ts []item.Item
 	var busy []string
 	var busyItems []item.Item
 	for _, it := range all {
 		if b, ok := m.busy[session.Key(it.ID)]; ok {
 			busy = append(busy, fmt.Sprintf("%s busy (%s)", it.ID, b.action))
+			busyItems = append(busyItems, it)
+			continue
+		}
+		if gate && m.queued(it.ID) != "" { // a queued item waits for its start already
+			busy = append(busy, it.ID+" already queued")
 			busyItems = append(busyItems, it)
 			continue
 		}
@@ -364,7 +371,7 @@ func (m *Model) startAction(name string, act config.Action, targets []item.Item,
 	var jobs []job
 	skipped := 0
 	var runningItems []item.Item
-	headless := act.Type == "run"
+	var jobItems []item.Item
 	jump := act.Jump && !headless && !auto && len(all) == 1 // several targets start all and jump into none
 	vars := act.Vars
 	if vars == nil {
@@ -405,6 +412,7 @@ func (m *Model) startAction(name string, act config.Action, targets []item.Item,
 				return nil
 			}
 			jobs = append(jobs, job{sname, it.ID, session.Key(it.ID), cwd, cmd, restart})
+			jobItems = append(jobItems, it)
 		}
 	next:
 	}
@@ -417,39 +425,57 @@ func (m *Model) startAction(name string, act config.Action, targets []item.Item,
 		return nil
 	}
 	start := func() tea.Cmd {
-		m.lock(name, jobs)
-		var cmd tea.Cmd
-		if headless {
-			cmd = m.executeRun(name, jobs, act.Refresh, len(busy), skippedWhen)
-		} else {
-			attach := ""
-			if jump {
-				attach = jobs[0].name
+		run, note := jobs, skippedWhen
+		if over := m.overLimit(len(jobs)); gate && over != "" { // start what fits, queue the rest in item order
+			n := m.autoRoom(act, len(jobs))
+			for _, it := range jobItems[n:] {
+				m.enqueue(name, act, it, false)
 			}
-			cmd = m.execute(name, jobs, skipped, len(busy), skippedWhen, attach)
+			run = jobs[:n]
+			note = withNote(fmt.Sprintf("%d queued (%s)", len(jobs)-n, over), skippedWhen)
+			if n == 0 {
+				note = withNote(fmt.Sprintf("queued %s on %s (%s)", name, labelsOf(jobs), over), withNote(strings.Join(busy, ", "), skippedWhen))
+			}
+		}
+		var cmd tea.Cmd
+		switch {
+		case len(run) == 0:
+			m.marks = map[string]bool{}
+			m.say(lvWarn, note)
+		case headless:
+			m.lock(name, run)
+			cmd = m.executeRun(name, run, act.Refresh, len(busy), note)
+		default:
+			m.lock(name, run)
+			attach := ""
+			if jump && len(run) == len(jobs) {
+				attach = run[0].name
+			}
+			cmd = m.execute(name, run, skipped, len(busy), note, attach)
 		}
 		for _, it := range append(append(unmatched, busyItems...), runningItems...) {
 			m.marks[it.ID] = true // skipped items stay marked, so it shows what did not run
 		}
 		return cmd
 	}
-	over := ""
-	if limit && !headless {
-		over = m.overLimit(len(jobs))
-	}
-	if !auto && (len(all) > 1 || act.Confirm == "single" || over != "") {
+	if !auto && (len(all) > 1 || act.Confirm == "single") {
 		what := ts[0].ID
 		if len(ts) > 1 {
 			what = fmt.Sprintf("%d items (%s)", len(ts), ids(ts))
 		}
-		if over != "" {
-			m.ask(fmt.Sprintf("%s. Run %q on %s anyway?", over, name, what), start)
-		} else {
-			m.ask(fmt.Sprintf("Run %q on %s?", name, what), start)
-		}
+		m.ask(fmt.Sprintf("Run %q on %s?", name, what), start)
 		return nil
 	}
 	return start()
+}
+
+// labelsOf lists the jobs' item labels, comma-separated.
+func labelsOf(jobs []job) string {
+	labels := make([]string, len(jobs))
+	for i, j := range jobs {
+		labels[i] = j.label
+	}
+	return strings.Join(labels, ", ")
 }
 
 // overLimit says, when starting n more sessions would take the live action sessions above max_claude_sessions,
@@ -485,8 +511,11 @@ func (m *Model) liveSessions() int {
 
 // resume starts, in its action's session, the resume template of the action whose Claude session ended last on it
 // (the newest history event with a claude_session whose action has resume). A dead session is restarted; a
-// running one is left alone. Marks are ignored and kept.
-func (m *Model) resume(it item.Item) tea.Cmd {
+// running one is left alone. Marks are ignored and kept. Over max_claude_sessions the resume is queued.
+func (m *Model) resume(it item.Item) tea.Cmd { return m.resumeItem(it, true) }
+
+// resumeItem is resume; limit false skips the session limit and the queue and never jumps (a queued resume).
+func (m *Model) resumeItem(it item.Item, limit bool) tea.Cmd {
 	if m.sess == nil {
 		m.say(lvWarn, "tmux unavailable")
 		return nil
@@ -494,6 +523,10 @@ func (m *Model) resume(it item.Item) tea.Cmd {
 	key := session.Key(it.ID)
 	if b, ok := m.busy[key]; ok {
 		m.say(lvWarn, fmt.Sprintf("%s busy (%s)", it.ID, b.action))
+		return nil
+	}
+	if limit && m.queued(it.ID) != "" {
+		m.say(lvWarn, it.ID+" already queued")
 		return nil
 	}
 	var ev *history.Event
@@ -540,31 +573,27 @@ func (m *Model) resume(it item.Item) tea.Cmd {
 	}
 	jobs := []job{{sname, it.ID, key, cwd, cmd, restart}}
 	attach := ""
-	if act.Jump {
+	if act.Jump && limit {
 		attach = sname
 	}
-	start := func() tea.Cmd {
-		marks := m.marks
-		m.lock(name, jobs)
-		cmd := m.execute(name, jobs, 0, 0, "", attach)
-		m.marks = marks // execute consumes the marks; resume runs on the cursor item only
-		return cmd
-	}
-	if over := m.overLimit(len(jobs)); over != "" {
-		m.ask(fmt.Sprintf("%s. Resume %q on %s anyway?", over, name, it.ID), start)
+	if over := m.overLimit(len(jobs)); limit && over != "" {
+		m.enqueue(name, act, it, true)
+		m.say(lvWarn, fmt.Sprintf("queued resume of %s on %s (%s)", name, it.ID, over))
 		return nil
 	}
-	return start()
+	marks := m.marks
+	m.lock(name, jobs)
+	start := m.execute(name, jobs, 0, 0, "", attach)
+	m.marks = marks // execute consumes the marks; resume runs on the cursor item only
+	return start
 }
 
 // lock marks the jobs' items busy with action and says so in the footer; doneMsg releases them.
 func (m *Model) lock(action string, jobs []job) {
-	labels := make([]string, len(jobs))
-	for i, j := range jobs {
+	for _, j := range jobs {
 		m.busy[j.itemKey] = busyState{action: action}
-		labels[i] = j.label
 	}
-	m.say(lvInfo, fmt.Sprintf("starting %s on %s…", action, strings.Join(labels, ", ")))
+	m.say(lvInfo, fmt.Sprintf("starting %s on %s…", action, labelsOf(jobs)))
 }
 
 func jobKeys(jobs []job) []string {

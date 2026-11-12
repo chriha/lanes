@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -47,8 +48,18 @@ func others(n int, dead bool) []session.Info {
 	return out
 }
 
-// Starting a session action asks to confirm when the live action sessions plus the new ones exceed
-// max_claude_sessions; "no" starts nothing. Under the limit, or with limit 0, nothing changes.
+// queuedIDs lists the items in the queue, oldest first.
+func queuedIDs(m *Model) []string {
+	var out []string
+	for _, e := range m.auto.queue {
+		out = append(out, e.id)
+	}
+	return out
+}
+
+// Starting a session action that would take the live action sessions above max_claude_sessions asks nothing: the
+// items that fit start, the rest are queued in item order. Under the limit, or with limit 0, nothing changes; the
+// confirm prompt of a batch still shows.
 func TestSessionLimit(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -57,38 +68,41 @@ func TestSessionLimit(t *testing.T) {
 		busy       map[string]string // item key -> action holding it
 		action     string            // default "review"
 		targets    []string          // marked items; empty = the cursor item 1
-		answer     string            // key pressed at the prompt
+		twice      bool              // start the action a second time
+		answer     string            // key pressed at a prompt
 		wantPrompt string            // substring of the prompt; "" = no prompt
-		noLimit    bool              // the prompt must not mention the limit
 		wantStarts int
+		wantQueued []string
+		wantNotice string // substring of the final notice
 	}{
-		{name: "under the default limit: no prompt", live: others(2, false), wantStarts: 1},
-		{name: "at the default limit: asks, yes starts", live: others(3, false), answer: "y",
-			wantPrompt: `Limit of 3 reached (3 live). Run "review" on 1 anyway?`, wantStarts: 1},
-		{name: "at the limit: no starts nothing", live: others(3, false), answer: "n",
-			wantPrompt: "Limit of 3 reached", wantStarts: 0},
+		{name: "under the default limit: starts", live: others(2, false), wantStarts: 1},
+		{name: "at the default limit: queued, no prompt", live: others(3, false), wantQueued: []string{"1"},
+			wantNotice: "queued review on 1 (Limit of 3 reached (3 live))"},
 		{name: "configured limit", limit: intp(5), live: others(4, false), wantStarts: 1},
-		{name: "configured limit exceeded", limit: intp(5), live: others(5, false), answer: "y",
-			wantPrompt: "Limit of 5 reached", wantStarts: 1},
-		{name: "limit 0: never asks", limit: intp(0), live: others(10, false), wantStarts: 1},
-		{name: "batch over the limit: one prompt naming the limit, yes starts all", live: others(1, false),
-			targets: []string{"1", "2", "3"}, answer: "y",
-			wantPrompt: `Limit of 3 reached (1 live). Run "review" on 3 items (1, 2, 3) anyway?`, wantStarts: 3},
-		{name: "batch over the limit: no starts none", live: others(1, false),
-			targets: []string{"1", "2", "3"}, answer: "n", wantPrompt: "Limit of 3 reached", wantStarts: 0},
+		{name: "configured limit exceeded: queued", limit: intp(5), live: others(5, false), wantQueued: []string{"1"},
+			wantNotice: "Limit of 5 reached"},
+		{name: "limit 0: never queues", limit: intp(0), live: others(10, false), wantStarts: 1},
+		{name: "batch over the limit: what fits starts, the rest queues in item order", live: others(0, false),
+			limit: intp(1), targets: []string{"1", "2", "3"}, answer: "y",
+			wantPrompt: `Run "review" on 3 items (1, 2, 3)?`, wantStarts: 1, wantQueued: []string{"2", "3"},
+			wantNotice: "2 queued (Limit of 1 reached (0 live))"},
+		{name: "batch over the limit: no starts and queues nothing", live: others(1, false),
+			targets: []string{"1", "2", "3"}, answer: "n", wantPrompt: `Run "review" on 3 items`},
 		{name: "batch within the limit: today's prompt", targets: []string{"1", "2", "3"}, answer: "y",
-			wantPrompt: `Run "review" on 3 items (1, 2, 3)?`, noLimit: true, wantStarts: 3},
+			wantPrompt: `Run "review" on 3 items (1, 2, 3)?`, wantStarts: 3},
 		{name: "dead sessions are not counted", limit: intp(1), live: others(3, true), wantStarts: 1},
 		{name: "starting session actions are counted", limit: intp(2), live: others(1, false),
-			busy: map[string]string{"z": "review"}, answer: "y", wantPrompt: "Limit of 2 reached (2 live)", wantStarts: 1},
+			busy: map[string]string{"z": "review"}, wantQueued: []string{"1"}, wantNotice: "Limit of 2 reached (2 live)"},
 		{name: "busy headless runs are not counted", limit: intp(2), live: others(1, false),
 			busy: map[string]string{"z": "quick"}, wantStarts: 1},
 		{name: "restarting a dead session counts as new", limit: intp(1),
-			live:   append(others(1, false), session.Info{Name: "review~1", Action: "review", ItemKey: "1", Dead: true}),
-			answer: "y", wantPrompt: "Limit of 1 reached (1 live)", wantStarts: 1},
+			live:       append(others(1, false), session.Info{Name: "review~1", Action: "review", ItemKey: "1", Dead: true}),
+			wantQueued: []string{"1"}, wantNotice: "Limit of 1 reached (1 live)"},
 		{name: "headless run actions are not gated", limit: intp(1), live: others(3, false), action: "quick"},
-		{name: "already running item: nothing new, no prompt", limit: intp(1),
+		{name: "already running item: nothing new, nothing queued", limit: intp(1),
 			live: []session.Info{{Name: "review~1", Action: "review", ItemKey: "1"}}},
+		{name: "an item already queued is not queued again", live: others(3, false), twice: true,
+			wantQueued: []string{"1"}, wantNotice: "1 already queued"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -96,52 +110,70 @@ func TestSessionLimit(t *testing.T) {
 			for key, action := range tt.busy {
 				m.busy[key] = busyState{action: action}
 			}
-			for _, id := range tt.targets {
-				m.marks[id] = true
-			}
 			name := tt.action
 			if name == "" {
 				name = "review"
 			}
-			cmd := m.runAction(name, m.cfg.Action[name])
 			prompt := ""
-			if m.mode == modeConfirm {
-				prompt = m.confirm.prompt
-				cmd = press(m, tt.answer)
-				if m.mode == modeConfirm {
-					t.Fatalf("a second prompt followed: %q", m.confirm.prompt)
-				}
+			runs := 1
+			if tt.twice {
+				runs = 2
 			}
-			settle(m, cmd)
+			for range runs {
+				for _, id := range tt.targets {
+					m.marks[id] = true
+				}
+				cmd := m.runAction(name, m.cfg.Action[name])
+				if m.mode == modeConfirm {
+					prompt = m.confirm.prompt
+					cmd = press(m, tt.answer)
+					if m.mode == modeConfirm {
+						t.Fatalf("a second prompt followed: %q", m.confirm.prompt)
+					}
+				}
+				settle(m, cmd)
+			}
 
 			switch {
 			case tt.wantPrompt == "" && prompt != "":
 				t.Errorf("prompt = %q, want none", prompt)
 			case tt.wantPrompt != "" && !strings.Contains(prompt, tt.wantPrompt):
 				t.Errorf("prompt = %q, want it to contain %q", prompt, tt.wantPrompt)
-			case tt.noLimit && strings.Contains(prompt, "Limit"):
-				t.Errorf("prompt = %q, want no limit in it", prompt)
+			case strings.Contains(prompt, "anyway"):
+				t.Errorf("prompt = %q, want no limit question", prompt)
 			}
 			if got := starts(t, log); got != tt.wantStarts {
 				t.Errorf("started %d session(s), want %d (notice %q)", got, tt.wantStarts, m.notice)
+			}
+			if got := queuedIDs(m); !reflect.DeepEqual(got, tt.wantQueued) {
+				t.Errorf("queued %v, want %v", got, tt.wantQueued)
+			}
+			if !strings.Contains(m.notice, tt.wantNotice) {
+				t.Errorf("notice = %q, want it to contain %q", m.notice, tt.wantNotice)
 			}
 		})
 	}
 }
 
-// gr / :resume asks the same question over the limit; yes resumes, no starts nothing.
+// gr / :resume over the limit queues the resume instead of asking; it starts once a poll shows room.
 func TestResumeSessionLimit(t *testing.T) {
 	tests := []struct {
 		name       string
 		limit      *int
 		live       int
-		answer     string
-		wantPrompt bool
+		twice      bool // press gr a second time
+		freed      bool // a poll then shows no live sessions
 		wantStarts int
+		wantQueued []string
+		wantNotice string
 	}{
 		{name: "under the limit: resumes", limit: intp(2), live: 1, wantStarts: 1},
-		{name: "over the limit: yes resumes", limit: intp(1), live: 1, answer: "y", wantPrompt: true, wantStarts: 1},
-		{name: "over the limit: no starts nothing", limit: intp(1), live: 1, answer: "n", wantPrompt: true},
+		{name: "over the limit: queued, no prompt", limit: intp(1), live: 1, wantQueued: []string{"1"},
+			wantNotice: "queued resume of fix on 1 (Limit of 1 reached (1 live))"},
+		{name: "a queued resume starts once there is room", limit: intp(1), live: 1, freed: true, wantStarts: 1,
+			wantNotice: "resumed queued fix on 1"},
+		{name: "a queued item is not queued again", limit: intp(1), live: 1, twice: true, wantQueued: []string{"1"},
+			wantNotice: "1 already queued"},
 		{name: "limit 0: resumes", limit: intp(0), live: 5, wantStarts: 1},
 	}
 	for _, tt := range tests {
@@ -150,21 +182,25 @@ func TestResumeSessionLimit(t *testing.T) {
 			m.cfg.Action = map[string]config.Action{"fix": {Run: "echo fix", Resume: "claude --resume {{.claude_session}}"}}
 			history.Append(history.Event{Item: "1", Action: "fix", Event: "finished", ClaudeSession: "abc"})
 
-			cmd := press(m, "g", "r")
-			prompted := m.mode == modeConfirm
-			if prompted {
-				if !strings.Contains(m.confirm.prompt, "Limit of 1 reached") {
-					t.Errorf("prompt = %q, want it to name the limit", m.confirm.prompt)
-				}
-				cmd = press(m, tt.answer)
+			settle(m, press(m, "g", "r"))
+			if tt.twice {
+				settle(m, press(m, "g", "r"))
 			}
-			settle(m, cmd)
+			if m.mode == modeConfirm {
+				t.Fatalf("resume asked %q, want no prompt", m.confirm.prompt)
+			}
+			if tt.freed {
+				poll()(t, m, nil)
+			}
 
-			if prompted != tt.wantPrompt {
-				t.Errorf("prompted = %v, want %v", prompted, tt.wantPrompt)
-			}
 			if got := starts(t, log); got != tt.wantStarts {
 				t.Errorf("started %d session(s), want %d (notice %q)", got, tt.wantStarts, m.notice)
+			}
+			if got := queuedIDs(m); !reflect.DeepEqual(got, tt.wantQueued) {
+				t.Errorf("queued %v, want %v", got, tt.wantQueued)
+			}
+			if !strings.Contains(m.notice, tt.wantNotice) {
+				t.Errorf("notice = %q, want it to contain %q", m.notice, tt.wantNotice)
 			}
 		})
 	}

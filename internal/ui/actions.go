@@ -148,7 +148,7 @@ func (m *Model) chain(action, key string, exit int) tea.Cmd {
 	nact.Jump = false // lanes never pulls the user into a session out of the blue
 	marks := m.marks
 	// no limit check: no one is there to answer its prompt
-	cmd := m.startAction(next, nact, []item.Item{*target}, false)
+	cmd := m.startAction(next, nact, []item.Item{*target}, false, false)
 	m.marks = marks // the follow-up runs on its item alone; the user's marks stay
 	if cmd != nil {
 		m.notice = prefix + "starting " + next
@@ -323,11 +323,12 @@ func (m *Model) runAction(name string, act config.Action) tea.Cmd {
 // runActionOn starts action name on targets: when, busy and already-running items are skipped with a notice.
 // Over the session limit it asks first.
 func (m *Model) runActionOn(name string, act config.Action, targets []item.Item) tea.Cmd {
-	return m.startAction(name, act, targets, true)
+	return m.startAction(name, act, targets, true, false)
 }
 
 // startAction is runActionOn; limit false skips the session limit check (chain follow-ups start unattended).
-func (m *Model) startAction(name string, act config.Action, targets []item.Item, limit bool) tea.Cmd {
+// auto (on_enter starts) never prompts and never jumps.
+func (m *Model) startAction(name string, act config.Action, targets []item.Item, limit, auto bool) tea.Cmd {
 	if m.sess == nil {
 		m.say(lvWarn, "tmux unavailable")
 		return nil
@@ -360,7 +361,7 @@ func (m *Model) startAction(name string, act config.Action, targets []item.Item,
 	skipped := 0
 	var runningItems []item.Item
 	headless := act.Type == "run"
-	jump := act.Jump && !headless && len(all) == 1 // several targets start all and jump into none
+	jump := act.Jump && !headless && !auto && len(all) == 1 // several targets start all and jump into none
 	vars := act.Vars
 	if vars == nil {
 		vars = map[string]any{}
@@ -432,7 +433,7 @@ func (m *Model) startAction(name string, act config.Action, targets []item.Item,
 	if limit && !headless {
 		over = m.overLimit(len(jobs))
 	}
-	if len(all) > 1 || act.Confirm == "single" || over != "" {
+	if !auto && (len(all) > 1 || act.Confirm == "single" || over != "") {
 		what := ts[0].ID
 		if len(ts) > 1 {
 			what = fmt.Sprintf("%d items (%s)", len(ts), ids(ts))

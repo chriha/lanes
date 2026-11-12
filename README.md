@@ -211,7 +211,8 @@ Views come from three places: the global config, the project config, and views y
 edited inside the app shows a `*` in the tab bar.
 
 To group tabs, set `divider = true` on a view: a dim `¦` is drawn before its tab. A divider is not a view, so
-`h`/`l`, `1`–`9` and `:view` skip it and the numbering is unchanged.
+`h`/`l`, `1`–`9` and `:view` skip it and the numbering is unchanged. The built-in [queue tab](#running-on-many-items)
+always has one before it (unless it is the only tab); there is no setting for that.
 
 ```toml
 [[view]]
@@ -727,7 +728,7 @@ when = '"auto-review" in labels'   # optional gate: only items with this label a
   items stay handled; run the action by hand.
 - **Queue view.** The last tab, `queue`, lists the queue: one row per entry, oldest first, each the normal item row
   with `queued <action>`. `Q` jumps to it from anywhere (`1`-`9` address the configured views only). The tab is
-  muted and shows a count only while entries wait; it is always there, and an empty queue shows an empty-state line.
+  muted, set apart from the views by a `¦`, and shows a count only while entries wait; it is always there, and an empty queue shows an empty-state line.
   Navigation, marks, search, `o`, `y`, `enter` and `d` work as in other views; `x` drops the entry under the cursor
   (or the marked ones) from the queue, without asking and without touching any session. The item stays handled and
   is not queued again. Action keys and `:run` do nothing there, so nothing starts past the limit. The list follows

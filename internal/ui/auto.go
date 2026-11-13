@@ -140,6 +140,20 @@ func (m *Model) autoStart(view, action string, its []item.Item) tea.Cmd {
 	return m.autoRun(action, act, ready[:n])
 }
 
+// dropReason says why a queued start of action on it can no longer run, "" when it can.
+func (m *Model) dropReason(action string, act config.Action, it item.Item) string {
+	if match, _, _ := matchWhen(act, []item.Item{it}); len(match) != 1 {
+		return "no longer matches when"
+	}
+	if b, busy := m.busy[session.Key(it.ID)]; busy {
+		return fmt.Sprintf("busy (%s)", b.action)
+	}
+	if m.autoBlocked(action, act, it) {
+		return "already runs " + action
+	}
+	return ""
+}
+
 // autoBlocked says whether it is busy or runs a live session of action already.
 func (m *Model) autoBlocked(action string, act config.Action, it item.Item) bool {
 	if _, busy := m.busy[session.Key(it.ID)]; busy {
@@ -227,9 +241,11 @@ func (m *Model) drainAuto() tea.Cmd {
 		}
 		it, ok := m.autoLookup(e)
 		act := m.entryAction(e)
+		why := ""
 		if ok && !e.resume {
-			match, _, _ := matchWhen(act, []item.Item{it})
-			ok = len(match) == 1 && !m.autoBlocked(e.action, act, it)
+			if why = m.dropReason(e.action, act, it); why != "" {
+				ok = false
+			}
 		}
 		if ok && m.autoRoom(act, 1) == 0 {
 			break
@@ -237,6 +253,9 @@ func (m *Model) drainAuto() tea.Cmd {
 		m.auto.queue = append(m.auto.queue[:i], m.auto.queue[i+1:]...)
 		switch {
 		case !ok:
+			if e.manual && why != "" {
+				m.say(lvWarn, fmt.Sprintf("dropped queued %s on %s: %s", e.action, e.id, why))
+			}
 		case e.manual:
 			cmds = append(cmds, m.queuedRun(e, act, it))
 		default:

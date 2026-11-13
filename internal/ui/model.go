@@ -54,6 +54,8 @@ type view struct {
 	// members are the items the filter matches, snoozed or not and whatever the search: the items on_enter sees
 	members []item.Item
 	queue   bool // the built-in queue view: its items are the auto queue's entries
+	// sessions marks the built-in sessions view: it lists m.sessions, not items
+	sessions bool
 }
 
 // head is a group header in the list: items[at:at+n] belong to the group name.

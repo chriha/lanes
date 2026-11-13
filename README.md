@@ -1361,12 +1361,15 @@ Set `selection` (flat, or per mode under `[theme.light]` / `[theme.dark]`) to ch
 The footer draws errors in the `bad` color and warnings (a request that was not fully carried out, such as
 `tmux unavailable` or a skipped item) in `warn`; other messages stay plain.
 
-`mode` picks the palette: `system` (the default) follows the terminal background as detected at start, `light` and
-`dark` force that palette. Forcing a mode helps when detection is slow or wrong, for example over SSH.
+`mode` picks the palette: `system` (the default) follows the terminal background, detected at start and again each
+time the terminal window regains focus, so switching the system or terminal between light and dark takes effect when
+you come back to `lanes`; `light` and `dark` force that palette. Forcing a mode helps when detection is slow or wrong,
+for example over SSH. A focus regain the terminal does not answer within 200 ms keeps the current palette.
 
 Inside tmux, detection asks the outer terminal through tmux's passthrough, which needs `set -g allow-passthrough on`
-in your tmux config. Without it the answer never arrives and `lanes` falls back to `COLORFGBG`, then to the dark
-palette; on a light terminal set that option or use `mode = "light"`.
+in your tmux config, at start and on focus regain alike. Without it the answer never arrives: at start `lanes` falls
+back to `COLORFGBG`, then to the dark palette, and on focus regain it keeps the palette; on a light terminal set that
+option or use `mode = "light"`.
 
 The flat `[theme]` keys apply to both modes. `[theme.light]` and `[theme.dark]` take the same color keys for one mode
 only. Per key, the active mode's table wins over the flat `[theme]` value, which wins over the built-in default:

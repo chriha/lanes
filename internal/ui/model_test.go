@@ -411,7 +411,8 @@ func TestSelectionHighlight(t *testing.T) {
 		"session row": func(t *testing.T, sel string) string {
 			useSelection(t, sel)
 			m := sessModel(t, session.Info{Name: "a~1", ItemKey: "1", Created: time.Now().Add(-time.Hour)})
-			return strings.Split(m.sessionsList(), "\n")[0]
+			press(m, "S")
+			return sessionsRow(m, 0)
 		},
 		"active tab": func(t *testing.T, sel string) string {
 			m := newBackoffModel(t)

@@ -53,7 +53,12 @@ func viewIs(name string) autoStep {
 func queueIs(ids ...string) autoStep {
 	return func(t *testing.T, m *Model, _ *time.Time) {
 		t.Helper()
-		qv := m.views[m.viewIndex(func(v *view) bool { return v.queue })]
+		var qv *view
+		for _, v := range m.views {
+			if v.queue {
+				qv = v
+			}
+		}
 		if got := itemIDs(qv.items); !reflect.DeepEqual(got, append([]string{}, ids...)) {
 			t.Errorf("queue view lists %v, want %v", got, ids)
 		}

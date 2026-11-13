@@ -95,7 +95,10 @@ func TestNoteShowsInEveryView(t *testing.T) {
 		t.Fatalf("noted view lists %v before any note", got)
 	}
 	command(m, "note waiting on backend")
-	for i := range m.views[:m.configured()] { // the built-in views list no noted item
+	for i, v := range m.views {
+		if v.queue || v.sessions {
+			continue // the built-in views list no noted item
+		}
 		m.switchView(i)
 		if !strings.Contains(rowOf(t, m, "a"), "✎") {
 			t.Errorf("view %s: row of a lacks ✎: %q", m.views[i].cfg.Name, rowOf(t, m, "a"))

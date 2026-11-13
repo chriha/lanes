@@ -73,6 +73,9 @@ func sessModel(t *testing.T, infos ...session.Info) *Model {
 	return m
 }
 
+// sessionsRow is row i of the sessions view as the screen shows it, below the tab bar and its rule.
+func sessionsRow(m *Model, i int) string { return strings.Split(m.View(), "\n")[2+i] }
+
 func names(n ...string) []session.Info {
 	out := make([]session.Info, len(n))
 	for i, s := range n {
@@ -468,9 +471,10 @@ func TestSessionsViewHighlightsCursorRow(t *testing.T) {
 		{Name: "a~1", ItemKey: "1", Created: time.Now().Add(-time.Hour)},
 		{Name: "b~9", ItemKey: "9", Created: time.Now().Add(-time.Hour)}, // in no view: orphan hint
 	}
-	rowLine := func(m *Model, i int) string { return strings.Split(m.sessionsList(), "\n")[i] }
+	rowLine := sessionsRow
 	for cursor := range infos {
 		m := sessModel(t, infos...)
+		press(m, "S")
 		m.sessCursor = cursor
 		for i := range infos {
 			line := rowLine(m, i)
@@ -507,15 +511,15 @@ func TestSessionsRowFillsScreenWidth(t *testing.T) {
 		for cursor := range infos {
 			m := sessModel(t, infos...)
 			m.width = width
+			press(m, "S")
 			m.sessCursor = cursor
-			lines := strings.Split(m.sessionsList(), "\n")
 			for i := range infos {
-				if got := ansi.StringWidth(lines[i]); got != width {
-					t.Errorf("width %d cursor %d: row %d is %d columns wide: %q", width, cursor, i, got, lines[i])
+				if got := ansi.StringWidth(sessionsRow(m, i)); got != width {
+					t.Errorf("width %d cursor %d: row %d is %d columns wide: %q", width, cursor, i, got, sessionsRow(m, i))
 				}
 			}
-			if !strings.Contains(lines[1], "…") {
-				t.Errorf("width %d: long label not truncated: %q", width, lines[1])
+			if !strings.Contains(sessionsRow(m, 1), "…") {
+				t.Errorf("width %d: long label not truncated: %q", width, sessionsRow(m, 1))
 			}
 		}
 	}

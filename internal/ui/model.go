@@ -1231,21 +1231,24 @@ func (m *Model) header() string {
 			name += "*"
 		}
 		label := fmt.Sprintf("%s %d", name, len(v.items))
-		attn := m.attention(v.items)
+		var n int // asking or waiting
 		switch {
+		case v.sessions:
+			label, n = fmt.Sprintf("%s %d", name, len(m.sessions)), m.sessionsAttention()
 		case v.queue:
 			label = name // muted, with a count only when entries wait
 			if len(m.auto.queue) > 0 {
 				label = fmt.Sprintf("%s %d", name, len(m.auto.queue))
 			}
-		case v.sessions:
-			label, attn = fmt.Sprintf("%s %d", name, len(m.sessions)), m.sessionsAttention()
+			n = m.attention(v.items)
+		default:
+			n = m.attention(v.items)
 		}
 		st := sTab
 		if i == m.cur {
 			st = sTabOn
 		}
-		if n := attn; n > 0 {
+		if n > 0 {
 			// the count carries its own style; the active tab's background must reach it
 			cs := badgeStyle("warn")
 			if i == m.cur {

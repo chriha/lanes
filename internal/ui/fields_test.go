@@ -321,3 +321,13 @@ func TestPreviewTruncatesColoredLabels(t *testing.T) {
 		}
 	}
 }
+
+func TestHelpDetailRowListsThreadKeys(t *testing.T) {
+	m := fieldsModel(t, 200)
+	help := ansi.Strip(strings.Join(m.helpLines(), "\n"))
+	for _, want := range []string{"n/N next/prev open thread", "o open in browser"} {
+		if !strings.Contains(help, want) {
+			t.Errorf("details help row lacks %q", want)
+		}
+	}
+}

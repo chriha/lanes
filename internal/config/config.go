@@ -370,6 +370,26 @@ func (c Config) PollBlurred() time.Duration {
 	return max(d, c.Poll())
 }
 
+// rejectBareRepeat fails when a view in the file at path sets on_enter_repeat to a bare integer: the TOML decoder
+// reads it into a time.Duration as nanoseconds (5 = 5ns), which silently disables the cooldown.
+func rejectBareRepeat(path string) error {
+	var raw struct {
+		View []struct {
+			Name          string `toml:"name"`
+			OnEnterRepeat any    `toml:"on_enter_repeat"`
+		} `toml:"view"`
+	}
+	if _, err := toml.DecodeFile(path, &raw); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	for _, v := range raw.View {
+		if n, ok := v.OnEnterRepeat.(int64); ok {
+			return fmt.Errorf("%s: view %q: on_enter_repeat = %d: must be a duration string such as \"24h\", not a bare number", path, v.Name, n)
+		}
+	}
+	return nil
+}
+
 // Load reads the global config (writing a default on first run) and overlays the project config:
 // settings and theme merge per field, keymap per key, providers/actions/views per name.
 func Load() (*Config, error) {
@@ -386,10 +406,16 @@ func Load() (*Config, error) {
 	if _, err := toml.DecodeFile(p, &c); err != nil {
 		return nil, fmt.Errorf("%s: %w", p, err)
 	}
+	if err := rejectBareRepeat(p); err != nil {
+		return nil, err
+	}
 	if pp := ProjectPath(); pp != "" {
 		var pc Config
 		if _, err := toml.DecodeFile(pp, &pc); err != nil {
 			return nil, fmt.Errorf("%s: %w", pp, err)
+		}
+		if err := rejectBareRepeat(pp); err != nil {
+			return nil, err
 		}
 		// the global tables must not collide on their own, even when a project key is about to shadow them
 		for prefix, labels := range map[string]map[string]string{

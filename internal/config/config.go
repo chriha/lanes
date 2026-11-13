@@ -288,6 +288,9 @@ func branchUsesField(b *parse.BranchNode, name string) bool {
 // ShellAction is the name of the built-in shell session (key t); config actions cannot use it.
 const ShellAction = "shell"
 
+// QueueView is the name of the built-in queue view (key Q); configured views cannot use it.
+const QueueView = "queue"
+
 type Config struct {
 	Settings Settings            `toml:"settings"`
 	Provider map[string]Provider `toml:"provider"`
@@ -414,6 +417,9 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("%s: no [[view]] defined", p)
 	}
 	for _, v := range c.View {
+		if v.Name == QueueView {
+			return nil, fmt.Errorf("%s: view %q: the name is reserved for the built-in queue view (Q); rename the view", p, v.Name)
+		}
 		if _, ok := c.Provider[v.Provider]; !ok {
 			return nil, fmt.Errorf("%s: view %q uses unknown provider %q", p, v.Name, v.Provider)
 		}

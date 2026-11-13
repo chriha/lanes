@@ -208,7 +208,8 @@ zero.
 
 Views come from three places: the global config, the project config, and views you create inside the app with
 `:newview` (stored outside your config, see [The command line](#the-command-line)). A view whose filter was
-edited inside the app shows a `*` in the tab bar.
+edited inside the app shows a `*` in the tab bar. The name `queue` is reserved for the built-in
+[queue view](#running-on-many-items): a view with that name fails the config load.
 
 To group tabs, set `divider = true` on a view: a dim `¦` is drawn before its tab. A divider is not a view, so
 `h`/`l`, `1`–`9` and `:view` skip it and the numbering is unchanged. The built-in [queue tab](#running-on-many-items)
@@ -344,7 +345,7 @@ goes into the first group it matches; items matching no group are listed below t
 
 ```toml
 [[view]]
-name = "queue"
+name = "triage"
 provider = "gitlab"
 groups = [
   { name = "mine",   filter = 'author == me' },

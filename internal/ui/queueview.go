@@ -12,7 +12,7 @@ import (
 
 // queueName is the name of the built-in view that lists the auto queue. It is always the last view, is not
 // configurable and is reached with Q.
-const queueName = "queue"
+const queueName = config.QueueView
 
 // newQueueView is the built-in view of the auto queue; its items are the queue's entries, see syncQueue.
 func newQueueView() *view { return &view{cfg: config.View{Name: queueName}, queue: true} }

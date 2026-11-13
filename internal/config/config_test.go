@@ -413,6 +413,57 @@ run = "echo shell"
 	}
 }
 
+func TestReservedQueueView(t *testing.T) {
+	tests := []struct {
+		name    string
+		global  string // extra TOML appended to the global config
+		project string // project .lanes.toml, empty = none
+		wantErr bool
+	}{
+		{"global queue view", "[[view]]\nname = \"queue\"\nprovider = \"gl\"\n", "", true},
+		{"project queue view", "", "[[view]]\nname = \"queue\"\nprovider = \"gl\"\n", true},
+		{"similar name queue2", "[[view]]\nname = \"queue2\"\nprovider = \"gl\"\n", "", false},
+		{"names are case-sensitive", "[[view]]\nname = \"Queue\"\nprovider = \"gl\"\n", "", false},
+		{"project queue2", "", "[[view]]\nname = \"queue2\"\nprovider = \"gl\"\n", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+			t.Setenv("HOME", tmp)
+			proj := filepath.Join(tmp, "proj")
+			if err := os.MkdirAll(proj, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			old, _ := os.Getwd()
+			defer os.Chdir(old)
+			if err := os.Chdir(proj); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+`+tt.global)
+			if tt.project != "" {
+				write(t, filepath.Join(proj, ProjectFile), tt.project)
+			}
+			_, err := Load()
+			if !tt.wantErr {
+				if err != nil {
+					t.Fatalf("err = %v, want none", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), `view "queue"`) || !strings.Contains(err.Error(), "reserved") {
+				t.Fatalf("err = %v, want it to say view \"queue\" is reserved", err)
+			}
+		})
+	}
+}
+
 func TestViewGroupsValidation(t *testing.T) {
 	tests := []struct {
 		name    string

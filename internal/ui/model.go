@@ -1555,7 +1555,7 @@ func (m *Model) helpLines() []string {
 		{"t", "shell for the cursor item: jump into it (started, or restarted if finished)"},
 		{"gr", "resume the cursor item's newest finished Claude session (actions with resume)"},
 		{"i", "item history"},
-		{"d", "item details: fields, description, pipeline, threads, comments (j/k scroll, J/K thread, enter/space fold it, za/zA fold/unfold all, q close)"},
+		{"d", "item details: fields, description, pipeline, threads, comments (j/k scroll, J/K thread, n/N next/prev open thread, enter/space fold it, za/zA fold/unfold all, o open in browser, q close)"},
 		{"N", "edit the item's note in $EDITOR (save empty to delete)"},
 		{"m", "mark item(s) unread; when all of them are unread: read"},
 		{"z", "snooze item(s): 2h, 3d, mon, 2026-11-03, empty = until it changes; on a snoozed one: unsnooze"},

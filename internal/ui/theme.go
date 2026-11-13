@@ -184,3 +184,12 @@ func badgeStyle(kind string) lipgloss.Style {
 	}
 	return lipgloss.NewStyle().Foreground(c)
 }
+
+// bgSentMsg reports that the focus-time background query of capture gen was written; err is why it was not.
+type bgSentMsg struct {
+	gen int
+	err error
+}
+
+// bgTimeoutMsg ends capture gen when the terminal has not answered in time.
+type bgTimeoutMsg struct{ gen int }

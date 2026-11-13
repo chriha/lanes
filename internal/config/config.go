@@ -574,7 +574,7 @@ poll_interval = "30s"
 # no_notify = true    # disable desktop notifications
 # no_update_check = true  # never check GitHub (once a day) for a newer lanes release
 # claude_dir = "~/.claude"  # show this Claude profile's usage in the footer (written by a Claude Code mod)
-# max_claude_sessions = 3  # live action sessions before starting more asks to confirm (0 = no limit)
+# max_claude_sessions = 3  # live action sessions (waiting Claude sessions excluded) before starting more asks to confirm (0 = no limit)
 
 # type "auto" picks github for a github.com origin and gitlab otherwise, per project
 # (GitHub Enterprise: set type = "github"). project is detected from the git remote of the

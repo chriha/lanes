@@ -115,7 +115,7 @@ const projectTail = `
 # no_notify = false           # disable desktop notifications (default false)
 # no_update_check = false     # never check GitHub (once a day) for a newer lanes release (default false)
 # claude_dir = "~/.claude"    # show this Claude profile's usage in the footer (default: none)
-# max_claude_sessions = 3     # live action sessions before starting more asks to confirm; 0 = no limit (default 3)
+# max_claude_sessions = 3     # live action sessions (waiting Claude sessions excluded) before starting more asks to confirm; 0 = no limit (default 3)
 
 # ---------------------------------------------------------------------------------------------------------
 # Views: one tab each. A view with the name of a global view replaces it; other names are appended.

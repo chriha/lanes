@@ -827,11 +827,16 @@ type interruptedMsg struct {
 	level  level
 }
 
-// shell runs the built-in shell action on it alone (marks are ignored and kept) and jumps into it.
+// shell runs the built-in shell action on it alone (marks are ignored and kept) and jumps into it. It is a plain
+// user shell, not a Claude session, so max_claude_sessions never queues it (a queued start would not jump).
 func (m *Model) shell(it item.Item) tea.Cmd {
+	if m.onQueue() {
+		m.say(lvWarn, "the queue view runs no actions: switch to a view, start entries now with r or drop them with x")
+		return nil
+	}
 	marks := m.marks
-	m.marks = map[string]bool{it.ID: true} // ponytail: runAction targets the marks; borrow them for this item
-	cmd := m.runAction(config.ShellAction, config.Action{Run: `exec "${SHELL:-/bin/sh}"`, Jump: true})
+	m.marks = map[string]bool{it.ID: true} // ponytail: startAction resets and sets marks; borrow them for this item
+	cmd := m.startAction(config.ShellAction, config.Action{Run: `exec "${SHELL:-/bin/sh}"`, Jump: true}, []item.Item{it}, false, false)
 	m.marks = marks
 	return cmd
 }

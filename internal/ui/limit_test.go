@@ -220,3 +220,35 @@ func TestChainIgnoresSessionLimit(t *testing.T) {
 		t.Errorf("started %d session(s), want the follow-up (notice %q)", got, m.notice)
 	}
 }
+
+// The built-in shell is a plain user shell: over max_claude_sessions it starts right away (and jumps) instead of
+// queueing a start that would later run without a jump.
+func TestShellIgnoresSessionLimit(t *testing.T) {
+	tests := []struct {
+		name  string
+		limit *int
+		live  []session.Info
+	}{
+		{name: "at the default limit", live: others(3, false)},
+		{name: "over a configured limit", limit: intp(1), live: others(4, false)},
+		{name: "under the limit", live: others(1, false)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, log := limitModel(t, tt.limit, tt.live)
+			m.marks["2"] = true // ignored by the shell
+
+			settle(m, m.shell(m.items()[0]))
+
+			if got := starts(t, log); got != 1 {
+				t.Errorf("started %d session(s), want 1 (notice %q)", got, m.notice)
+			}
+			if got := queuedIDs(m); len(got) != 0 {
+				t.Errorf("queued %v, want nothing", got)
+			}
+			if !m.marks["2"] {
+				t.Errorf("marks = %v, want them kept", m.marks)
+			}
+		})
+	}
+}

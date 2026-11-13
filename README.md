@@ -660,7 +660,7 @@ sessions lanes' actions run before starting more asks first. Every live session 
 waiting or a [shell](#shell-sessions) included, whatever its command; finished (dead) sessions and
 [run actions](#run-actions) do not, and restarting a finished session counts as a new one. When a start (an
 action key, `gr` / `:resume`) would take the count above the limit, lanes asks; on a multi-item run this is the
-one prompt it shows:
+one prompt it shows (`t` never waits: a shell starts at once, whatever the count):
 
 ```text
 Limit of 3 reached (2 live). Run "review" on 3 items (!1948, !1957, !1961) anyway?  y/enter yes · n/esc no

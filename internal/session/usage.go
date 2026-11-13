@@ -49,7 +49,10 @@ func TranscriptUsage(path string, since time.Time) (tok Tokens, ok bool) {
 			var l tokenLine
 			if json.Unmarshal(b, &l) == nil && l.Type == "assistant" && l.Message.ID != "" &&
 				l.Message.Model != "<synthetic>" && !l.Timestamp.Before(since) {
-				msgs[l.Message.ID] = l.Message.Usage
+				// A line without usage carries nothing to count: a known message keeps what it has.
+				if _, known := msgs[l.Message.ID]; !known || l.Message.Usage != (usage{}) {
+					msgs[l.Message.ID] = l.Message.Usage
+				}
 			}
 		}
 		if errors.Is(err, io.EOF) {

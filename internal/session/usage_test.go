@@ -1,8 +1,10 @@
 package session
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -64,5 +66,38 @@ func TestTranscriptUsageHalfWrittenLine(t *testing.T) {
 	got, ok := TranscriptUsage(path, time.Time{})
 	if want := (Tokens{Input: 1, CacheWrite: 2, CacheRead: 3, Output: 4}); !ok || got != want {
 		t.Errorf("TranscriptUsage = %+v, %v; want %+v, true", got, ok, want)
+	}
+}
+
+// A later line of a message without usage keeps what the earlier lines counted; a message seen only on usage-less
+// lines counts as zero.
+func TestTranscriptUsageLineWithoutUsage(t *testing.T) {
+	withUsage := func(id string, in, out int) string {
+		return fmt.Sprintf(`{"type":"assistant","timestamp":"2026-11-01T10:00:00Z","message":{"id":%q,"usage":{"input_tokens":%d,"output_tokens":%d}}}`, id, in, out)
+	}
+	noUsage := func(id string) string {
+		return fmt.Sprintf(`{"type":"assistant","timestamp":"2026-11-01T10:00:00Z","message":{"id":%q}}`, id)
+	}
+	tests := []struct {
+		name  string
+		lines []string
+		want  Tokens
+	}{
+		{"usage-less line after the usage line", []string{withUsage("m1", 5, 7), noUsage("m1")}, Tokens{Input: 5, Output: 7}},
+		{"usage-less line between usage lines", []string{withUsage("m1", 5, 7), noUsage("m1"), withUsage("m1", 6, 9)}, Tokens{Input: 6, Output: 9}},
+		{"message only on a usage-less line", []string{noUsage("m1")}, Tokens{}},
+		{"usage-less message beside a counted one", []string{withUsage("m1", 5, 7), noUsage("m2")}, Tokens{Input: 5, Output: 7}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "t.jsonl")
+			if err := os.WriteFile(path, []byte(strings.Join(tt.lines, "\n")+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			got, ok := TranscriptUsage(path, time.Time{})
+			if !ok || got != tt.want {
+				t.Errorf("TranscriptUsage = %+v, %v; want %+v, true", got, ok, tt.want)
+			}
+		})
 	}
 }

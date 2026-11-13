@@ -3,7 +3,9 @@ package ui
 import (
 	"cmp"
 	"strings"
+	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/chriha/lanes/internal/config"
@@ -34,7 +36,8 @@ var cAgent = flowview.NeonPalette()
 // cLabels maps a lowercased label name to its resolved color; a label without an entry renders in cText.
 var cLabels map[string]lipgloss.AdaptiveColor
 
-// detectedDark is the terminal background lipgloss detected before the first forced mode; nil = never forced.
+// detectedDark is the terminal background as last detected: recorded before the first forced mode, or reported on a
+// focus regain; nil = lipgloss's own detection stands.
 var detectedDark *bool
 
 func init() {
@@ -184,3 +187,80 @@ func badgeStyle(kind string) lipgloss.Style {
 	}
 	return lipgloss.NewStyle().Foreground(c)
 }
+
+// redetected applies a background the terminal reported after start: in system mode a changed one re-pins lipgloss
+// and rebuilds the styles; a forced mode or an unchanged background leaves the palette alone.
+func redetected(mode string, dark bool) {
+	if forcedMode(mode) || lipgloss.HasDarkBackground() == dark {
+		return
+	}
+	lipgloss.SetHasDarkBackground(dark)
+	detectedDark = &dark
+	buildStyles()
+}
+
+// forcedMode reports whether mode pins the palette instead of following the terminal.
+func forcedMode(mode string) bool { return mode == "light" || mode == "dark" }
+
+// bgReplyWait bounds the wait for the terminal's answer to a focus-time background query.
+const bgReplyWait = 200 * time.Millisecond
+
+// oscBG starts the body of an OSC 11 reply, after its ESC ].
+const oscBG = "11;rgb:"
+
+// bgCapture catches the terminal's answer to a background query among the key messages: bubbletea v1 owns stdin and
+// has no OSC parsing, so "\x1b]11;rgb:…" arrives as alt+], the body as runes, then alt+\ (ESC \) or ctrl+g (BEL).
+type bgCapture struct {
+	gen    int          // counts the queries written, to drop the messages of an ended capture
+	active bool         // a query is out and its reply not yet complete
+	keys   []tea.KeyMsg // the keys swallowed so far, replayed when the pattern breaks
+	body   string       // the reply's runes after ESC ]
+}
+
+// bgVerdict is what a key means to an active capture.
+type bgVerdict int
+
+const (
+	bgPass  bgVerdict = iota // no reply has started: the key is the user's
+	bgHold                   // continues the reply: swallowed for now
+	bgDone                   // ends the reply
+	bgBreak                  // breaks the reply: the swallowed keys and this one are replayed
+)
+
+// feed classifies k against the reply seen so far and takes a continuing body chunk into body.
+func (c *bgCapture) feed(k tea.KeyMsg) bgVerdict {
+	switch {
+	case len(c.keys) == 0:
+		if k.Type == tea.KeyRunes && k.Alt && string(k.Runes) == "]" {
+			return bgHold
+		}
+		return bgPass
+	case k.Type == tea.KeyRunes && !k.Alt && !k.Paste:
+		if body := c.body + string(k.Runes); replyBody(body) {
+			c.body = body
+			return bgHold
+		}
+	case len(c.body) > len(oscBG) && (k.Type == tea.KeyCtrlG || k.Type == tea.KeyRunes && k.Alt && string(k.Runes) == `\`):
+		return bgDone
+	}
+	return bgBreak
+}
+
+// replyBody reports whether s can be the start of an OSC 11 reply body: a prefix of "11;rgb:", or that followed by hex
+// digits and slashes.
+func replyBody(s string) bool {
+	if strings.HasPrefix(oscBG, s) {
+		return true
+	}
+	rest, ok := strings.CutPrefix(s, oscBG)
+	return ok && strings.Trim(rest, "0123456789abcdefABCDEF/") == ""
+}
+
+// bgSentMsg reports that the focus-time background query of capture gen was written; err is why it was not.
+type bgSentMsg struct {
+	gen int
+	err error
+}
+
+// bgTimeoutMsg ends capture gen when the terminal has not answered in time.
+type bgTimeoutMsg struct{ gen int }

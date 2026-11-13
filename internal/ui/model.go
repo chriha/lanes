@@ -4,6 +4,8 @@ package ui
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"github.com/chriha/lanes/internal/seen"
 	"github.com/chriha/lanes/internal/session"
 	"github.com/chriha/lanes/internal/snooze"
+	"github.com/chriha/lanes/internal/termbg"
 	"github.com/chriha/lanes/internal/update"
 )
 
@@ -122,6 +125,9 @@ type Model struct {
 	notice   string
 	level    level                               // how the footer draws notice
 	clip     func(string) error                  // nil: the system clipboard (tests fake it)
+	bgOut    io.Writer                           // where the background query goes; nil: stdout if a terminal (tests fake it)
+	getenv   func(string) string                 // reads TERM and TMUX for the background query; nil: os.Getenv (tests fake it)
+	bg       bgCapture                           // the focus-time background query and its reply
 	open     func(string) error                  // nil: the system opener (tests fake it)
 	sampler  func() func(pid int) []session.Proc // nil: a ps sampler per agent view (tests fake it)
 
@@ -644,7 +650,13 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.blurred = true
 	case tea.FocusMsg:
 		m.blurred = false
-		return m, m.fetchStale(m.cfg.Poll())
+		return m, tea.Batch(m.fetchStale(m.cfg.Poll()), m.queryBackground())
+	case bgSentMsg:
+		return m.onBgSent(msg)
+	case bgTimeoutMsg:
+		if msg.gen == m.bg.gen && m.bg.active {
+			return m.endCapture()
+		}
 	case dwellMsg:
 		m.dwelled(msg)
 		return m, nil
@@ -722,7 +734,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case detailMsg:
 		m.onDetail(msg)
 	case tea.KeyMsg:
-		return m.key(msg)
+		return m.keyIn(msg)
 	default:
 		if m.agents != nil { // the agent view's own tick
 			var cmd tea.Cmd
@@ -731,6 +743,81 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// queryBackground writes the terminal background query in system mode and arms the capture of its reply; nil in a
+// forced mode, while a query is unanswered, or when the terminal must not be asked.
+func (m *Model) queryBackground() tea.Cmd {
+	if forcedMode(m.cfg.Theme.Mode) || m.bg.active {
+		return nil
+	}
+	getenv := m.getenv
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	q, ok := termbg.Query(getenv("TERM"), getenv("TMUX"))
+	if !ok {
+		return nil
+	}
+	out := m.bgOut
+	if out == nil {
+		if fi, err := os.Stdout.Stat(); err != nil || fi.Mode()&os.ModeCharDevice == 0 {
+			return nil // no terminal to ask
+		}
+		out = os.Stdout
+	}
+	m.bg = bgCapture{gen: m.bg.gen + 1, active: true}
+	gen := m.bg.gen
+	return func() tea.Msg {
+		_, err := io.WriteString(out, q)
+		return bgSentMsg{gen: gen, err: err}
+	}
+}
+
+// onBgSent starts the wait for the reply of a written query; a query that could not be written ends its capture,
+// which keeps the palette as for a terminal that never answers.
+func (m *Model) onBgSent(msg bgSentMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.bg.gen || !m.bg.active {
+		return m, nil
+	}
+	if msg.err != nil {
+		return m.endCapture()
+	}
+	return m, tea.Tick(bgReplyWait, func(time.Time) tea.Msg { return bgTimeoutMsg{gen: msg.gen} })
+}
+
+// keyIn hands k to the key handling unless it is part of the reply to a background query.
+func (m *Model) keyIn(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if !m.bg.active {
+		return m.key(k)
+	}
+	switch m.bg.feed(k) {
+	case bgPass:
+		return m.key(k)
+	case bgHold:
+		m.bg.keys = append(m.bg.keys, k)
+		return m, nil
+	case bgDone:
+		dark, ok := termbg.ParseDark("\x1b]" + m.bg.body + "\a")
+		m.bg = bgCapture{gen: m.bg.gen}
+		if ok {
+			redetected(m.cfg.Theme.Mode, dark)
+		}
+		return m, nil
+	}
+	return m.endCapture(k)
+}
+
+// endCapture ends the background capture and replays the keys it swallowed, then extra, in order.
+func (m *Model) endCapture(extra ...tea.KeyMsg) (tea.Model, tea.Cmd) {
+	keys := append(m.bg.keys, extra...)
+	m.bg = bgCapture{gen: m.bg.gen}
+	cmds := make([]tea.Cmd, 0, len(keys))
+	for _, k := range keys {
+		_, cmd := m.key(k)
+		cmds = append(cmds, cmd)
+	}
+	return m, tea.Batch(cmds...)
 }
 
 func (m *Model) unlock(keys []string) {

@@ -130,9 +130,12 @@ func TestNoticeColour(t *testing.T) {
 				m.say(tt.level, "something")
 				render := m.footer
 				if screen == "sessions" {
+					m.views = append(m.views, newQueueView(), newSessionsView())
 					m.openSessions()
+					if !m.onSessionsTab() {
+						t.Fatal("not on the sessions view")
+					}
 					m.say(tt.level, "something")
-					render = m.sessionsView
 				}
 				want := tt.want.Render(" something")
 				if got := render(); !strings.Contains(got, want) {

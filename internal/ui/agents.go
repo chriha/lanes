@@ -91,13 +91,13 @@ func (m *Model) agentsOfItem(it item.Item) tea.Cmd {
 	return nil
 }
 
-// agentsOfSession opens the agent view on session s, from the sessions screen.
+// agentsOfSession opens the agent view on session s, from the sessions view.
 func (m *Model) agentsOfSession(s session.Info) tea.Cmd {
 	if session.ClaudeTranscript(s.Name) == "" {
 		m.say(lvWarn, "no Claude session in "+s.Name)
 		return nil
 	}
-	return m.openAgents(s, modeSessions, "")
+	return m.openAgents(s, modeNormal, "")
 }
 
 // openAgents opens the agent view on session s, which has a Claude transcript, titled with the item's title ("" for

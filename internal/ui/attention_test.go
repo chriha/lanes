@@ -127,7 +127,8 @@ func TestDividerDoesNotChangeViewSwitching(t *testing.T) {
 	for _, tt := range []struct {
 		keys []string
 		want int
-	}{{[]string{"l"}, 1}, {[]string{"l", "l"}, 2}, {[]string{"3"}, 2}, {[]string{"2"}, 1}, {[]string{"3", "h"}, 1}, {[]string{"Q"}, 3}, {[]string{"Q", "h"}, 2}} {
+	}{{[]string{"l"}, 1}, {[]string{"l", "l"}, 2}, {[]string{"3"}, 2}, {[]string{"2"}, 1}, {[]string{"3", "h"}, 1}, {[]string{"Q"}, 3}, {[]string{"Q", "h"}, 2},
+		{[]string{"S"}, 4}, {[]string{"Q", "l"}, 4}, {[]string{"S", "h"}, 3}, {[]string{"4"}, 0}, {[]string{"5"}, 0}} {
 		m.cur = 0
 		nav(m, tt.keys...)
 		if m.cur != tt.want {

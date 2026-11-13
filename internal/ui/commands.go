@@ -164,8 +164,8 @@ func (m *Model) inConfig(name string) bool {
 
 func (m *Model) setFilter(arg string) tea.Cmd {
 	v := m.views[m.cur]
-	if v.queue {
-		m.say(lvWarn, "the queue view has no filter")
+	if v.builtin() {
+		m.say(lvWarn, "the "+v.cfg.Name+" view has no filter")
 		return nil
 	}
 	name := v.cfg.Name
@@ -252,7 +252,7 @@ func (m *Model) newView(arg string) {
 		m.say(lvErr, "filter: "+err.Error())
 		return
 	}
-	if m.onQueue() {
+	if m.views[m.cur].builtin() {
 		m.say(lvWarn, "newview copies the current view's provider: switch to a view first")
 		return
 	}

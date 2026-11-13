@@ -53,7 +53,12 @@ func viewIs(name string) autoStep {
 func queueIs(ids ...string) autoStep {
 	return func(t *testing.T, m *Model, _ *time.Time) {
 		t.Helper()
-		qv := m.views[len(m.views)-1]
+		var qv *view
+		for _, v := range m.views {
+			if v.queue {
+				qv = v
+			}
+		}
 		if got := itemIDs(qv.items); !reflect.DeepEqual(got, append([]string{}, ids...)) {
 			t.Errorf("queue view lists %v, want %v", got, ids)
 		}
@@ -111,7 +116,7 @@ func cursorOn(id string) autoStep {
 	}
 }
 
-// The built-in queue view is always the last tab, reached with Q, and lists the auto queue first in, first out
+// The built-in queue view follows the configured views (only the sessions view comes after it), is reached with Q, and lists the auto queue first in, first out
 // with the action name on each row; x drops entries without touching sessions.
 func TestQueueView(t *testing.T) {
 	tests := []struct {
@@ -119,8 +124,8 @@ func TestQueueView(t *testing.T) {
 		steps      []autoStep
 		wantStarts []string
 	}{
-		{name: "last tab after views and dividers, muted without a count when empty",
-			steps: []autoStep{tabsAre("review", "other", "queue"), headerHas("queue", true), headerHas("queue 0", false)}},
+		{name: "after views and dividers, before the sessions tab, muted without a count when empty",
+			steps: []autoStep{tabsAre("review", "other", "queue", "sessions"), headerHas("queue", true), headerHas("queue 0", false)}},
 		{name: "the tab shows the number of queued entries",
 			steps:      []autoStep{full("1"), full("1", "2", "3"), headerHas("queue 2", true), poll(), headerHas("queue 1", true)},
 			wantStarts: []string{"review~2"}},
@@ -131,7 +136,8 @@ func TestQueueView(t *testing.T) {
 			steps: []autoStep{pressKeys("Q"), viewIs("queue"), pressKeys("1"), viewIs("review"), pressKeys("2"), viewIs("other"),
 				pressKeys("3"), viewIs("other"), pressKeys("Q"), viewIs("queue")}},
 		{name: "l moves from the last configured view onto it",
-			steps: []autoStep{pressKeys("2", "l"), viewIs("queue"), pressKeys("l"), viewIs("queue"), pressKeys("h"), viewIs("other")}},
+			steps: []autoStep{pressKeys("2", "l"), viewIs("queue"), pressKeys("l"), viewIs("sessions"), pressKeys("h"), viewIs("queue"),
+				pressKeys("h"), viewIs("other")}},
 		{name: "rows are the queued items in FIFO order with the action name",
 			steps: []autoStep{full("1"), full("1", "4", "2", "3"), pressKeys("Q"), queueIs("4", "2", "3"),
 				listHas("queued review", true)}},
@@ -165,11 +171,14 @@ func TestQueueView(t *testing.T) {
 		{name: "action keys run nothing from the queue view",
 			steps: []autoStep{full("1"), full("1", "2"), pressKeys("Q"), colon("run review"), queueIs("2"),
 				footerHas("queue view runs no actions", true)}},
-		{name: "a config reload keeps one queue view, last, and selected",
-			steps: []autoStep{full("1"), full("1", "2"), pressKeys("Q"), reload(), tabsAre("review", "other", "queue"),
+		{name: "a config reload keeps one queue view, before the sessions view, and selected",
+			steps: []autoStep{full("1"), full("1", "2"), pressKeys("Q"), reload(), tabsAre("review", "other", "queue", "sessions"),
 				viewIs("queue")}},
 		{name: "a reload from another view keeps that view",
-			steps: []autoStep{pressKeys("2"), reload(), tabsAre("review", "other", "queue"), viewIs("other")}},
+			steps: []autoStep{pressKeys("2"), reload(), tabsAre("review", "other", "queue", "sessions"), viewIs("other")}},
+		{name: "a reload on the sessions view keeps one sessions view, last, and selected",
+			steps: []autoStep{pressKeys("S"), reload(), tabsAre("review", "other", "queue", "sessions"), viewIs("sessions"),
+				reload(), tabsAre("review", "other", "queue", "sessions"), viewIs("sessions")}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

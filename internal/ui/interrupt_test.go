@@ -178,7 +178,7 @@ func TestInterruptAgainForces(t *testing.T) {
 	}
 }
 
-func TestSessionsScreenInterrupt(t *testing.T) {
+func TestSessionsViewInterrupt(t *testing.T) {
 	m := sessModel(t, session.Info{Name: "fix~1", Action: "fix", ItemKey: "1"}, session.Info{Name: "fix~2", Action: "fix", ItemKey: "2"})
 	log := paneTmux(t, 0)
 	mgr, err := session.NewManager()
@@ -191,8 +191,8 @@ func TestSessionsScreenInterrupt(t *testing.T) {
 		t.Fatalf("mode %d, confirm %+v; want the interrupt prompt", m.mode, m.confirm)
 	}
 	cmd := press(m, "y")
-	if m.mode != modeSessions {
-		t.Errorf("mode = %d, want back on the sessions screen", m.mode)
+	if m.mode != modeNormal || !m.onSessionsTab() {
+		t.Errorf("mode = %d, on the sessions view %v; want back on the sessions view", m.mode, m.onSessionsTab())
 	}
 	runAll(cmd)
 	if raw, _ := os.ReadFile(log); !strings.Contains(string(raw), "display-message -p -t =fix~2: ") {

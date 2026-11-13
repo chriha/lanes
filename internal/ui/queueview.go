@@ -10,12 +10,36 @@ import (
 	"github.com/chriha/lanes/internal/item"
 )
 
-// queueName is the name of the built-in view that lists the auto queue. It is always the last view, is not
-// configurable and is reached with Q.
+// queueName is the name of the built-in view that lists the auto queue. It follows the configured views, comes
+// before the sessions view, is not configurable and is reached with Q.
 const queueName = config.QueueView
 
 // newQueueView is the built-in view of the auto queue; its items are the queue's entries, see syncQueue.
 func newQueueView() *view { return &view{cfg: config.View{Name: queueName}, queue: true} }
+
+// builtin says whether v is a built-in view (queue or sessions) rather than a configured one.
+func (v *view) builtin() bool { return v.queue || v.sessions }
+
+// viewIndex is the index of the first view is holds for, -1 for none.
+func (m *Model) viewIndex(is func(*view) bool) int {
+	for i, v := range m.views {
+		if is(v) {
+			return i
+		}
+	}
+	return -1
+}
+
+// configured counts the configured views; the built-in ones follow them.
+func (m *Model) configured() int {
+	n := 0
+	for _, v := range m.views {
+		if !v.builtin() {
+			n++
+		}
+	}
+	return n
+}
 
 // onQueue says whether the current view is the queue view.
 func (m *Model) onQueue() bool { return m.cur < len(m.views) && m.views[m.cur].queue }

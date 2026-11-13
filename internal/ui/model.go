@@ -35,7 +35,6 @@ const (
 	modeHelp
 	modeConfirm
 	modeHistory
-	modeSessions
 	modeAgents
 	modeDetail
 )
@@ -136,7 +135,7 @@ type Model struct {
 	hist       []string
 	helpOff    int       // scroll offset of the help and detail screens
 	detail     item.Item // the item the detail screen shows
-	sessCursor int       // cursor of the sessions screen
+	sessCursor int       // cursor of the sessions view
 	lastAttn   string    // session the n key jumped to last
 	// interrupted holds the sessions X interrupted in this run; X on one of them again sends SIGKILL
 	interrupted map[string]bool
@@ -280,7 +279,7 @@ func (m *Model) applyBuilt(cfg *config.Config, provs map[string]provider.Provide
 			delete(m.busy, k)
 		}
 	}
-	prev, prevQueue := "", m.onQueue()
+	prev, prevQueue, prevSessions := "", m.onQueue(), m.onSessionsTab()
 	if m.cur < len(m.views) {
 		prev = m.views[m.cur].cfg.Name
 	}
@@ -316,12 +315,15 @@ func (m *Model) applyBuilt(cfg *config.Config, provs map[string]provider.Provide
 			groups = append(groups, gf)
 		}
 		m.views = append(m.views, &view{cfg: vc, filter: f, err: err, sort: keys, edited: edited, groups: groups})
-		if vc.Name == prev && !prevQueue {
+		if vc.Name == prev && !prevQueue && !prevSessions {
 			m.cur = i
 		}
 	}
-	m.views = append(m.views, newQueueView()) // always last
-	if prevQueue {
+	m.views = append(m.views, newQueueView(), newSessionsView()) // always last: the queue, then the sessions
+	switch {
+	case prevQueue:
+		m.cur = len(m.views) - 2
+	case prevSessions:
 		m.cur = len(m.views) - 1
 	}
 	m.rebuild()
@@ -334,8 +336,8 @@ func (m *Model) rebuild() {
 	m.unread = map[string]bool{}
 	stacks := map[string][]item.StackInfo{} // per provider, over its whole list: a base the view hides still counts
 	for i, v := range m.views {
-		if v.queue {
-			continue // syncQueue fills it
+		if v.builtin() {
+			continue // syncQueue fills the queue view; the sessions view lists m.sessions
 		}
 		v.items, v.heads, v.snoozed, v.members = v.items[:0], nil, 0, nil
 		if v.err != nil {
@@ -907,7 +909,7 @@ func (m *Model) onReloaded(msg reloadedMsg) tea.Cmd {
 	}
 	m.cancelFetches() // their results belong to the old config; refreshAll below fetches at once
 	m.applyBuilt(msg.cfg, msg.providers, msg.buildErr)
-	m.say(lvInfo, fmt.Sprintf("config reloaded: %d views, %d actions", len(m.views)-1, len(msg.cfg.Action)))
+	m.say(lvInfo, fmt.Sprintf("config reloaded: %d views, %d actions", m.configured(), len(msg.cfg.Action)))
 	for k := range msg.cfg.Keymap {
 		if len(k) == 1 && strings.Contains(builtinKeys, k) {
 			m.say(lvWarn, m.notice+fmt.Sprintf(" · key %q is built in and ignored", k))
@@ -931,13 +933,19 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case modeHistory:
 		m.mode = modeNormal
 		return m, nil
-	case modeSessions:
-		return m.keySessions(k)
 	case modeAgents:
 		return m.keyAgents(k)
 	}
 	m.notice = ""
 	s := k.String()
+	if m.onSessionsTab() {
+		if cmd, ok := m.keySessions(s); ok {
+			return m, cmd
+		}
+		if !sessionsPass(s) {
+			return m, nil
+		}
+	}
 	n := len(m.items())
 	if m.pendingG && s == "r" { // gr: the g prefix wins over a keymap binding for r
 		m.pendingG = false
@@ -1038,7 +1046,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.jump(m.items()[m.cursor])
 		}
 	case "Q":
-		m.switchView(len(m.views) - 1)
+		m.switchView(m.viewIndex(func(v *view) bool { return v.queue }))
 	case "x":
 		if m.onQueue() {
 			m.dropQueued()
@@ -1103,7 +1111,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if name, ok := m.cfg.Keymap[s]; ok {
 			return m, m.runAction(name, m.cfg.Action[name])
 		}
-		if len(s) == 1 && s[0] >= '1' && s[0] <= '9' && int(s[0]-'1') < len(m.views)-1 { // not the queue view: Q
+		if len(s) == 1 && s[0] >= '1' && s[0] <= '9' && int(s[0]-'1') < m.configured() { // not Q or S
 			m.switchView(int(s[0] - '1'))
 		}
 	}
@@ -1115,7 +1123,7 @@ func (m *Model) switchView(i int) {
 	if i < 0 || i >= len(m.views) || i == m.cur {
 		return
 	}
-	m.cur, m.cursor, m.offset = i, 0, 0
+	m.cur, m.cursor, m.offset, m.sessCursor = i, 0, 0, 0
 	m.rebuild()
 }
 
@@ -1177,21 +1185,19 @@ func (m *Model) View() string {
 		return m.scrollView(m.detailLines())
 	case modeHistory:
 		return m.historyView()
-	case modeSessions:
-		return m.sessionsView()
 	case modeAgents:
 		if m.agents != nil {
 			return m.agents.fv.View()
-		}
-	case modeConfirm:
-		if m.confirm != nil && m.confirm.back == modeSessions {
-			return m.sessionsView()
 		}
 	}
 	var b strings.Builder
 	b.WriteString(m.header() + "\n")
 	b.WriteString(sRule.Render(strings.Repeat("─", m.width)) + "\n")
-	b.WriteString(m.list())
+	if m.onSessionsTab() {
+		b.WriteString(m.sessionsList())
+	} else {
+		b.WriteString(m.list())
+	}
 	b.WriteString(sRule.Render(strings.Repeat("─", m.width)) + "\n")
 	if m.preview_ {
 		b.WriteString(m.preview())
@@ -1217,7 +1223,7 @@ func (m *Model) attention(items []item.Item) (n int) {
 func (m *Model) header() string {
 	var tabs []string
 	for i, v := range m.views {
-		if (v.cfg.Divider || v.queue) && i > 0 { // the built-in queue tab is always set apart
+		if (v.cfg.Divider || v.builtin()) && i > 0 { // the built-in tabs are always set apart
 			tabs = append(tabs, sDim.Render("¦"))
 		}
 		name := v.cfg.Name
@@ -1225,17 +1231,21 @@ func (m *Model) header() string {
 			name += "*"
 		}
 		label := fmt.Sprintf("%s %d", name, len(v.items))
-		if v.queue {
+		attn := m.attention(v.items)
+		switch {
+		case v.queue:
 			label = name // muted, with a count only when entries wait
 			if len(m.auto.queue) > 0 {
 				label = fmt.Sprintf("%s %d", name, len(m.auto.queue))
 			}
+		case v.sessions:
+			label, attn = fmt.Sprintf("%s %d", name, len(m.sessions)), m.sessionsAttention()
 		}
 		st := sTab
 		if i == m.cur {
 			st = sTabOn
 		}
-		if n := m.attention(v.items); n > 0 {
+		if n := attn; n > 0 {
 			// the count carries its own style; the active tab's background must reach it
 			cs := badgeStyle("warn")
 			if i == m.cur {
@@ -1253,7 +1263,7 @@ func (m *Model) header() string {
 	if gap < 1 {
 		// too narrow for every provider: only the one of the current view
 		right = m.sessionSummary()
-		if !m.onQueue() {
+		if !m.views[m.cur].builtin() {
 			right += m.styledStatus(m.views[m.cur].cfg.Provider, now)
 		}
 		gap = max(m.width-lipgloss.Width(left)-lipgloss.Width(right)-1, 1)
@@ -1531,6 +1541,9 @@ func (m *Model) footer() string {
 		left += sDim.Render(sep + fmt.Sprintf(seg.format, seg.n))
 	}
 	hint := sDim.Render("j/k move · h/l view · space mark · enter jump · x close · p preview · ? help")
+	if m.onSessionsTab() {
+		hint = sDim.Render("j/k move · h/l view · enter jump · A agents · x close · X interrupt · ? help")
+	}
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(hint) - 1
 	if gap < 1 {
 		return left

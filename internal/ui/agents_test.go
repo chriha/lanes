@@ -58,8 +58,8 @@ func working(name string) session.Info {
 func TestAgentKeyOpensTheView(t *testing.T) {
 	tests := []struct {
 		name     string
-		sessions bool     // press A on the sessions screen instead of the list
-		cursor   int      // sessions screen cursor
+		sessions bool     // press A on the sessions view instead of the list
+		cursor   int      // sessions view cursor
 		claude   []string // sessions with a recorded Claude transcript
 		want     string   // session the view opens on, "" for none
 		header   string   // what the header names
@@ -68,8 +68,8 @@ func TestAgentKeyOpensTheView(t *testing.T) {
 		{name: "item: newest Claude session", claude: []string{"fix~1", "review~1"}, want: "fix~1", header: "first"},
 		{name: "item: skips sessions without Claude", claude: []string{"review~1"}, want: "review~1", header: "first"},
 		{name: "item: no Claude session", notice: "no Claude session for this item"},
-		{name: "sessions screen: selected session", sessions: true, cursor: 1, claude: []string{"fix~1", "review~1"}, want: "review~1", header: "review~1"},
-		{name: "sessions screen: no Claude session", sessions: true, claude: []string{"review~1"}, notice: "no Claude session in fix~1"},
+		{name: "sessions view: selected session", sessions: true, cursor: 1, claude: []string{"fix~1", "review~1"}, want: "review~1", header: "review~1"},
+		{name: "sessions view: no Claude session", sessions: true, claude: []string{"review~1"}, notice: "no Claude session in fix~1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -79,10 +79,13 @@ func TestAgentKeyOpensTheView(t *testing.T) {
 			}
 			back := modeNormal
 			if tt.sessions {
-				back = modeSessions
-				m.mode, m.sessCursor = modeSessions, tt.cursor
+				press(m, "S")
+				m.sessCursor = tt.cursor
 			}
 			cmd := press(m, "A")
+			if m.onSessionsTab() != tt.sessions {
+				t.Errorf("on the sessions view = %v, want %v", m.onSessionsTab(), tt.sessions)
+			}
 			if tt.want == "" {
 				if m.agents != nil || m.mode != back || cmd != nil {
 					t.Fatalf("opened a view (mode %v, cmd %v), want none", m.mode, cmd != nil)
@@ -113,18 +116,21 @@ func TestAgentKeyOpensTheView(t *testing.T) {
 }
 
 func TestAgentViewBackKeys(t *testing.T) {
-	for _, back := range []mode{modeNormal, modeSessions} {
+	for _, onSessions := range []bool{false, true} {
 		for _, key := range []string{"esc", "q", "A"} {
 			m := agentModel(t, working("fix~1"))
 			withTranscript(t, "fix~1")
-			m.mode = back
+			if onSessions {
+				press(m, "S")
+			}
 			press(m, "A")
 			if m.mode != modeAgents {
 				t.Fatalf("A did not open the view (mode %v)", m.mode)
 			}
 			press(m, key)
-			if m.mode != back || m.agents != nil {
-				t.Errorf("%s from mode %v: mode %v, view open %v; want back, closed", key, back, m.mode, m.agents != nil)
+			if m.mode != modeNormal || m.agents != nil || m.onSessionsTab() != onSessions {
+				t.Errorf("%s from the sessions view %v: mode %v, view open %v, on the sessions view %v; want back, closed",
+					key, onSessions, m.mode, m.agents != nil, m.onSessionsTab())
 			}
 		}
 	}
@@ -286,7 +292,7 @@ func TestAgentKeyIsListed(t *testing.T) {
 	if help := strings.Join(m.helpLines(), "\n"); !strings.Contains(ansi.Strip(help), "A ") || !strings.Contains(help, "agent view") {
 		t.Error("help does not list A")
 	}
-	m.mode = modeSessions
+	press(m, "S")
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "A agents") {
 		t.Errorf("sessions footer does not hint A:\n%s", v)
 	}

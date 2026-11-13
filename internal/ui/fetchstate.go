@@ -137,7 +137,7 @@ func (m *Model) providerStatuses(now time.Time) []string {
 		add(name)
 	}
 	for _, v := range m.views {
-		if !v.queue {
+		if !v.builtin() {
 			add(v.cfg.Provider)
 		}
 	}

@@ -220,3 +220,37 @@ func TestBackupOnlyWhenFileFailsToDecode(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadNullFileIsUsableEmptyStore(t *testing.T) {
+	tests := []struct{ name, content string }{
+		{"null", "null"},
+		{"null with whitespace", " null\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setup(t)
+			if err := os.MkdirAll(filepath.Dir(file()), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(file(), []byte(tt.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			s := load(t)
+			if s == nil || len(s) != 0 {
+				t.Fatalf("want an empty non-nil store, got %#v", s)
+			}
+			if err := s.Set("!1", "note"); err != nil {
+				t.Fatalf("Set: %v", err)
+			}
+			if got := load(t).Get("!1"); got != "note" {
+				t.Fatalf("want note after reload, got %q", got)
+			}
+			if err := s.Delete("!1"); err != nil {
+				t.Fatalf("Delete: %v", err)
+			}
+			if got := load(t); len(got) != 0 {
+				t.Fatalf("want no notes after delete, got %v", got)
+			}
+		})
+	}
+}

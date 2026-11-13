@@ -86,6 +86,9 @@ func (m *Model) autoView(v *view) tea.Cmd {
 	}
 	var fire []item.Item
 	for _, it := range v.members {
+		if _, snoozed := m.snoozes[it.ID]; snoozed {
+			continue // set aside: not an arrival until its snooze ends, when it counts as one
+		}
 		switch {
 		case !seen[it.ID]:
 			seen[it.ID] = true

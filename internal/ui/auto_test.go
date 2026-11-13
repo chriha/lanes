@@ -16,6 +16,7 @@ import (
 	"github.com/chriha/lanes/internal/item"
 	"github.com/chriha/lanes/internal/provider"
 	"github.com/chriha/lanes/internal/session"
+	"github.com/chriha/lanes/internal/snooze"
 )
 
 // autoStep is one thing that happens to an autoModel; now is the fixed clock the step may move.
@@ -115,6 +116,21 @@ func rowHas(id, text string, want bool) autoStep {
 		}
 		t.Errorf("item %s is not listed", id)
 	}
+}
+
+// snoozeItem snoozes item id until long after the test.
+func snoozeItem(id string) autoStep {
+	return func(_ *testing.T, m *Model, _ *time.Time) {
+		if m.snoozes == nil {
+			m.snoozes = snooze.Store{}
+		}
+		m.snoozes[id] = snooze.Entry{Until: time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)}
+	}
+}
+
+// unsnoozeItem ends the snooze of item id.
+func unsnoozeItem(id string) autoStep {
+	return func(_ *testing.T, m *Model, _ *time.Time) { delete(m.snoozes, id) }
 }
 
 var newSession = regexp.MustCompile(`new-session -d -s (\S+)`)
@@ -222,6 +238,16 @@ func TestOnEnter(t *testing.T) {
 			wantStarts: []string{"review~2"}},
 		{name: "a failed or partial fetch does not count as leaving", repeat: &hour,
 			steps: []autoStep{full("1", "2"), failed(), quick("1"), full("1", "2")}},
+		{name: "a snoozed arrival does not fire, an unsnoozed one still does",
+			steps:      []autoStep{full("1"), snoozeItem("2"), full("1", "2", "3")},
+			wantStarts: []string{"review~3"}},
+		{name: "a snoozed item re-entering after the cooldown does not fire", repeat: &hour,
+			steps: []autoStep{full("1"), full("1", "2"), full("1"), snoozeItem("2"), wait(61 * time.Minute),
+				full("1", "2")},
+			wantStarts: []string{"review~2"}},
+		{name: "an item fires once its snooze is over",
+			steps:      []autoStep{full("1"), snoozeItem("2"), full("1", "2"), unsnoozeItem("2"), full("1", "2")},
+			wantStarts: []string{"review~2"}},
 		{name: "a partial fetch does not fire; the full one does",
 			steps:      []autoStep{full("1"), quick("1", "2"), footerHas("auto-started", false), full("1", "2")},
 			wantStarts: []string{"review~2"}},

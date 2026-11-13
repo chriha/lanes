@@ -249,6 +249,58 @@ func TestManualQueue(t *testing.T) {
 	}
 }
 
+// A manual entry dropped when the queue drains is reported in the footer with its item and the reason; an on_enter
+// entry is dropped silently.
+func TestManualQueueDropNotice(t *testing.T) {
+	setBusy := func(_ *testing.T, m *Model, _ *time.Time) { m.busy[session.Key("1")] = busyState{action: "fix"} }
+	tests := []struct {
+		name       string
+		steps      []autoStep
+		wantNotice string
+	}{
+		{name: "when no longer matches",
+			steps:      []autoStep{full("1:auto-review"), whenLabel, pressKeys("2"), colon("run review"), full("1"), poll()},
+			wantNotice: "dropped queued review on 1: no longer matches when"},
+		{name: "item is busy",
+			steps:      []autoStep{full("1"), pressKeys("2"), colon("run review"), setBusy, poll()},
+			wantNotice: "dropped queued review on 1: busy (fix)"},
+		{name: "item already runs the action",
+			steps: []autoStep{full("1"), pressKeys("2"), colon("run review"),
+				poll(session.Info{Name: "review~1", Action: "review", ItemKey: "1"})},
+			wantNotice: "dropped queued review on 1: already runs review"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, log := queueModel(t)
+			now := clock()
+			for _, step := range tt.steps {
+				step(t, m, &now)
+			}
+			if !strings.Contains(m.notice, tt.wantNotice) || m.level != lvWarn {
+				t.Errorf("notice = %q (level %v), want warning %q", m.notice, m.level, tt.wantNotice)
+			}
+			if len(m.auto.queue) != 0 {
+				t.Errorf("queue = %v, want the entry dropped", m.auto.queue)
+			}
+			if got := started(t, log); len(got) != 0 {
+				t.Errorf("started %v, want nothing", got)
+			}
+		})
+	}
+}
+
+// An on_enter entry whose item left its view is dropped without a notice.
+func TestOnEnterDropSilent(t *testing.T) {
+	m, _ := queueModel(t)
+	now := clock()
+	for _, step := range []autoStep{full("1"), full("1", "2"), full("1"), poll()} {
+		step(t, m, &now)
+	}
+	if strings.Contains(m.notice, "dropped") {
+		t.Errorf("notice = %q, want none about a dropped on_enter entry", m.notice)
+	}
+}
+
 // In the queue view r starts the entry under the cursor, or the marked ones, past max_claude_sessions and removes
 // them from the queue; an entry whose when no longer matches or whose item is busy is reported and dropped.
 func TestQueueRunNow(t *testing.T) {

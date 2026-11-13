@@ -493,11 +493,12 @@ func (m *Model) overLimit(n int) string {
 }
 
 // liveSessions counts the action sessions that are alive in the last poll or starting right now (busy with a
-// session action, which the poll may not show yet). Dead sessions and headless runs do not count.
+// session action, which the poll may not show yet). Dead sessions, Claude sessions that are waiting (finished
+// their turn and idle) and headless runs do not count.
 func (m *Model) liveSessions() int {
 	names := map[string]bool{}
 	for _, s := range m.sessions {
-		if !s.Dead {
+		if !s.Dead && s.Claude != "waiting" {
 			names[s.Name] = true
 		}
 	}

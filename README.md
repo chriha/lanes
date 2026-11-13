@@ -657,9 +657,11 @@ Run "review" on 3 items (!1948, !1957, !1961)?  y/enter yes · n/esc no
 Each item gets its own session; items that already have the action running are skipped.
 
 **Session limit.** `max_claude_sessions` under `[settings]` (default `3`, `0` = no limit) caps how many live
-sessions lanes' actions run before starting more asks first. Every live session lanes started counts, idle,
-waiting or a [shell](#shell-sessions) included, whatever its command; finished (dead) sessions and
-[run actions](#run-actions) do not, and restarting a finished session counts as a new one. When a start (an
+sessions lanes' actions run before starting more asks first. Every live session lanes started counts, a
+[shell](#shell-sessions) included, whatever its command; a Claude session that is `waiting` (finished its turn,
+idle at the prompt), finished (dead) sessions and [run actions](#run-actions) do not. Resuming a waiting session
+makes it `working` and it counts again, so the count can end above the limit; nothing is stopped. Restarting a
+finished session counts as a new one. When a start (an
 action key, `gr` / `:resume`) would take the count above the limit, lanes asks; on a multi-item run this is the
 one prompt it shows (`t` never waits: a shell starts at once, whatever the count):
 
@@ -750,7 +752,7 @@ when = '"auto-review" in labels'   # optional gate: only items with this label a
   into the session, whatever `jump` says, and leave your marks alone.
 - **Session limit.** A start that would go over [`max_claude_sessions`](#running-on-many-items) waits in a queue
   (first in, first out) instead of asking. The row shows `queued <action>` and the footer `queued N`. The queue
-  starts the next entry when a session ends or a fetch lands and there is room again, checking `when` once more;
+  starts the next entry when a session ends or goes `waiting`, or a fetch lands, and there is room again, checking `when` once more;
   an entry whose item left the view is dropped. The queue lives in memory only: on quit it is lost, and the
   items stay handled; run the action by hand.
 - **Queue view.** The last tab, `queue`, lists the queue: one row per entry, oldest first, each the normal item row
@@ -1310,7 +1312,7 @@ preview       = false   # open the preview pane at startup
 no_notify     = false   # disable desktop notifications
 no_update_check = false # never check GitHub for a newer lanes release (see Updates under Install)
 claude_dir    = "~/.claude"   # show this Claude profile's usage in the footer (see Claude Code integration)
-max_claude_sessions = 3 # live action sessions before starting more asks first; 0 = no limit (see Running on many items)
+max_claude_sessions = 3 # live action sessions (waiting Claude ones excluded) before starting more asks first; 0 = no limit (see Running on many items)
 
 [provider.<name>]
 type    = "gitlab"      # or "github", "github-issues", "linear", "auto" (github for a github.com origin, else gitlab), "command"

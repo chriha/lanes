@@ -48,6 +48,14 @@ func others(n int, dead bool) []session.Info {
 	return out
 }
 
+// withClaude gives every session the Claude status.
+func withClaude(status string, infos []session.Info) []session.Info {
+	for i := range infos {
+		infos[i].Claude = status
+	}
+	return infos
+}
+
 // queuedIDs lists the items in the queue, oldest first.
 func queuedIDs(m *Model) []string {
 	var out []string
@@ -93,6 +101,18 @@ func TestSessionLimit(t *testing.T) {
 		{name: "dead sessions are not counted", limit: intp(1), live: others(3, true), wantStarts: 1},
 		{name: "starting session actions are counted", limit: intp(2), live: others(1, false),
 			busy: map[string]string{"z": "review"}, wantQueued: []string{"1"}, wantNotice: "Limit of 2 reached (2 live)"},
+		{name: "waiting Claude sessions are not counted", live: withClaude("waiting", others(3, false)), wantStarts: 1},
+		{name: "working Claude sessions are counted", live: withClaude("working", others(3, false)),
+			wantQueued: []string{"1"}, wantNotice: "Limit of 3 reached (3 live)"},
+		{name: "asking Claude sessions are counted", live: withClaude("asking", others(3, false)),
+			wantQueued: []string{"1"}, wantNotice: "Limit of 3 reached (3 live)"},
+		{name: "waiting sessions are left out of the live count", limit: intp(2),
+			live:       append(others(2, false), withClaude("waiting", []session.Info{{Name: "work~w", ItemKey: "w"}, {Name: "work~v", ItemKey: "v"}})...),
+			wantQueued: []string{"1"}, wantNotice: "Limit of 2 reached (2 live)"},
+		{name: "a waiting session whose item is starting an action is counted", limit: intp(1),
+			live:       withClaude("waiting", []session.Info{{Name: "review~z", Action: "review", ItemKey: "z"}}),
+			busy:       map[string]string{"z": "review"},
+			wantQueued: []string{"1"}, wantNotice: "Limit of 1 reached (1 live)"},
 		{name: "busy headless runs are not counted", limit: intp(2), live: others(1, false),
 			busy: map[string]string{"z": "quick"}, wantStarts: 1},
 		{name: "restarting a dead session counts as new", limit: intp(1),
@@ -152,6 +172,30 @@ func TestSessionLimit(t *testing.T) {
 				t.Errorf("notice = %q, want it to contain %q", m.notice, tt.wantNotice)
 			}
 		})
+	}
+}
+
+// A waiting session stops counting, and counts again once it works; a start then asks or queues as before.
+func TestWaitingSessionCountsAgainWhenWorking(t *testing.T) {
+	m, log := limitModel(t, intp(1), withClaude("waiting", others(1, false)))
+	if got := m.liveSessions(); got != 0 {
+		t.Fatalf("liveSessions with a waiting session = %d, want 0", got)
+	}
+	settle(m, m.runAction("review", m.cfg.Action["review"]))
+	if got := starts(t, log); got != 1 {
+		t.Fatalf("started %d session(s) next to a waiting one, want 1", got)
+	}
+
+	_, cmd := m.Update(sessionsMsg{infos: withClaude("working", others(1, false))})
+	m.polling = true
+	settle(m, cmd)
+	if got := m.liveSessions(); got != 1 {
+		t.Fatalf("liveSessions after the session resumed = %d, want 1", got)
+	}
+	m.marks["2"] = true
+	settle(m, m.runAction("review", m.cfg.Action["review"]))
+	if got := queuedIDs(m); !reflect.DeepEqual(got, []string{"2"}) {
+		t.Errorf("queued %v, want [2] (notice %q)", got, m.notice)
 	}
 }
 

@@ -177,6 +177,13 @@ views — `review`, `mine`, `drafts` — and one `auto` provider named `forge`, 
 `origin` and GitLab otherwise, and detects the repository from that remote.
 Press `?` at any time for the built-in help (scroll with `j`/`k`, close with `q`).
 
+**Scrollbars.** Every scrollable area shows a one-column scrollbar on its right edge while its content overflows: the
+list, queue and sessions views, the help and detail screens, and in the agent view the diagram, the session log and
+the session column. The thumb (`█`) is as tall as the visible part of the content (at least one cell) and moves with
+the scroll position over the track (`░`); nothing is drawn, and the full width stays, while everything fits. The
+list and the screens give up their last column to the bar, only while it shows. The text positions (`1–20 of 80`,
+the log's `12/87`, the diagram's `lines`/`cols`) stay.
+
 Then make it yours: press `:edit` (or edit the file in your editor — changes apply immediately), define the
 filters for the lists you care about and bind keys to the commands you run all the time.
 
@@ -946,6 +953,11 @@ the diagram has no focus). The session log scrolls back with the same keys: it f
 scroll up; then it stays put while new lines come in, its top border shows the newest line shown and the total
 (`12/87`), and `G` (or scrolling back to the bottom) follows the newest line again. The session column scrolls
 when it is taller than the terminal.
+
+Each of the three scrolls with a scrollbar (see above): the diagram's sits in the last column of its viewport, plus
+a horizontal one on its last row when the diagram is wider than the viewport (the viewport is one column or row
+smaller while they show); the log's and the session column's sit inside their border, next to it. The bar of the
+focused area is drawn in the accent.
 
 **Look.** The view has its own neon palette: opus magenta, sonnet cyan, haiku yellow, a violet header, heavy box
 borders with a double one around the lead, and bars that light up over a deep track. Light terminals get a

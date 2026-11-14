@@ -167,9 +167,10 @@ func (m *Model) keyDetail(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // scrollToThread scrolls the thread under the cursor to the top when it is off screen.
 func (m *Model) scrollToThread() {
-	for i, l := range m.detailLines() {
+	lines, _ := m.scrollLines(m.detailLines)
+	for i, l := range lines {
 		if strings.HasPrefix(ansi.Strip(l), "›") {
-			if i < m.helpOff || i >= m.helpOff+max(m.height-1, 3) {
+			if i < m.helpOff || i >= m.helpOff+m.scrollH() {
 				m.helpOff = i
 			}
 			return

@@ -1,24 +1,24 @@
  AGENT VIEW · issue-196                                                                   
 ══════════════════════════════════════════════════════════════════════════════════════════
                                ■ opus   ■ sonnet   ■ haiku                                
-┏━ session ━━━━━━━━━━┓ ═════════════╗   ┏━ processes ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ issue-196   12m03s ┃ ▮▮▯ high     ║   ┃ implementer   180%  1.5G go test ./...         ┃
-┃ ctx ▬▬▬▬▬▬▬▬▬  61% ┃ nter         ║   ┃ implementer    96%  210M compile -o x.a        ┃
-┃ effort ▮▮▮▯ high   ┃ m03s         ║   ┃ lead           35%  420M claude --model opus   ┃
-┃                    ┃ ═════════════╝   ┃ lead            2%   80M node mcp-server.js    ┃
-┃ activity     3/min ┃                  ┃ implementer     0%    3M zsh -c -l eval 'go t… ┃
-┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄    ┃                  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-┃                    ┃                                                                    
-┃ ◆ working          ┃                                                                    
-┃ ┆                  ┃ ━━━┓                                                               
-┃ ◇ asking           ┃    ┃                                                               
-┃ ┆                  ┃ 7% ┃                                                               
-┗━━━━━━━━━━━━━━━━━━━━┛ 0% ┃                                                               
-                                                  diagram  lines 1-13/36  cols 62-128/128 
+┏━ session ━━━━━━━━━━┓ ════════════╗   ┏━ processes ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓█
+┃ issue-196   12m03s█┃ ▮▯ high     ║   ┃ implementer   180%  1.5G go test ./...         ┃█
+┃ ctx ▬▬▬▬▬▬▬▬▬  61%█┃ ter         ║   ┃ implementer    96%  210M compile -o x.a        ┃█
+┃ effort ▮▮▮▯ high  █┃ 03s         ║   ┃ lead           35%  420M claude --model opus   ┃█
+┃                   ░┃ ════════════╝   ┃ lead            2%   80M node mcp-server.js    ┃░
+┃ activity     3/min░┃                 ┃ implementer     0%    3M zsh -c -l eval 'go t… ┃░
+┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄   ░┃                 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛░
+┃                   ░┃                                                                   ░
+┃ ◆ working         ░┃                                                                   ░
+┃ ┆                 ░┃ ━┓                                                                ░
+┃ ◇ asking          ░┃  ┃                                                                ░
+┃ ┆                 ░┃  ┃                                                                ░
+┗━━━━━━━━━━━━━━━━━━━━┛ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██████████████████████████████████ 
+                                                  diagram  lines 1-12/36  cols 63-128/128 
 ┌─ session log ──────────────────────────────────────────────────────────────────── 6/6 ─┐
-│ 14:28:30 code-reviewer spawned validator                                               │
-│ 14:29:30 validator     failed                                                          │
-│ 14:29:40 code-reviewer Bash go test ./internal/...                                     │
-│ 14:29:50 lead          Slice 2 is next: the layered layout                             │
+│ 14:28:30 code-reviewer spawned validator                                              ░│
+│ 14:29:30 validator     failed                                                         █│
+│ 14:29:40 code-reviewer Bash go test ./internal/...                                    █│
+│ 14:29:50 lead          Slice 2 is next: the layered layout                            █│
 └────────────────────────────────────────────────────────────────────────────────────────┘
  opus [1 running]  sonnet [1 running]  haiku [done]  cpu [313%]  agents [2/4]      ● live 

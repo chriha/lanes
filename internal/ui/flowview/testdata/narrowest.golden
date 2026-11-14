@@ -1,15 +1,15 @@
  AGENT VIEW · issue-196                             
 ════════════════════════════════════════════════════
             ■ opus   ■ sonnet   ■ haiku             
-┏━ session ━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-┃ issue-196   12m03s ┃ ┃ tools                   cal
-┃ ctx ▬▬▬▬▬▬▬▬▬  61% ┃ ┃ Read     ■■■■■■■■■■■■■■■■■■
-┗━━━━━━━━━━━━━━━━━━━━┛ ┃ Bash     ■■■■■■■■■■■■■■■■■■
-                diagram  lines 1-4/45  cols 1-29/75 
+┏━ session ━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━█
+┃ issue-196   12m03s█┃ ┃ tools                   ca░
+┃ ctx ▬▬▬▬▬▬▬▬▬  61%░┃ ┃ Read     ■■■■■■■■■■■■■■■■■░
+┗━━━━━━━━━━━━━━━━━━━━┛ ██████████░░░░░░░░░░░░░░░░░░ 
+                diagram  lines 1-3/45  cols 1-28/75 
 ┌─ session log ────────────────────────────── 6/6 ─┐
-│ 14:28:30 code-reviewer spawned validator         │
-│ 14:29:30 validator     failed                    │
-│ 14:29:40 code-reviewer Bash go test ./internal/… │
-│ 14:29:50 lead          Slice 2 is next: the lay… │
+│ 14:28:30 code-reviewer spawned validator        ░│
+│ 14:29:30 validator     failed                   █│
+│ 14:29:40 code-reviewer Bash go test ./internal/…█│
+│ 14:29:50 lead          Slice 2 is next: the lay…█│
 └──────────────────────────────────────────────────┘
  opus [1 running]  sonnet [1 running]        ● live 

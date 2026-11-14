@@ -26,6 +26,8 @@ var (
 	cSelBg = lipgloss.AdaptiveColor{Light: "#CFC4F0", Dark: "#404872"}
 
 	sTitle, sTab, sTabOn, sDim, sText, sID, sMark, sErr, sRule, sKey, sWarn lipgloss.Style
+	// sBarThumb and sBarTrack draw the scrollbars: muted, the thumb stronger than the track.
+	sBarThumb, sBarTrack lipgloss.Style
 )
 
 var base [8]lipgloss.AdaptiveColor
@@ -57,6 +59,8 @@ func buildStyles() {
 	sRule = lipgloss.NewStyle().Foreground(cDim)
 	sKey = lipgloss.NewStyle().Foreground(cAccent).Bold(true)
 	sWarn = lipgloss.NewStyle().Foreground(cWarn).Bold(true)
+	sBarThumb = lipgloss.NewStyle().Foreground(cDim)
+	sBarTrack = lipgloss.NewStyle().Foreground(cSelBg)
 }
 
 // selectStyle marks s as part of the selected row or active tab: with a configured selection color for the current

@@ -128,7 +128,13 @@ an env var).
   focused area has its border / title in the accent and takes the scroll keys, so the others stay put. The session
   log is a closed square box of 4 lines (`time actor message`, the actor in its family color, failed calls in the
   bad color) holding the newest 200 lines: it follows the newest line until scrolled up, then holds its place
-  while lines append and shows `n/total` in its top border; `G` follows again. Boxes are 28–30 cols (widened for long names, never narrower), as many per row as fit, every agent drawn
+  while lines append and shows `n/total` in its top border; `G` follows again. Every scrollable area draws a scrollbar while
+  its content overflows (one shared renderer, `internal/ui/scrollbar`: thumb `█`, track `░`, thumb ∝ visible/total and at
+  least one cell, placed by the offset; muted theme styles, the accent for the focused agent-view area): the list,
+  queue, sessions and the help/detail screens take the last column (content one column narrower only then), the diagram
+  the last column and, when wider than the viewport, the last row of its viewport (it shrinks by them; `Model.viewport`
+  lays the diagram out for what is left), the log and the session column the padding column inside their border. The
+  text positions stay. Boxes are 28–30 cols (widened for long names, never narrower), as many per row as fit, every agent drawn
   (a depth wraps into as many lines as it needs); a viewport narrower than a box scrolls sideways. Every bar row (the ctx row of agent
   boxes, the lead's ctx row in the session column, the tools box's rows) reads `LABEL BAR XX%`: the label left, the % right-aligned
   in 4 cells, and the bar (`▬` for ctx, `■` for tools) stretched over every cell between them, one space on each side. One cell is one

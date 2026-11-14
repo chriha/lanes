@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -156,18 +155,23 @@ func age(d time.Duration) string {
 func (m *Model) sessionsList() string {
 	rows := m.sessionRows()
 	h := m.listHeight()
+	if len(rows) > h { // the scrollbar takes the last column
+		m.width--
+		defer func() { m.width++ }()
+	}
 	var lines []string
 	if len(rows) == 0 {
 		lines = append(lines, "", "  "+sDim.Render("no sessions"))
 	}
 	// ponytail: the window only follows the cursor down; scroll state is not worth a field here
-	for i := max(0, m.sessCursor-h+1); i < len(rows) && len(lines) < h; i++ {
+	off := max(0, m.sessCursor-h+1)
+	for i := off; i < len(rows) && len(lines) < h; i++ {
 		lines = append(lines, m.sessionLine(rows[i], i == m.sessCursor))
 	}
 	for len(lines) < h {
 		lines = append(lines, "")
 	}
-	return strings.Join(lines, "\n") + "\n"
+	return m.withScrollbar(lines, off, len(rows))
 }
 
 // sessionLine renders one row of the sessions view, full width.

@@ -29,7 +29,7 @@ func groupModel(t *testing.T, groups []config.Group, sort string) *Model {
 func listLines(m *Model) []string {
 	var out []string
 	for _, l := range strings.Split(strings.TrimRight(ansi.Strip(m.list()), "\n"), "\n") {
-		l = strings.TrimSpace(l)
+		l = trimBar(l)
 		switch {
 		case l == "":
 		case strings.HasPrefix(l, "──"):

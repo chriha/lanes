@@ -1267,9 +1267,9 @@ func (m *Model) View() string {
 	}
 	switch m.mode {
 	case modeHelp:
-		return m.scrollView(m.helpLines())
+		return m.scrollView(m.helpLines)
 	case modeDetail:
-		return m.scrollView(m.detailLines())
+		return m.scrollView(m.detailLines)
 	case modeHistory:
 		return m.historyView()
 	case modeAgents:
@@ -1399,6 +1399,10 @@ func (m *Model) list() string {
 	items := m.items()
 	v := m.views[m.cur]
 	lines := v.lines()
+	if len(lines) > h { // the scrollbar takes the last column
+		m.width--
+		defer func() { m.width++ }()
+	}
 	// offset counts lines; the cursor's line is the cursor plus the headers above it
 	cl := m.cursor
 	for _, hd := range v.heads {
@@ -1453,7 +1457,7 @@ func (m *Model) list() string {
 	for len(rows) < h {
 		rows = append(rows, "")
 	}
-	return strings.Join(rows, "\n") + "\n"
+	return m.withScrollbar(rows, m.offset, len(lines))
 }
 
 // idColWidth is the width of the ID column for items: the longest ID, within [idMinW, idMaxW].
@@ -1734,12 +1738,26 @@ func (m *Model) helpLines() []string {
 	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 }
 
-// scrollView renders lines as a full screen scrolled by helpOff (the help and detail screens).
-func (m *Model) scrollView(lines []string) string {
-	h := m.height - 1
-	if h < 3 {
-		h = 3
+// scrollH is the height of the scrolling part of the help and detail screens: all but the footer line.
+func (m *Model) scrollH() int { return max(m.height-1, 3) }
+
+// scrollLines are the lines of the help or detail screen, built for the width left of the scrollbar when they
+// overflow the screen (bar reports it) and for the full width when they fit.
+func (m *Model) scrollLines(gen func() []string) (lines []string, bar bool) {
+	lines = gen()
+	if len(lines) <= m.scrollH() {
+		return lines, false
 	}
+	m.width--
+	defer func() { m.width++ }()
+	return gen(), true
+}
+
+// scrollView renders the lines gen builds as a full screen scrolled by helpOff (the help and detail screens), with
+// a scrollbar in the last column while they overflow.
+func (m *Model) scrollView(gen func() []string) string {
+	lines, bar := m.scrollLines(gen)
+	h := m.scrollH()
 	if max := len(lines) - h; m.helpOff > max {
 		m.helpOff = max
 	}
@@ -1755,10 +1773,14 @@ func (m *Model) scrollView(lines []string) string {
 		out = append(out, "")
 	}
 	pos := ""
-	if len(lines) > h {
+	body := strings.Join(out, "\n") + "\n"
+	if bar {
 		pos = fmt.Sprintf("  %d–%d of %d", m.helpOff+1, end, len(lines))
+		m.width--
+		body = m.withScrollbar(out, m.helpOff, len(lines))
+		m.width++
 	}
-	return strings.Join(out, "\n") + "\n" + sDim.Render(" j/k scroll · ctrl-d/u page · g/G top/bottom · q close"+pos)
+	return body + sDim.Render(" j/k scroll · ctrl-d/u page · g/G top/bottom · q close"+pos)
 }
 
 func (m *Model) keyHelp(k tea.KeyMsg) (tea.Model, tea.Cmd) {

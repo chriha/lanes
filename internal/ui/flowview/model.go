@@ -162,19 +162,45 @@ func delta(key string, half int) (dx, dy int, ok bool) {
 // scroll moves the viewport over the diagram for a scroll key. It stops at the diagram's edges; other keys do
 // nothing.
 func (m *Model) scroll(key string) {
-	dx, dy, ok := delta(key, m.layout.View.H/2)
+	v, d, _, _ := m.viewport()
+	dx, dy, ok := delta(key, v.H/2)
 	if !ok {
 		return
 	}
-	d := m.layoutDiagram()
-	x, y := m.clamp(d, m.offX, m.offY)
-	m.offX, m.offY = m.clamp(d, x+dx, y+dy)
+	x, y := clamp(d, v, m.offX, m.offY)
+	m.offX, m.offY = clamp(d, v, x+dx, y+dy)
 }
 
-// clamp keeps an offset within the diagram d: the viewport never runs past its edges.
-func (m Model) clamp(d Diagram, x, y int) (int, int) {
-	v := m.layout.View
+// clamp keeps an offset within the diagram d: the viewport v never runs past its edges.
+func clamp(d Diagram, v Rect, x, y int) (int, int) {
 	return min(max(x, 0), max(d.W-v.W, 0)), min(max(y, 0), max(d.H-v.H, 0))
+}
+
+// viewport is the part of the layout's viewport the diagram shows, with the diagram laid out for it. Its
+// scrollbars take the last column (vbar: the diagram is higher than the viewport) and the last row (hbar: it is
+// wider) while it overflows, so the viewport shrinks by them; the diagram is laid out again for what is left.
+func (m Model) viewport() (v Rect, d Diagram, vbar, hbar bool) {
+	l := m.layout
+	base := l.View
+	agents, procs := m.st.Snap.Agents, len(m.st.Procs) > 0
+	d = l.Diagram(agents, procs)
+	for {
+		vb := vbar || (d.H > l.View.H && base.W >= 2)
+		hb := hbar || (d.W > l.View.W && base.H >= 2)
+		if vb == vbar && hb == hbar {
+			break
+		}
+		vbar, hbar = vb, hb
+		l.View = base
+		if vbar {
+			l.View.W--
+		}
+		if hbar {
+			l.View.H--
+		}
+		d = l.Diagram(agents, procs)
+	}
+	return l.View, d, vbar, hbar
 }
 
 // logRows is how many log lines the log box shows.
@@ -251,12 +277,8 @@ func (m *Model) SetState(st State) {
 // Offset returns the diagram's scroll offset: the column and line of the diagram at the viewport's top left. It
 // is kept across snapshots and resizes and clamped to the diagram as it is now.
 func (m Model) Offset() (x, y int) {
-	return m.clamp(m.layoutDiagram(), m.offX, m.offY)
-}
-
-// layoutDiagram lays out the diagram for the state as it is now.
-func (m Model) layoutDiagram() Diagram {
-	return m.layout.Diagram(m.st.Snap.Agents, len(m.st.Procs) > 0)
+	v, d, _, _ := m.viewport()
+	return clamp(d, v, m.offX, m.offY)
 }
 
 // View draws the frame. The header, legend, session column, log and status line are pinned; the diagram (lead,
@@ -265,7 +287,7 @@ func (m Model) layoutDiagram() Diagram {
 func (m Model) View() string {
 	c, l, s := m.canvas, m.layout, m.frame()
 	c.Clear()
-	d := l.Diagram(s.Snap.Agents, len(s.Procs) > 0)
+	v, d, vbar, hbar := m.viewport()
 	dc := m.diagram
 	dc.Resize(d.W, d.H)
 	s.drawLead(dc, d.Lead)
@@ -275,17 +297,19 @@ func (m Model) View() string {
 	}
 	paths := s.drawTree(dc, d)
 	s.drawPackets(dc, m.packets, d.Nodes, paths)
-	x, y := m.clamp(d, m.offX, m.offY)
-	c.Blit(dc, x, y, l.View)
+	x, y := clamp(d, v, m.offX, m.offY)
+	c.Blit(dc, x, y, v)
+	if thumb := barThumb(m.focus == areaDiagram); vbar {
+		c.VBar(l.View.X+l.View.W-1, v.Y, v.H, y, v.H, d.H, thumb)
+	}
+	if hbar {
+		c.HBar(v.X, l.View.Y+l.View.H-1, v.W, x, v.W, d.W, barThumb(m.focus == areaDiagram))
+	}
 	s.drawHeader(c, l)
 	s.drawSessionFrom(c, l.Session, m.sessionStart(), m.focus == areaSession)
+	l.View = v
 	drawPosition(c, l, d, x, y, m.focus == areaDiagram)
 	s.drawLogFrom(c, l.Log, m.logStart(), m.focus == areaLog)
 	s.drawStatus(c, l)
 	return c.String()
-}
-
-// viewport is the part of the layout's viewport the diagram shows; not implemented yet: all of it, no bars.
-func (m Model) viewport() (v Rect, d Diagram, vbar, hbar bool) {
-	return m.layout.View, m.layoutDiagram(), false, false
 }

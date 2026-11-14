@@ -1,24 +1,24 @@
  AGENT VIEW · issue-196                                                                   
 ══════════════════════════════════════════════════════════════════════════════════════════
                                ■ opus   ■ sonnet   ■ haiku                                
-┏━ session ━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓   ╔═══════════════════════════
-┃ issue-196   12m03s ┃ ┃ tools                   calls 48 ┃   ║    opus 4.1 · lead ▮▮▮▯ hi
-┃ ctx ▬▬▬▬▬▬▬▬▬  61% ┃ ┃ Read     ■■■■■■■■■■■■■■■■■■  42% ┃   ║        Agent implementer  
-┃ effort ▮▮▮▯ high   ┃ ┃ Bash     ■■■■■■■■■■■■■■■■■■  29% ┃   ║         ◓ working 12m03s  
-┃                    ┃ ┃ Agent    ■■■■■■■■■■■■■■■■■■  19% ┃   ╚═══════════════════════════
-┃ activity     3/min ┃ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                     │         
-┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄    ┃                  ┌────────────────────────────────┬──────┘         
-┃                    ┃                  ▼                                ▼                
-┃ ◆ working          ┃   ┏━ implementer ━━━━━━━━━━━━━━┓   ┏━ triager ━━━━━━━━━━━━━━━━━━┓  
-┃ ┆                  ┃   ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃  
-┃ ◇ asking           ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  42% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   7% ┃  
-┃ ┆                  ┃   ┃ 412.3k tok  37 calls 5h 7% ┃   ┃ 23.5k tok   8 calls  5h 0% ┃  
-┗━━━━━━━━━━━━━━━━━━━━┛   ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  
-                                                     diagram  lines 1-13/35  cols 1-67/75 
+┏━ session ━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓   ╔══════════════════════════█
+┃ issue-196   12m03s█┃ ┃ tools                   calls 48 ┃   ║    opus 4.1 · lead ▮▮▮▯ h█
+┃ ctx ▬▬▬▬▬▬▬▬▬  61%█┃ ┃ Read     ■■■■■■■■■■■■■■■■■■  42% ┃   ║        Agent implementer █
+┃ effort ▮▮▮▯ high  █┃ ┃ Bash     ■■■■■■■■■■■■■■■■■■  29% ┃   ║         ◓ working 12m03s █
+┃                   ░┃ ┃ Agent    ■■■■■■■■■■■■■■■■■■  19% ┃   ╚══════════════════════════░
+┃ activity     3/min░┃ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                     │        ░
+┃ ▃▁▁▁▂▁▁▇▁▃▁▅█▆▄   ░┃                 ┌────────────────────────────────┬───────┘        ░
+┃                   ░┃                 ▼                                ▼                ░
+┃ ◆ working         ░┃  ┏━ implementer ━━━━━━━━━━━━━━┓   ┏━ triager ━━━━━━━━━━━━━━━━━━┓  ░
+┃ ┆                 ░┃  ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃  ░
+┃ ◇ asking          ░┃  ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  42% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   7% ┃  ░
+┃ ┆                 ░┃  ┃ 412.3k tok  37 calls 5h 7% ┃   ┃ 23.5k tok   8 calls  5h 0% ┃  ░
+┗━━━━━━━━━━━━━━━━━━━━┛ ██████████████████████████████████████████████████████████░░░░░░░░ 
+                                                     diagram  lines 1-12/35  cols 1-66/75 
 ┌─ session log ──────────────────────────────────────────────────────────────────── 6/6 ─┐
-│ 14:28:30 code-reviewer spawned validator                                               │
-│ 14:29:30 validator     failed                                                          │
-│ 14:29:40 code-reviewer Bash go test ./internal/...                                     │
-│ 14:29:50 lead          Slice 2 is next: the layered layout                             │
+│ 14:28:30 code-reviewer spawned validator                                              ░│
+│ 14:29:30 validator     failed                                                         █│
+│ 14:29:40 code-reviewer Bash go test ./internal/...                                    █│
+│ 14:29:50 lead          Slice 2 is next: the layered layout                            █│
 └────────────────────────────────────────────────────────────────────────────────────────┘
  opus [1 running]  sonnet [1 running]  haiku [done]  agents [2/4]  tools [48]      ● live 

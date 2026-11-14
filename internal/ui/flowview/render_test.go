@@ -610,7 +610,9 @@ func TestSessionColumn(t *testing.T) {
 			tt.st.drawSession(c, Rect{0, 0, 22, tt.h})
 			got := rows(c)
 			for i, w := range tt.want {
-				g := strings.Join(strings.Fields(got[i]), " ")
+				rs := []rune(got[i])
+				rs[len(rs)-2] = ' ' // the scrollbar's column, inside the border
+				g := strings.Join(strings.Fields(string(rs)), " ")
 				if w == "" && strings.Trim(g, "┃ ") != "" || w != "" && !strings.Contains(g, w) {
 					t.Errorf("row %d = %q, want it to hold %q", i, got[i], w)
 				}

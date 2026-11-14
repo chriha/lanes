@@ -137,10 +137,10 @@ func TestDetailKeys(t *testing.T) {
 			if n := len(screen); n != m.height {
 				t.Fatalf("detail screen has %d lines, want %d:\n%s", n, m.height, strings.Join(screen, "\n"))
 			}
-			if tt.wantFirst != "" && strings.TrimSpace(screen[0]) != tt.wantFirst {
+			if tt.wantFirst != "" && trimBar(screen[0]) != tt.wantFirst {
 				t.Errorf("first line = %q, want %q:\n%s", screen[0], tt.wantFirst, strings.Join(screen, "\n"))
 			}
-			if tt.wantLast != "" && strings.TrimSpace(screen[len(screen)-2]) != tt.wantLast {
+			if tt.wantLast != "" && trimBar(screen[len(screen)-2]) != tt.wantLast {
 				t.Errorf("last line = %q, want %q:\n%s", screen[len(screen)-2], tt.wantLast, strings.Join(screen, "\n"))
 			}
 		})

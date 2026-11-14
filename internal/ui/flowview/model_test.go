@@ -113,6 +113,8 @@ func TestViewGolden(t *testing.T) {
 			Start: wide.Now.Add(-time.Minute), Tool: "Read", Ctx: 10 + i,
 		})
 	}
+	fits := fixtureState() // nothing overflows at 130x60: no scrollbar
+	fits.Log = fits.Log[len(fits.Log)-logLines:]
 	tests := []struct {
 		name  string
 		w, h  int
@@ -122,6 +124,7 @@ func TestViewGolden(t *testing.T) {
 		{"full", 90, 46, fixtureState(), false},
 		{"full_ended", 90, 46, ended, false},
 		{"full_wide", 200, 50, wide, false},
+		{"fits", 130, 60, fits, false},
 		{"short", 90, 24, fixtureState(), false},
 		{"narrow", 60, 20, fixtureState(), false},
 		{"narrowest", 52, 15, fixtureState(), false},
@@ -263,15 +266,15 @@ func TestScrollKeys(t *testing.T) {
 		{"k stops at the top", 90, 24, []string{"k"}, 0, 0},
 		{"ctrl+d moves half the viewport down", 90, 24, []string{"ctrl+d"}, 0, 6},
 		{"ctrl+u moves half the viewport up", 90, 24, []string{"ctrl+d", "ctrl+d", "ctrl+u"}, 0, 6},
-		{"G goes to the bottom", 90, 24, []string{"G"}, 0, 62},
-		{"j stops at the bottom", 90, 24, []string{"G", "j"}, 0, 62},
-		{"ctrl+d stops at the bottom", 90, 24, []string{"G", "k", "ctrl+d"}, 0, 62},
+		{"G goes to the bottom", 90, 24, []string{"G"}, 0, 63},
+		{"j stops at the bottom", 90, 24, []string{"G", "j"}, 0, 63},
+		{"ctrl+d stops at the bottom", 90, 24, []string{"G", "k", "ctrl+d"}, 0, 63},
 		{"g goes to the top", 90, 24, []string{"G", "g"}, 0, 0},
 		{"l does nothing when the diagram fits the width", 200, 50, []string{"l"}, 0, 0},
 		{"h does nothing when the diagram fits the width", 200, 50, []string{"h"}, 0, 0},
-		{"l stops at the right end at 90x24", 90, 24, strings.Split(strings.Repeat("l", 30), ""), 8, 0},
+		{"l stops at the right end at 90x24", 90, 24, strings.Split(strings.Repeat("l", 30), ""), 9, 0},
 		{"l moves a column right", 52, 15, []string{"l"}, 1, 0},
-		{"l stops at the right end", 52, 15, strings.Split(strings.Repeat("l", 70), ""), 46, 0},
+		{"l stops at the right end", 52, 15, strings.Split(strings.Repeat("l", 70), ""), 47, 0},
 		{"h moves a column left", 52, 15, []string{"l", "l", "h"}, 1, 0},
 		{"h stops at the left end", 52, 15, []string{"h"}, 0, 0},
 		{"arrows scroll like hjkl", 52, 15, []string{"right", "down", "down", "up"}, 1, 1},
@@ -316,12 +319,12 @@ func TestScrollOffsetSurvivesSnapshots(t *testing.T) {
 		t.Errorf("after a snapshot: offset %d,%d; want 0,3", x, y)
 	}
 	m, _ = m.Update(keyMsg("G"))
-	snap.Agents = snap.Agents[:1] // the diagram shrinks to 91×15: 7 lines past the 8 line viewport
+	snap.Agents = snap.Agents[:1] // the diagram shrinks to 91×15: 8 lines past the 7 line viewport (its bar takes a row)
 	m.Apply(SnapshotEvent{snap})
-	if x, y := m.Offset(); x != 0 || y != 7 {
-		t.Errorf("after the diagram shrank: offset %d,%d; want 0,7, the new bottom", x, y)
+	if x, y := m.Offset(); x != 0 || y != 8 {
+		t.Errorf("after the diagram shrank: offset %d,%d; want 0,8, the new bottom", x, y)
 	}
-	if m, _ = m.Update(keyMsg("k")); func() int { _, y := m.Offset(); return y }() != 6 {
+	if m, _ = m.Update(keyMsg("k")); func() int { _, y := m.Offset(); return y }() != 7 {
 		t.Errorf("k after the shrink did not move up from the new bottom")
 	}
 }
@@ -344,12 +347,15 @@ func TestScrollMovesOnlyTheDiagram(t *testing.T) {
 			l := before.layout
 			dx, _ := after.Offset()
 			a, b := frameRows(before), frameRows(after)
-			v := l.View
+			v, _, _, _ := before.viewport()
+			full := l.View // the viewport with its scrollbars
 			for y := 0; y < h; y++ {
 				for x := 0; x < w; x++ {
 					inView := x >= v.X && x < v.X+v.W && y >= v.Y && y < v.Y+v.H
+					inBars := !inView && x >= full.X && x < full.X+full.W && y >= full.Y && y < full.Y+full.H
 					indicator := y == l.Log.Y-1 && x >= v.X
 					switch {
+					case inBars: // the thumbs move with the offset
 					case inView:
 						// the diagram moved as one block: two lines up and dx columns left
 						if y+2 < v.Y+v.H && x+dx < v.X+v.W && b[y][x] != a[y+2][x+dx] {
@@ -407,9 +413,9 @@ func TestScrollIndicator(t *testing.T) {
 	}{
 		{"nothing to scroll, only the focus", 200, 50, fixtureState().Snap.Agents, nil, "diagram ", []string{"lines ", "cols "}},
 		{"nothing to scroll, not focused: nothing", 200, 50, fixtureState().Snap.Agents, []string{"tab"}, "", []string{"diagram", "lines ", "cols "}},
-		{"lines shown of the diagram's", 90, 24, deep(), []string{"j"}, "diagram  lines 2-14/75  cols 1-67/75", nil},
-		{"columns too on a narrow terminal", 52, 15, deep(), []string{"l"}, "diagram  lines 1-4/125  cols 2-30/75", nil},
-		{"not focused: the position without the name", 90, 24, deep(), []string{"tab"}, "lines 1-13/75  cols 1-67/75", []string{"diagram"}},
+		{"lines shown of the diagram's", 90, 24, deep(), []string{"j"}, "diagram  lines 2-13/75  cols 1-66/75", nil},
+		{"columns too on a narrow terminal", 52, 15, deep(), []string{"l"}, "diagram  lines 1-3/125  cols 2-29/75", nil},
+		{"not focused: the position without the name", 90, 24, deep(), []string{"tab"}, "lines 1-12/75  cols 1-66/75", []string{"diagram"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -442,7 +448,7 @@ func logFrame(m Model) []string {
 	l := m.layout.Log
 	out := []string{string(rows[l.Y])}
 	for y := l.Y + 1; y < l.Y+l.H-1; y++ {
-		out = append(out, strings.TrimSpace(strings.Trim(string(rows[y]), "│")))
+		out = append(out, strings.TrimSpace(strings.TrimRight(strings.Trim(string(rows[y]), "│"), "█░"))) // no bar
 	}
 	return out
 }
@@ -757,7 +763,7 @@ func TestProcessesBox(t *testing.T) {
 					at += k + len(f)
 				}
 			}
-			if rest := box[1+len(tt.want)]; len(tt.want) < 5 && strings.TrimSpace(strings.Trim(rest, "┃ ")) != "" {
+			if rest := box[1+len(tt.want)]; len(tt.want) < 5 && strings.TrimSpace(strings.Trim(rest, "┃ █░")) != "" {
 				t.Errorf("row after the processes is %q, want it empty", rest)
 			}
 		})

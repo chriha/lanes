@@ -200,7 +200,10 @@ func (s State) drawSessionFrom(c *Canvas, r Rect, off int, focused bool) {
 	role, title := panelRoles(focused)
 	c.titled(r, "session", role, title)
 	rows := s.sessionRows(c, r)
-	rows = rows[min(max(off, 0), len(rows)):]
+	n := max(r.H-2, 0)
+	off = min(max(off, 0), len(rows))
+	defer c.VBar(r.X+r.W-2, r.Y+1, n, off, n, len(rows), barThumb(focused)) // over the rows' padding column
+	rows = rows[off:]
 	for i, draw := range rows[:max(min(len(rows), r.H-2), 0)] {
 		if draw != nil {
 			draw(r.Y + 1 + i)
@@ -383,6 +386,7 @@ func (s State) drawLogFrom(c *Canvas, r Rect, start int, focused bool) {
 	n := max(r.H-2, 0)
 	start = min(max(start, 0), len(s.Log))
 	lines := s.Log[start:min(start+n, len(s.Log))]
+	c.VBar(r.X+r.W-2, r.Y+1, n, start, n, len(s.Log), barThumb(focused)) // in the padding column inside the border
 	pos := func(k int) string { return fmt.Sprintf(" %d/%d ", k, len(s.Log)) }
 	if len(s.Log) > n && r.W >= runeLen("session log")+len(pos(len(s.Log)))+8 {
 		p := pos(start + len(lines))

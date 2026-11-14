@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -67,6 +68,7 @@ func sessModel(t *testing.T, infos ...session.Info) *Model {
 		views: []*view{{cfg: config.View{Name: "v"}, items: []item.Item{{ID: "1", Title: "first"}}},
 			newQueueView(), newSessionsView()},
 		data:   map[string][]item.Item{},
+		search: textinput.New(),
 		width:  120,
 		height: 20,
 	}
@@ -268,7 +270,7 @@ func TestSessionsTabJump(t *testing.T) {
 
 // Item keys and configured actions do nothing on the sessions view, even with items marked in another view.
 func TestSessionsTabIgnoresItemKeys(t *testing.T) {
-	for _, key := range []string{"o", "y", "N", "f", "t", "d", "i", "z", "m", "F", "V", " ", "/"} {
+	for _, key := range []string{"o", "y", "N", "f", "t", "d", "i", "z", "m", "F", "V", " "} {
 		t.Run(key, func(t *testing.T) {
 			m := sessModel(t, session.Info{Name: "fix~1", Action: "fix", ItemKey: "1"})
 			m.cfg.Action = map[string]config.Action{"fix": {Run: "echo fix"}}
@@ -330,6 +332,137 @@ func TestSessionsClose(t *testing.T) {
 				t.Errorf("mode = %d, on the sessions view %v; want back on the sessions view", m.mode, m.onSessionsTab())
 			}
 		})
+	}
+}
+
+// space marks sessions by name; x and X act on the marked ones, else on the one under the cursor. Marks survive a
+// refresh and drop when their session ends, is closed or is restarted under the same name.
+func TestSessionsMarks(t *testing.T) {
+	t0 := time.Unix(100, 0)
+	alive := func(n string) session.Info { return session.Info{Name: n, ItemKey: n, Created: t0} }
+	dead := func(n string) session.Info { return session.Info{Name: n, ItemKey: n, Created: t0, Dead: true} }
+	is := func(s ...session.Info) []session.Info { return s }
+	tests := []struct {
+		name   string
+		infos  []session.Info
+		keys   []string         // after S
+		polls  [][]session.Info // the next polls
+		after  []string         // keys after the polls
+		key    string           // x or X
+		prompt string           // the confirmation asked
+	}{
+		{"x without marks closes the cursor row", is(alive("a"), dead("b")), []string{"j"}, nil, nil,
+			"x", "Close 1 session(s)?"},
+		{"x on two marked", is(alive("a"), alive("b"), dead("c")), []string{" ", " "}, nil, nil,
+			"x", "Close 2 session(s) (2 running)?"},
+		{"x on the marked one, not the cursor", is(alive("a"), dead("b"), alive("c")), []string{"j", " "}, nil, nil,
+			"x", "Close 1 session(s)?"},
+		{"space again unmarks", is(dead("a"), alive("b")), []string{" ", "k", " "}, nil, nil,
+			"x", "Close 1 session(s) (1 running)?"},
+		{"esc clears marks", is(alive("a"), alive("b"), dead("c")), []string{" ", " ", "esc"}, nil, nil,
+			"x", "Close 1 session(s)?"},
+		{"marks survive a refresh", is(alive("a"), alive("b"), dead("c")), []string{" ", " "},
+			[][]session.Info{is(alive("new"), alive("a"), alive("b"), dead("c"))}, nil, "x", "Close 2 session(s) (2 running)?"},
+		{"mark of a closed session drops", is(dead("a"), alive("b"), dead("c")), []string{" ", " "},
+			[][]session.Info{is(alive("b"), dead("c")), is(dead("a"), alive("b"), dead("c"))}, nil,
+			"x", "Close 1 session(s) (1 running)?"},
+		{"mark of an ended session drops", is(alive("a"), dead("b"), dead("c")), []string{" ", " "},
+			[][]session.Info{is(dead("a"), dead("b"), dead("c"))}, nil, "x", "Close 1 session(s)?"},
+		{"mark of a restarted session drops", is(dead("a"), alive("b")), []string{" ", " "},
+			[][]session.Info{is(session.Info{Name: "a", ItemKey: "a", Created: t0.Add(time.Minute)}, alive("b"))}, []string{"k"},
+			"x", "Close 1 session(s) (1 running)?"},
+		{"X without marks interrupts the cursor row", is(alive("a"), alive("b")), nil, nil, nil,
+			"X", "Interrupt 1 running session(s)?"},
+		{"X on the marked ones", is(alive("a"), alive("b"), alive("c")), []string{" ", " "}, nil, nil,
+			"X", "Interrupt 2 running session(s)?"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := sessModel(t, tt.infos...)
+			press(m, "S")
+			press(m, tt.keys...)
+			for _, p := range tt.polls {
+				m.onSessions(sessionsMsg{infos: p})
+			}
+			press(m, tt.after...)
+			press(m, tt.key)
+			if m.mode != modeConfirm || m.confirm.prompt != tt.prompt {
+				t.Errorf("mode %d, prompt %q; want %q", m.mode, m.confirm.prompt, tt.prompt)
+			}
+		})
+	}
+}
+
+// Marked sessions show the mark glyph on their row.
+func TestSessionsMarkShows(t *testing.T) {
+	m := sessModel(t, names("a", "b", "c")...)
+	press(m, "S", "j", " ")
+	for i, want := range []bool{false, true, false} {
+		if got := strings.Contains(sessionsRow(m, i), "▌"); got != want {
+			t.Errorf("row %d %q: marked %v, want %v", i, ansi.Strip(sessionsRow(m, i)), got, want)
+		}
+	}
+	if f := ansi.Strip(m.footer()); !strings.Contains(f, "1 marked") {
+		t.Errorf("footer %q lacks the mark count", f)
+	}
+}
+
+// / filters the session rows by label; esc clears the filter; the cursor sticks to its session.
+func TestSessionsSearch(t *testing.T) {
+	visible := func(m *Model) string {
+		var out []string
+		for i := range 4 {
+			if l := strings.TrimSpace(ansi.Strip(sessionsRow(m, i))); l != "" {
+				out = append(out, strings.Fields(l)[0])
+			}
+		}
+		return strings.Join(out, " ")
+	}
+	tests := []struct {
+		name    string
+		keys    []string // after S
+		refresh []string // the next poll, when set
+		rows    string   // the visible rows, by label
+		cursor  string   // the session under the cursor
+	}{
+		{"no filter", nil, nil, "fix-1 rev-1 fix-2", "fix-1"},
+		{"typing filters", []string{"/", "f", "i", "x"}, nil, "fix-1 fix-2", "fix-1"},
+		{"case-insensitive, kept by enter", []string{"/", "R", "E", "enter"}, nil, "rev-1", "rev-1"},
+		{"esc in the search clears, cursor stays", []string{"/", "r", "e", "v", "esc"}, nil, "fix-1 rev-1 fix-2", "rev-1"},
+		{"esc after enter clears, cursor stays", []string{"/", "r", "e", "v", "enter", "esc"}, nil, "fix-1 rev-1 fix-2", "rev-1"},
+		{"no match", []string{"/", "z", "enter"}, nil, "no", ""},
+		{"cursor moves within the filter", []string{"/", "f", "i", "x", "enter", "j"}, nil, "fix-1 fix-2", "fix-2"},
+		{"cursor follows its session while typing", []string{"j", "j", "/", "f"}, nil, "fix-1 fix-2", "fix-2"},
+		{"cursor sticks across a refresh", []string{"/", "f", "i", "x", "enter", "j"},
+			[]string{"fix-3", "fix-1", "rev-1", "fix-2"}, "fix-3 fix-1 fix-2", "fix-2"},
+		{"filter kept across a refresh", []string{"/", "r", "e", "v", "enter"},
+			[]string{"fix-3", "rev-1"}, "rev-1", "rev-1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := sessModel(t, names("fix-1", "rev-1", "fix-2")...)
+			press(m, "S")
+			press(m, tt.keys...)
+			if tt.refresh != nil {
+				m.onSessions(sessionsMsg{infos: names(tt.refresh...)})
+			}
+			if got := visible(m); got != tt.rows {
+				t.Errorf("rows %q, want %q", got, tt.rows)
+			}
+			if got := m.selectedSession(); got != tt.cursor {
+				t.Errorf("cursor on %q, want %q", got, tt.cursor)
+			}
+		})
+	}
+}
+
+// x on a filtered view closes the session under the cursor among the visible rows, and only visible marks count.
+func TestSessionsSearchTargets(t *testing.T) {
+	m := sessModel(t, session.Info{Name: "fix-1", ItemKey: "fix-1"}, session.Info{Name: "rev-1", ItemKey: "rev-1", Dead: true},
+		session.Info{Name: "fix-2", ItemKey: "fix-2"})
+	press(m, "S", " ", "/", "r", "e", "v", "enter", "x")
+	if want := "Close 1 session(s)?"; m.confirm.prompt != want {
+		t.Errorf("prompt %q, want %q", m.confirm.prompt, want)
 	}
 }
 

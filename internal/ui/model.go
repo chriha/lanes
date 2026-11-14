@@ -141,8 +141,11 @@ type Model struct {
 	hist       []string
 	helpOff    int       // scroll offset of the help and detail screens
 	detail     item.Item // the item the detail screen shows
-	sessCursor int       // cursor of the sessions view
+	sessCursor int       // cursor of the sessions view, into its visible rows
 	lastAttn   string    // session the n key jumped to last
+	// sessMarks holds the marked sessions of the sessions view by name, with their creation time so a mark never
+	// moves to a session restarted under the same name
+	sessMarks map[string]time.Time
 	// interrupted holds the sessions X interrupted in this run; X on one of them again sends SIGKILL
 	interrupted map[string]bool
 	agents      *agentView // the open agent view, nil when closed
@@ -200,6 +203,7 @@ func New(cfg *config.Config, opts ...Option) *Model {
 		busy:         map[string]busyState{},
 		refetchAfter: map[string]bool{},
 		marks:        map[string]bool{},
+		sessMarks:    map[string]time.Time{},
 		search:       textinput.New(),
 		cmdline:      textinput.New(),
 		preview_:     cfg.Settings.Preview,
@@ -1215,6 +1219,8 @@ func (m *Model) switchView(i int) {
 }
 
 func (m *Model) keySearch(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	sel := m.selectedSession()
+	var cmd tea.Cmd
 	switch k.String() {
 	case "enter":
 		m.mode = modeNormal
@@ -1223,13 +1229,14 @@ func (m *Model) keySearch(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.mode, m.query = modeNormal, ""
 		m.search.Blur()
-		m.rebuild()
-		return m, nil
+	default:
+		m.search, cmd = m.search.Update(k)
+		m.query = m.search.Value()
 	}
-	var cmd tea.Cmd
-	m.search, cmd = m.search.Update(k)
-	m.query = m.search.Value()
 	m.rebuild()
+	if m.onSessionsTab() { // rebuild keeps the item cursors; the sessions cursor follows its session the same way
+		m.restoreSessCursor(sel)
+	}
 	return m, cmd
 }
 
@@ -1614,7 +1621,9 @@ func (m *Model) footer() string {
 	switch {
 	case m.notice != "":
 		left = m.level.style().Render(" " + strings.SplitN(m.notice, "\n", 2)[0])
-	case len(m.marks) > 0:
+	case m.onSessionsTab() && len(m.sessMarks) > 0:
+		left = sMark.Render(fmt.Sprintf(" %d marked", len(m.sessMarks)))
+	case !m.onSessionsTab() && len(m.marks) > 0:
 		left = sMark.Render(fmt.Sprintf(" %d marked", len(m.marks)))
 	case m.query != "":
 		left = sDim.Render(" filter: ") + sText.Render(m.query)
@@ -1636,7 +1645,7 @@ func (m *Model) footer() string {
 	}
 	hint := sDim.Render("j/k move · h/l view · space mark · enter jump · x close · p preview · ? help")
 	if m.onSessionsTab() {
-		hint = sDim.Render("j/k move · h/l view · enter jump · A agents · x close · X interrupt · ? help")
+		hint = sDim.Render("j/k move · h/l view · space mark · / search · enter jump · A agents · x close · X interrupt · ? help")
 	}
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(hint) - 1
 	if gap < 1 {

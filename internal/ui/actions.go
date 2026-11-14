@@ -107,6 +107,7 @@ func (m *Model) onSessions(msg sessionsMsg) tea.Cmd {
 	}
 	sel := m.selectedSession()
 	m.sessions = msg.infos
+	m.keepSessMarks(prev)
 	m.restoreSessCursor(sel)
 	var chains []tea.Cmd
 	for _, s := range ended {

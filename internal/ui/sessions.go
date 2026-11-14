@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -39,6 +40,7 @@ func sessionRows(infos []session.Info, labelOf func(key string) string, inView m
 	return rows
 }
 
+// sessionRows are the visible rows of the sessions view: every session, filtered by the search query on its label.
 func (m *Model) sessionRows() []sessionRow {
 	inView := map[string]bool{}
 	for _, v := range m.views {
@@ -46,25 +48,73 @@ func (m *Model) sessionRows() []sessionRow {
 			inView[session.Key(it.ID)] = true
 		}
 	}
-	return sessionRows(m.sessions, m.itemLabel, inView)
+	rows := sessionRows(m.sessions, m.itemLabel, inView)
+	q := strings.ToLower(m.query)
+	if q == "" {
+		return rows
+	}
+	var out []sessionRow
+	for _, r := range rows {
+		if strings.Contains(strings.ToLower(r.label), q) {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func (m *Model) selectedSession() string {
-	if m.sessCursor < len(m.sessions) {
-		return m.sessions[m.sessCursor].Name
+	if rows := m.sessionRows(); m.sessCursor < len(rows) {
+		return rows[m.sessCursor].info.Name
 	}
 	return ""
 }
 
-// restoreSessCursor keeps the sessions cursor on the session called name when it survives, else clamps it.
+// restoreSessCursor keeps the sessions cursor on the session called name when it is still visible, else clamps it.
 func (m *Model) restoreSessCursor(name string) {
-	for i, s := range m.sessions {
-		if s.Name == name {
+	rows := m.sessionRows()
+	for i, r := range rows {
+		if r.info.Name == name {
 			m.sessCursor = i
 			return
 		}
 	}
-	m.sessCursor = max(0, min(m.sessCursor, len(m.sessions)-1))
+	m.sessCursor = max(0, min(m.sessCursor, len(rows)-1))
+}
+
+// sessMarked says whether the session is marked on the sessions view.
+func (m *Model) sessMarked(s session.Info) bool {
+	created, ok := m.sessMarks[s.Name]
+	return ok && created.Equal(s.Created)
+}
+
+// sessionTargets are the marked visible sessions, else the one under the cursor (the targets of x and X).
+func (m *Model) sessionTargets() []session.Info {
+	rows := m.sessionRows()
+	var out []session.Info
+	for _, r := range rows {
+		if m.sessMarked(r.info) {
+			out = append(out, r.info)
+		}
+	}
+	if len(out) == 0 && m.sessCursor < len(rows) {
+		out = append(out, rows[m.sessCursor].info)
+	}
+	return out
+}
+
+// keepSessMarks drops the marks of sessions that are gone, were restarted under the same name or ended since the
+// poll before (prev), so a mark never acts on a session the user did not mark.
+func (m *Model) keepSessMarks(prev map[string]session.Info) {
+	now := map[string]session.Info{}
+	for _, s := range m.sessions {
+		now[s.Name] = s
+	}
+	for name, created := range m.sessMarks {
+		s, ok := now[name]
+		if !ok || !s.Created.Equal(created) || s.Dead && !prev[name].Dead {
+			delete(m.sessMarks, name)
+		}
+	}
 }
 
 // openSessions switches to the sessions view (S, :sessions).
@@ -73,11 +123,11 @@ func (m *Model) openSessions() {
 }
 
 // sessionsPass says whether the sessions view leaves key s to the list's handling: quitting, switching views,
-// the command line, help, refresh, the next session asking and the preview. Every other key it does not handle
-// itself does nothing there, so item keys and actions never run from it.
+// the command line, search, help, refresh, the next session asking and the preview. Every other key it does not
+// handle itself does nothing there, so item keys and actions never run from it.
 func sessionsPass(s string) bool {
 	switch s {
-	case "ctrl+c", "q", "l", "tab", "right", "h", "shift+tab", "left", "Q", "S", ":", "?", "R", "ctrl+r", "n", "p":
+	case "ctrl+c", "q", "l", "tab", "right", "h", "shift+tab", "left", "Q", "S", ":", "/", "?", "R", "ctrl+r", "n", "p":
 		return true
 	}
 	return len(s) == 1 && s[0] >= '1' && s[0] <= '9'
@@ -87,6 +137,7 @@ func sessionsPass(s string) bool {
 func (m *Model) keySessions(s string) (tea.Cmd, bool) {
 	g := m.pendingG
 	m.pendingG = false
+	rows := m.sessionRows()
 	var cmd tea.Cmd
 	switch s {
 	case "j", "down":
@@ -104,22 +155,44 @@ func (m *Model) keySessions(s string) (tea.Cmd, bool) {
 			m.pendingG = true
 		}
 	case "G":
-		m.sessCursor = len(m.sessions) - 1
+		m.sessCursor = len(rows) - 1
+	case " ":
+		if m.sessCursor < len(rows) {
+			s := rows[m.sessCursor].info
+			if m.sessMarked(s) {
+				delete(m.sessMarks, s.Name)
+			} else {
+				if m.sessMarks == nil {
+					m.sessMarks = map[string]time.Time{}
+				}
+				m.sessMarks[s.Name] = s.Created
+			}
+			m.sessCursor++
+		}
+	case "esc":
+		sel := m.selectedSession()
+		m.sessMarks = map[string]time.Time{}
+		if m.query != "" {
+			m.query = ""
+			m.search.SetValue("")
+			m.rebuild()
+		}
+		m.restoreSessCursor(sel)
 	case "enter":
 		if name := m.selectedSession(); name != "" && m.sess != nil {
 			cmd = m.jumpTo(name)
 		}
 	case "x":
-		if m.sessCursor < len(m.sessions) {
-			cmd = m.killSessions(m.sessions[m.sessCursor : m.sessCursor+1])
+		if t := m.sessionTargets(); len(t) > 0 {
+			cmd = m.killSessions(t)
 		}
 	case "X":
-		if m.sessCursor < len(m.sessions) {
-			cmd = m.interruptSessions(m.sessions[m.sessCursor : m.sessCursor+1])
+		if t := m.sessionTargets(); len(t) > 0 {
+			cmd = m.interruptSessions(t)
 		}
 	case "A":
-		if m.sessCursor < len(m.sessions) {
-			cmd = m.agentsOfSession(m.sessions[m.sessCursor])
+		if m.sessCursor < len(rows) {
+			cmd = m.agentsOfSession(rows[m.sessCursor].info)
 		}
 	default:
 		return nil, false
@@ -160,7 +233,10 @@ func (m *Model) sessionsList() string {
 		defer func() { m.width++ }()
 	}
 	var lines []string
-	if len(rows) == 0 {
+	switch {
+	case len(rows) == 0 && m.query != "":
+		lines = append(lines, "", "  "+sDim.Render("no sessions match the filter"))
+	case len(rows) == 0:
 		lines = append(lines, "", "  "+sDim.Render("no sessions"))
 	}
 	// ponytail: the window only follows the cursor down; scroll state is not worth a field here
@@ -184,6 +260,9 @@ func (m *Model) sessionLine(r sessionRow, selected bool) string {
 		return s
 	}
 	cur := st(lipgloss.NewStyle()).Render("  ")
+	if m.sessMarked(r.info) {
+		cur = st(sMark).Render("▌") + st(lipgloss.NewStyle()).Render(" ")
+	}
 	sp := st(lipgloss.NewStyle()).Render("  ")
 	badge := r.info.Badge()
 	right := st(badgeStyle(badge.Kind)).Render(badge.Text) + sp + st(sDim).Render(age(time.Since(r.info.Created)))

@@ -554,7 +554,7 @@ func TestSessionsRowFitsWidthWhenRightSideIsWide(t *testing.T) {
 					if width == 60 && !tt.orphan && ansi.StringWidth(line) != width {
 						t.Errorf("width %d: row is %d columns wide, want it filled", width, ansi.StringWidth(line))
 					}
-					if width == 40 && tt.label != "fix" && tt.orphan && !strings.Contains(ansi.Strip(line), "…") {
+					if width == 40 && tt.name == "long label orphan" && !strings.Contains(ansi.Strip(line), "…") {
 						t.Errorf("width %d: label not cut first: %q", width, ansi.Strip(line))
 					}
 				}

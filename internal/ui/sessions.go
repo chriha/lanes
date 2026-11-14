@@ -42,6 +42,9 @@ func sessionRows(infos []session.Info, labelOf func(key string) string, inView m
 func (m *Model) sessionRows() []sessionRow {
 	inView := map[string]bool{}
 	for _, v := range m.views {
+		if v.builtin() {
+			continue // the queue view lists queued items, which no configured view need list
+		}
 		for _, it := range v.items {
 			inView[session.Key(it.ID)] = true
 		}

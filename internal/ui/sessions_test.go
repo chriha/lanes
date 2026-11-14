@@ -53,6 +53,19 @@ func TestSessionRows(t *testing.T) {
 	}
 }
 
+func TestSessionRowsQueueIsNotAView(t *testing.T) {
+	m := sessModel(t, session.Info{Name: "a~1", ItemKey: "1"}, session.Info{Name: "b~7", ItemKey: "7"})
+	// 7 is only queued: the queue view lists it, no configured view does
+	m.views[m.viewIndex(func(v *view) bool { return v.queue })].items = []item.Item{{ID: "7"}}
+	var got []bool
+	for _, r := range m.sessionRows() {
+		got = append(got, r.orphan)
+	}
+	if want := []bool{false, true}; !reflect.DeepEqual(got, want) {
+		t.Errorf("orphan flags = %v, want %v", got, want)
+	}
+}
+
 func sessModel(t *testing.T, infos ...session.Info) *Model {
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", t.TempDir())

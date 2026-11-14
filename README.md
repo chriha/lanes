@@ -380,6 +380,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `y`                 | copy the item's ID to the clipboard (all marked IDs, space-separated, if any are marked) |
 | `Q`                 | switch to the [queue view](#running-on-many-items) (the last tab) |
 | `x`                 | close the item's sessions (asks first); in the queue view: drop the entry from the queue             |
+| `r`                 | in the queue view: start the entry (all marked entries, if any are marked) now, past the [session limit](#running-on-many-items); elsewhere `r` is free for an action key |
 | `X`                 | interrupt the item's running sessions and keep their output (asks first; again: `SIGKILL`) |
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
 | `gr`                | resume the item's newest finished Claude session (see [Resuming a Claude session](#resuming-a-claude-session)) |
@@ -464,7 +465,7 @@ are dimmed too.
 | `⚑ 3`          | three unresolved discussions                                  |
 | `✔ approved`   | has approvals                                                 |
 | `▶ review`     | the `review` action is running in a session                   |
-| `queued review` | an [`on_enter`](#running-on-arrival-on_enter) start of `review` waits for a free session |
+| `queued review` | a start of `review` waits in the [queue](#running-on-many-items) for a free session |
 | `◐ review: working`  | a Claude session is working                             |
 | `? review: asking`   | a Claude session asks a question / needs permission     |
 | `● review: waiting`  | a Claude session finished its turn and waits for you    |
@@ -664,21 +665,31 @@ Run "review" on 3 items (!1948, !1957, !1961)?  y/enter yes · n/esc no
 Each item gets its own session; items that already have the action running are skipped.
 
 **Session limit.** `max_claude_sessions` under `[settings]` (default `3`, `0` = no limit) caps how many live
-sessions lanes' actions run before starting more asks first. Every live session lanes started counts, a
+sessions lanes' actions run at once; starts beyond it wait in a queue. Every live session lanes started counts, a
 [shell](#shell-sessions) included, whatever its command; a Claude session that is `waiting` (finished its turn,
 idle at the prompt), finished (dead) sessions and [run actions](#run-actions) do not. Resuming a waiting session
 makes it `working` and it counts again, so the count can end above the limit; nothing is stopped. Restarting a
-finished session counts as a new one. When a start (an
-action key, `gr` / `:resume`) would take the count above the limit, lanes asks; on a multi-item run this is the
-one prompt it shows (`t` never waits: a shell starts at once, whatever the count):
+finished session counts as a new one.
 
-```text
-Limit of 3 reached (2 live). Run "review" on 3 items (!1948, !1957, !1961) anyway?  y/enter yes · n/esc no
-```
+When a start (an action key, `:run`, `gr` / `:resume`) would take the count above the limit, lanes does not ask:
+the items that fit start, the rest wait in the queue in item order. Their rows show `queued <action>` and the
+footer `queued N`. The multi-item prompt (and `confirm = "single"`) still asks first, as without a limit.
 
-Yes starts the whole batch, no starts nothing. [Chained](#chaining-actions-on_success-on_failure) follow-ups
-start without asking. [`on_enter`](#running-on-arrival-on_enter) starts never ask: over the limit they wait in a
-queue instead. A negative value fails the config load.
+- **Draining.** The queue starts its next entry, first in first out together with
+  [`on_enter`](#running-on-arrival-on_enter) starts, when a session ends or goes `waiting`, or a fetch lands, and
+  there is room again. Queued starts you made by hand drain under `:auto off` too. They start unattended: no jump
+  into the session, your marks left alone, and the footer says `started queued review on !1961`.
+- **Checked again.** Before it starts, a queued action checks its `when` once more; an entry that no longer
+  matches, or whose item is busy or already runs the action, is dropped with a notice. An entry you queued stays
+  when its item leaves the view: lanes starts it on the item as last listed.
+- **Once per item.** An item waits in the queue at most once; starting it again says `already queued` and does
+  nothing.
+- **Queue view.** `Q` opens the [queue view](#running-on-arrival-on_enter): `r` starts the entry under the cursor
+  (or the marked ones) now, past the limit; `x` drops it without starting anything.
+- **Memory only.** The queue is lost on quit; start the action again after a restart.
+
+`t` never waits: a shell starts at once, whatever the count. [Chained](#chaining-actions-on_success-on_failure)
+follow-ups and [run actions](#run-actions) never queue. A negative value fails the config load.
 
 ### Restricting actions (`when`)
 
@@ -762,21 +773,25 @@ when = '"auto-review" in labels'   # optional gate: only items with this label a
   starts the next entry when a session ends or goes `waiting`, or a fetch lands, and there is room again, checking `when` once more;
   an entry whose item left the view is dropped. The queue lives in memory only: on quit it is lost, and the
   items stay handled; run the action by hand.
-- **Queue view.** The last tab, `queue`, lists the queue: one row per entry, oldest first, each the normal item row
-  with `queued <action>`. `Q` jumps to it from anywhere (`1`-`9` address the configured views only). The tab is
-  muted, set apart from the views by a `¦`, and shows a count only while entries wait; it is always there, and an empty queue shows an empty-state line.
-  Navigation, marks, search, `o`, `y`, `enter` and `d` work as in other views; `x` drops the entry under the cursor
-  (or the marked ones) from the queue, without asking and without touching any session. The item stays handled and
-  is not queued again. Action keys and `:run` do nothing there, so nothing starts past the limit. The list follows
-  the queue live. It is built in: not in the config, and `:newview` / `:delview` do not touch it.
+- **Queue view.** The last tab, `queue`, lists the queue: one row per entry, oldest first, `on_enter` starts and
+  [starts you queued by hand](#running-on-many-items) alike, each the normal item row with `queued <action>`.
+  `Q` jumps to it from anywhere (`1`-`9` address the configured views only). The tab is muted, set apart from the views by a `¦`, and shows a count only while entries wait; it is always there, and an empty queue shows an empty-state line.
+  Navigation, marks, search, `o`, `y`, `enter` and `d` work as in other views. `r` starts the entry under the
+  cursor (or the marked ones) now, past the limit, without asking or jumping, and takes it off the queue; an
+  entry whose item is busy, already runs the action or no longer matches its `when` is reported and dropped. In
+  this view `r` wins over an action bound to `r`. `x` drops the entry under the cursor (or the marked ones) from
+  the queue, without asking and without touching any session; a dropped `on_enter` item stays handled and is not
+  queued again. Action keys and `:run` do nothing there. The list follows the queue live. It is built in: not in
+  the config, and `:newview` / `:delview` do not touch it.
 - **Failures are not retried.** An auto-start that fails, or whose command exits non-zero, is recorded in the item
   history like any run; later fetches do not start it again. Run it by hand to retry.
 - **Footer.** Each auto-start is reported, e.g. `auto-started review on !1961` or `auto-started review on 3 items`;
   for run actions and failed starts the usual notice is prefixed with `auto:`.
 - **Only full fetches count.** A fetch that fails or returns a partial list never makes items look as if they left
   or arrived.
-- **Pause.** `:auto off` pauses every view's `on_enter`: nothing starts and the queue stops draining (its entries
-  stay). Items that arrive meanwhile count as seen and do not fire after `:auto on`, which resumes the queue.
+- **Pause.** `:auto off` pauses every view's `on_enter`: nothing starts and its queued entries stay put; starts
+  you queued by hand keep draining. Items that arrive meanwhile count as seen and do not fire after `:auto on`,
+  which resumes the `on_enter` entries.
   `:auto` alone shows the state and the queue length. The switch is not saved: lanes always starts with auto-runs on.
 
 **Re-entry (`on_enter_repeat`).** To handle items that come back to a view (an MR that went back to draft and is
@@ -1324,7 +1339,7 @@ preview       = false   # open the preview pane at startup
 no_notify     = false   # disable desktop notifications
 no_update_check = false # never check GitHub for a newer lanes release (see Updates under Install)
 claude_dir    = "~/.claude"   # show this Claude profile's usage in the footer (see Claude Code integration)
-max_claude_sessions = 3 # live action sessions (waiting Claude ones excluded) before starting more asks first; 0 = no limit (see Running on many items)
+max_claude_sessions = 3 # live action sessions (waiting Claude ones excluded) before more starts queue; 0 = no limit (see Running on many items)
 
 [provider.<name>]
 type    = "gitlab"      # or "github", "github-issues", "linear", "auto" (github for a github.com origin, else gitlab), "command"

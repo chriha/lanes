@@ -200,6 +200,9 @@ func TestHelpWrapsLongRowsWithScrollbar(t *testing.T) {
 	var seen []string
 	for i := 0; i < 20; i++ {
 		s := strings.Split(m.View(), "\n")
+		if b := barOf(s[:len(s)-1]); b[0] == ' ' {
+			t.Fatalf("no scrollbar on the help screen at page %d", i)
+		}
 		for _, l := range s[:len(s)-1] {
 			seen = append(seen, trimBar(ansi.Strip(l)))
 		}

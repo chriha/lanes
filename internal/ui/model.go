@@ -1658,6 +1658,18 @@ func (m *Model) helpRow(key, text string, kw int) string {
 	return b.String()
 }
 
+// dimRow renders a dim label / text help row, wrapping the text under itself when it is longer than the screen.
+func (m *Model) dimRow(label, text string) string {
+	const indent = 18
+	lines := strings.Split(ansi.Wrap(text, max(m.width-indent, 10), ""), "\n")
+	var b strings.Builder
+	b.WriteString(sDim.Render(fmt.Sprintf("  %-*s", indent-2, label)+lines[0]) + "\n")
+	for _, l := range lines[1:] {
+		b.WriteString(sDim.Render(strings.Repeat(" ", indent)+l) + "\n")
+	}
+	return b.String()
+}
+
 func (m *Model) helpLines() []string {
 	rows := [][2]string{
 		{"j / k", "move down / up"},
@@ -1740,13 +1752,13 @@ func (m *Model) helpLines() []string {
 	} {
 		b.WriteString(m.helpRow(c[0], c[1], 26))
 	}
-	b.WriteString("\n" + sDim.Render("  global config   "+config.Path()) + "\n")
+	b.WriteString("\n" + m.dimRow("global config", config.Path()))
 	if pp := config.ProjectPath(); pp != "" {
-		b.WriteString(sDim.Render("  project config  "+pp) + "\n")
+		b.WriteString(m.dimRow("project config", pp))
 	} else {
-		b.WriteString(sDim.Render("  project config  none (create "+config.ProjectFile+" in the project, :edit project)") + "\n")
+		b.WriteString(m.dimRow("project config", "none (create "+config.ProjectFile+" in the project, :edit project)"))
 	}
-	b.WriteString(sDim.Render("  state           "+app.StateDir()+"  (history, views, notes, snoozes, sessions)") + "\n")
+	b.WriteString(m.dimRow("state", app.StateDir()+"  (history, views, notes, snoozes, sessions)"))
 	b.WriteString(m.fieldsHelp())
 	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 }

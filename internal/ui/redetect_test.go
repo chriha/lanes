@@ -3,6 +3,8 @@ package ui
 import (
 	"bytes"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -226,5 +228,44 @@ func TestFocusWhileCapturingWritesNoSecondQuery(t *testing.T) {
 	focus(t, m)
 	if n := strings.Count(out.String(), "\x1b]11;?"); n != 1 {
 		t.Errorf("queries written = %d, want 1 while the first is unanswered", n)
+	}
+}
+
+// overlapWriter is a terminal that notices two writes in flight at once; each write takes a moment, so an
+// unserialised pair is sure to overlap.
+type overlapWriter struct {
+	in      atomic.Int32
+	overlap atomic.Bool
+}
+
+func (w *overlapWriter) Write(p []byte) (int, error) {
+	if w.in.Add(1) > 1 {
+		w.overlap.Store(true)
+	}
+	time.Sleep(20 * time.Millisecond)
+	w.in.Add(-1)
+	return len(p), nil
+}
+
+func TestBackgroundQueryWaitsForFrameWrite(t *testing.T) {
+	m, _ := newBgModel(t, "system", true)
+	term := &overlapWriter{}
+	out := &SyncOut{dst: term}
+	m.syncOut = out
+	m.bgOut = term // the query goes to the same terminal as the frames
+
+	cmd := m.queryBackground()
+	if cmd == nil {
+		t.Fatal("no query written in system mode")
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); _, _ = out.Write([]byte("frame")) }() // the renderer's frame
+	go func() { defer wg.Done(); cmd() }()
+	wg.Wait()
+
+	if term.overlap.Load() {
+		t.Error("the background query was written while a frame write was in progress")
 	}
 }

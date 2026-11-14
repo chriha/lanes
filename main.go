@@ -73,16 +73,17 @@ func main() {
 // runTUI runs the TUI behind its startup trust gate: ready (initApp) and the config load run only once root is trusted.
 func runTUI(root string, ready func() (update.Checker, string)) int {
 	termbg.Settle()
+	out := ui.NewSyncOut(os.Stdout) // frames and the background query share its lock
 	s := ui.NewStartup(root, func() (*ui.Model, error) {
 		updates, upgrade := ready()
 		cfg, err := config.Load()
 		if err != nil {
 			return nil, err
 		}
-		return ui.New(cfg, ui.WithUpdateCheck(updates, upgrade)), nil
+		return ui.New(cfg, ui.WithUpdateCheck(updates, upgrade), ui.WithSyncOut(out)), nil
 	})
 	defer s.Close() // cancels the fetches still running, which stops their provider subprocesses
-	_, err := tea.NewProgram(s, tea.WithAltScreen(), tea.WithReportFocus()).Run()
+	_, err := tea.NewProgram(s, tea.WithOutput(out), tea.WithAltScreen(), tea.WithReportFocus()).Run()
 	if err == nil {
 		err = s.Err()
 	}

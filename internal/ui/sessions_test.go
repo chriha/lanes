@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"regexp"
@@ -541,7 +542,7 @@ func TestSessionsRowFitsWidthWhenRightSideIsWide(t *testing.T) {
 	}
 	for _, width := range []int{40, 60} {
 		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/w%d", tt.name, width), func(t *testing.T) {
 				m := sessModel(t)
 				m.width = width
 				tt.info.Created = time.Now().Add(-time.Hour)
@@ -549,6 +550,12 @@ func TestSessionsRowFitsWidthWhenRightSideIsWide(t *testing.T) {
 					line := m.sessionLine(sessionRow{info: tt.info, label: tt.label, orphan: tt.orphan}, selected)
 					if got := ansi.StringWidth(line); got > width {
 						t.Errorf("width %d selected %v: row is %d columns wide: %q", width, selected, got, ansi.Strip(line))
+					}
+					if width == 60 && !tt.orphan && ansi.StringWidth(line) != width {
+						t.Errorf("width %d: row is %d columns wide, want it filled", width, ansi.StringWidth(line))
+					}
+					if width == 40 && tt.label != "fix" && tt.orphan && !strings.Contains(ansi.Strip(line), "…") {
+						t.Errorf("width %d: label not cut first: %q", width, ansi.Strip(line))
 					}
 				}
 			})

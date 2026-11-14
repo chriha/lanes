@@ -190,9 +190,10 @@ func (m *Model) sessionLine(r sessionRow, selected bool) string {
 	if r.orphan {
 		right += sp + st(sDim).Render("(not in any view)")
 	}
-	labelW := max(10, m.width-lipgloss.Width(right)-3)
+	// the label gives way first; when even the right side alone is too wide, the row is cut to the width
+	labelW := max(0, m.width-lipgloss.Width(right)-3)
 	label := st(sText).Render(fmt.Sprintf("%-*s", labelW, ansi.Truncate(r.label, labelW, "…")))
-	return cur + label + st(lipgloss.NewStyle()).Render(" ") + right
+	return ansi.Truncate(cur+label+st(lipgloss.NewStyle()).Render(" ")+right, m.width, "")
 }
 
 // nextAttention picks the live session to jump to next: asking before waiting, then oldest first,

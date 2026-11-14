@@ -80,6 +80,13 @@ func claudeEnded(s session.Info) bool { return s.Dead || s.Claude == "" }
 // flowTheme renders the agent view's palette: the neon defaults with the [theme.agent_view] overrides.
 func flowTheme() *flowview.Theme { return flowview.NewTheme(cAgent) }
 
+// restyleAgents rebuilds the open agent view's styles from the current palette and background.
+func (m *Model) restyleAgents() {
+	if m.agents != nil {
+		m.agents.fv.SetTheme(flowTheme())
+	}
+}
+
 // agentsOfItem opens the agent view on the item's newest session with a Claude transcript.
 func (m *Model) agentsOfItem(it item.Item) tea.Cmd {
 	for _, s := range m.sessionsOf(it) { // newest first

@@ -65,6 +65,11 @@ func New(theme *Theme) Model {
 	return Model{canvas: NewCanvas(0, 0, theme), diagram: NewCanvas(0, 0, theme), layout: NewLayout(0, 0), id: lastID.Add(1)}
 }
 
+// SetTheme restyles the view with theme (nil renders without styles); the next View uses it.
+func (m *Model) SetTheme(theme *Theme) {
+	m.canvas.theme, m.diagram.theme = theme, theme
+}
+
 // SetSize sets the terminal size the view fills.
 func (m *Model) SetSize(w, h int) {
 	m.canvas.Resize(w, h)

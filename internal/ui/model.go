@@ -263,6 +263,7 @@ func (m *Model) applyConfig(cfg *config.Config) {
 func (m *Model) applyBuilt(cfg *config.Config, provs map[string]provider.Provider, errs map[string]error) {
 	m.cfg = cfg
 	applyTheme(cfg.Theme)
+	m.restyleAgents()
 	m.providers = map[string]provider.Provider{}
 	for name, err := range errs {
 		m.provErr[name] = err
@@ -802,6 +803,7 @@ func (m *Model) keyIn(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.bg = bgCapture{gen: m.bg.gen}
 		if ok {
 			redetected(m.cfg.Theme.Mode, dark)
+			m.restyleAgents()
 		}
 		return m, nil
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chriha/lanes/internal/app"
+	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/item"
 	"github.com/chriha/lanes/internal/session"
 )
@@ -526,5 +527,69 @@ func TestAgentKeyAfterSessionEnded(t *testing.T) {
 	press(m, "A")
 	if m.agents == nil || m.mode != modeAgents || m.agents.name != "fix~1" || !m.agents.ended {
 		t.Fatalf("mode %v, view %+v; want the agent view of fix~1 open and ended (notice %q)", m.mode, m.agents, m.notice)
+	}
+}
+
+// TestOpenAgentViewRestylesOnThemeChange keeps the agent view open across a config reload that recolors it and a
+// terminal background re-detected in system mode: its next render uses the new palette without reopening it.
+func TestOpenAgentViewRestylesOnThemeChange(t *testing.T) {
+	const (
+		neonDark  = "38;2;178;107;255" // default accent on a dark background
+		neonLight = "38;2;105;31;176"  // default accent on a light background, as the renderer rounds it
+		custom    = "38;2;17;34;51"    // #112233
+	)
+	tests := []struct {
+		name   string
+		change func(t *testing.T, m *Model)
+		before string // accent the view starts with
+		after  string // accent it must show after the change
+	}{
+		{
+			name: "config reload sets the accent",
+			change: func(t *testing.T, m *Model) {
+				cfg := &config.Config{Theme: config.Theme{Colors: config.Colors{AgentView: config.AgentView{Accent: "#112233"}}}}
+				m.applyBuilt(cfg, nil, nil)
+			},
+			before: neonDark, after: custom,
+		},
+		{
+			name: "config reload forces the light mode",
+			change: func(t *testing.T, m *Model) {
+				m.applyBuilt(&config.Config{Theme: config.Theme{Mode: "light"}}, nil, nil)
+			},
+			before: neonDark, after: neonLight,
+		},
+		{
+			name: "background re-detected in system mode",
+			change: func(t *testing.T, m *Model) {
+				m.cfg.Theme.Mode = "system"
+				m.bg.active = true
+				for _, k := range reply(lightBody, keyST) {
+					m.Update(k)
+				}
+			},
+			before: neonDark, after: neonLight,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, _ := newBgModel(t, "", true)
+			withTranscript(t, "fix~1")
+			m.openAgents(working("fix~1"), modeNormal, "first")
+			if got := m.agents.fv.View(); !strings.Contains(got, tt.before) {
+				t.Fatalf("view before the change lacks accent %s", tt.before)
+			}
+			tt.change(t, m)
+			if m.agents == nil {
+				t.Fatal("the agent view closed")
+			}
+			got := m.agents.fv.View()
+			if !strings.Contains(got, tt.after) {
+				t.Errorf("view after the change lacks accent %s", tt.after)
+			}
+			if strings.Contains(got, tt.before) {
+				t.Errorf("view after the change still has the old accent %s", tt.before)
+			}
+		})
 	}
 }

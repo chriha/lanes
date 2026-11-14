@@ -284,3 +284,8 @@ func (m Model) View() string {
 	s.drawStatus(c, l)
 	return c.String()
 }
+
+// viewport is the part of the layout's viewport the diagram shows; not implemented yet: all of it, no bars.
+func (m Model) viewport() (v Rect, d Diagram, vbar, hbar bool) {
+	return m.layout.View, m.layoutDiagram(), false, false
+}

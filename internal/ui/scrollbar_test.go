@@ -153,7 +153,7 @@ func TestHelpAndDetailScrollbar(t *testing.T) {
 					t.Errorf("footer lacks the text hint: %q", foot)
 				}
 				// j moves the thumb down, G puts it at the bottom, g back at the top
-				for i := 0; i < 100; i++ {
+				for i := 0; i < 1000; i++ {
 					nav(m, "j")
 				}
 				if got := bar(); []rune(got)[len([]rune(got))-1] != scrollbar.Thumb {
@@ -168,7 +168,9 @@ func TestHelpAndDetailScrollbar(t *testing.T) {
 					t.Errorf("G: bar %q, want the thumb last", got)
 				}
 				nav(m, "g")
-				nav(m, "ctrl+d")
+				for i := 0; i < 5; i++ { // the help wraps long rows, so it takes a few pages to move the thumb a row
+					nav(m, "ctrl+d")
+				}
 				if got := bar(); []rune(got)[0] != scrollbar.Track {
 					t.Errorf("ctrl-d: bar %q, want the thumb moved down", got)
 				}
@@ -187,4 +189,23 @@ func TestHelpAndDetailScrollbar(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestHelpWrapsLongRowsWithScrollbar(t *testing.T) {
+	const qRow = "queue view: starts waiting for a free session (r starts entries now, past the limit; x drops them)"
+	m := newBackoffModel(t)
+	m.width, m.height = 80, 20
+	m.Update(fetchedMsg{name: "p", items: manyItems(3)})
+	m.mode = modeHelp
+	var seen []string
+	for i := 0; i < 20; i++ {
+		s := strings.Split(m.View(), "\n")
+		for _, l := range s[:len(s)-1] {
+			seen = append(seen, trimBar(ansi.Strip(l)))
+		}
+		nav(m, "ctrl+d")
+	}
+	if got := strings.Join(strings.Fields(strings.Join(seen, " ")), " "); !strings.Contains(got, qRow) {
+		t.Errorf("the Q row's full text is not on the barred help screen:\n%s", got)
+	}
 }

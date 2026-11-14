@@ -1645,6 +1645,19 @@ func (m *Model) footer() string {
 	return left + strings.Repeat(" ", gap) + hint
 }
 
+// helpRow renders a help row, the key padded to kw cells, wrapping a text longer than the screen onto continuation
+// lines indented under the text.
+func (m *Model) helpRow(key, text string, kw int) string {
+	indent := 2 + kw
+	lines := strings.Split(ansi.Wrap(text, max(m.width-indent, 10), ""), "\n")
+	var b strings.Builder
+	b.WriteString("  " + sKey.Render(fmt.Sprintf("%-*s", kw, key)) + sText.Render(lines[0]) + "\n")
+	for _, l := range lines[1:] {
+		b.WriteString(strings.Repeat(" ", indent) + sText.Render(l) + "\n")
+	}
+	return b.String()
+}
+
 func (m *Model) helpLines() []string {
 	rows := [][2]string{
 		{"j / k", "move down / up"},
@@ -1680,7 +1693,7 @@ func (m *Model) helpLines() []string {
 	var b strings.Builder
 	b.WriteString(sTitle.Render(" "+app.Name+" — keys") + "\n\n")
 	for _, r := range rows {
-		b.WriteString("  " + sKey.Render(fmt.Sprintf("%-18s", r[0])) + sText.Render(r[1]) + "\n")
+		b.WriteString(m.helpRow(r[0], r[1], 18))
 	}
 	// only the actions whose when matches the cursor item; all of them when the list is empty
 	keys := make([]string, 0, len(m.cfg.Keymap))
@@ -1725,7 +1738,7 @@ func (m *Model) helpLines() []string {
 		{":prune [failed]", "kill every finished session (only failed ones)"},
 		{":refresh  :reload  :edit  :config  :quit", ""},
 	} {
-		b.WriteString("  " + sKey.Render(fmt.Sprintf("%-26s", c[0])) + sText.Render(c[1]) + "\n")
+		b.WriteString(m.helpRow(c[0], c[1], 26))
 	}
 	b.WriteString("\n" + sDim.Render("  global config   "+config.Path()) + "\n")
 	if pp := config.ProjectPath(); pp != "" {

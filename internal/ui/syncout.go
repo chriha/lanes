@@ -2,8 +2,8 @@ package ui
 
 import (
 	"io"
-	"os/exec"
 	"os"
+	"os/exec"
 	"sync"
 )
 

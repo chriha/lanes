@@ -860,8 +860,65 @@ func (m *Model) jump(it item.Item) tea.Cmd {
 	return m.jumpTo(ss[0].Name)
 }
 
-// jumpTo attaches to the session called name; sessions are re-polled on return.
+// jumpChecked carries the tmux version check that runs before attaching to the session called name.
+type jumpChecked struct {
+	name, client, server string
+	mismatch             bool
+	err                  error
+}
+
+// jumpTo attaches to the session called name; sessions are re-polled on return. It first compares the
+// installed tmux with the running lanes server: after a tmux upgrade the old server rejects the attach.
 func (m *Model) jumpTo(name string) tea.Cmd {
+	mgr := m.sess
+	return func() tea.Msg {
+		client, server, mismatch, err := mgr.VersionMismatch()
+		return jumpChecked{name, client, server, mismatch, err}
+	}
+}
+
+// onJumpChecked attaches when the versions match, and on a mismatch asks before restarting the lanes tmux
+// server, naming the sessions the restart closes. A failed check does not stop the attach.
+func (m *Model) onJumpChecked(msg jumpChecked) tea.Cmd {
+	if msg.err != nil {
+		m.say(lvWarn, "tmux version check: "+msg.err.Error())
+	}
+	if !msg.mismatch {
+		return m.attach(msg.name)
+	}
+	server := msg.server
+	if server == "" {
+		server = "another version"
+	}
+	infos := m.sessions
+	names := make([]string, len(infos))
+	for i, s := range infos {
+		names[i] = s.Name
+	}
+	lost := "no sessions"
+	if len(names) > 0 {
+		lost = fmt.Sprintf("%d session(s): %s", len(names), strings.Join(names, ", "))
+	}
+	mgr := m.sess
+	m.ask(fmt.Sprintf("lanes tmux server runs %s, installed tmux is %s: restart it, closing %s?", server, msg.client, lost),
+		func() tea.Cmd {
+			return func() tea.Msg {
+				for _, s := range infos {
+					if !s.Dead {
+						recordEnd(s, "killed", 0)
+					}
+				}
+				if err := mgr.RestartServer(); err != nil {
+					return doneMsg{notice: "restart tmux server: " + err.Error(), level: lvErr}
+				}
+				return doneMsg{notice: fmt.Sprintf("restarted the tmux server, closed %d session(s)", len(infos))}
+			}
+		})
+	return nil
+}
+
+// attach attaches to the session called name; sessions are re-polled on return.
+func (m *Model) attach(name string) tea.Cmd {
 	cmd, popup := m.sess.JumpCmd(name)
 	if popup {
 		return func() tea.Msg {

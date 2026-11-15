@@ -739,6 +739,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.setNote(msg.id, msg.text)
+	case jumpChecked:
+		return m, m.onJumpChecked(msg)
 	case pollNow:
 		if msg.err != nil {
 			m.say(lvErr, "attach: "+msg.err.Error())

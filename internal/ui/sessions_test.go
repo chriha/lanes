@@ -276,7 +276,7 @@ func TestSessionsTabJump(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.sess = mgr
-	runAll(press(m, "S", "j", "enter"))
+	settle(m, press(m, "S", "j", "enter"))
 	raw, _ := os.ReadFile(log)
 	if !strings.Contains(string(raw), "fix~2") || strings.Contains(string(raw), "fix~1") {
 		t.Errorf("tmux calls:\n%s\nwant a jump into fix~2 only", raw)

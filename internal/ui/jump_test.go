@@ -17,9 +17,29 @@ import (
 // TMUX is set so jumps take the popup path, which runs (the fake) tmux instead of suspending the TUI.
 func fakeTmux(t *testing.T) string {
 	t.Helper()
+	return fakeTmuxVersions(t, "3.8", "3.8")
+}
+
+// versionAnswers is the start of a fake tmux script: it answers the client (tmux -V) and server
+// (display-message -p #{version}) version queries without logging them. A server of "mismatch" fails the
+// server query with tmux's protocol error.
+func versionAnswers(client, server string) string {
+	srv := "echo " + shq(server) + "; exit 0"
+	if server == "mismatch" {
+		srv = "echo 'protocol version mismatch (client 9, server 8)' >&2; exit 1"
+	}
+	return "#!/bin/sh\ncase \"$*\" in\n" +
+		"*' -V') echo " + shq("tmux "+client) + "; exit 0;;\n" +
+		"*'display-message -p #{version}') " + srv + ";;\n" +
+		"esac\n"
+}
+
+// fakeTmuxVersions is fakeTmux with the given installed (client) and running server tmux versions.
+func fakeTmuxVersions(t *testing.T, client, server string) string {
+	t.Helper()
 	dir := t.TempDir()
 	log := filepath.Join(dir, "calls")
-	script := "#!/bin/sh\necho \"$*\" >> " + shq(log) + "\n"
+	script := versionAnswers(client, server) + "echo \"$*\" >> " + shq(log) + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +218,7 @@ func TestJumpAttachErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m, _ := busyModel(t)
 			dir := t.TempDir()
-			script := fmt.Sprintf("#!/bin/sh\nexit %d\n", tt.exit)
+			script := versionAnswers("3.8", "3.8") + fmt.Sprintf("exit %d\n", tt.exit)
 			if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -221,6 +241,10 @@ func TestJumpAttachErrors(t *testing.T) {
 			var msg tea.Msg
 			if popup {
 				msg = m.jumpTo("review~1")()
+				for _, ok := msg.(pollNow); !ok; _, ok = msg.(pollNow) { // the version check before the attach
+					_, next := m.Update(msg)
+					msg = next()
+				}
 			} else {
 				msg = attachDone(cmd.Run())
 			}
@@ -230,6 +254,66 @@ func TestJumpAttachErrors(t *testing.T) {
 			}
 			if tt.notice != "" && (!strings.Contains(m.notice, tt.notice) || m.level != lvErr) {
 				t.Errorf("notice = %q (level %v), want an error containing %q", m.notice, m.level, tt.notice)
+			}
+		})
+	}
+}
+
+func TestJumpVersionMismatch(t *testing.T) {
+	const attach = "attach -t '=review~1'"
+	tests := []struct {
+		name    string
+		server  string // version of the running lanes server; client is 3.8
+		keys    []string
+		prompt  []string // substrings of the confirm prompt, nil = no prompt
+		want    string   // tmux call made, empty = none
+		notWant string   // tmux call that must not be made
+	}{
+		{name: "no mismatch attaches as before", server: "3.8", want: attach, notWant: "kill-server"},
+		{name: "mismatch accepted restarts the server", server: "3.5a", keys: []string{"y"},
+			prompt: []string{"3.5a", "3.8", "review~1", "shell~2"}, want: "kill-server", notWant: attach},
+		{name: "mismatch declined changes nothing", server: "3.5a", keys: []string{"n"},
+			prompt: []string{"3.5a", "3.8", "review~1", "shell~2"}, notWant: "kill-server"},
+		{name: "protocol mismatch accepted restarts the server", server: "mismatch", keys: []string{"y"},
+			prompt: []string{"3.8", "review~1"}, want: "kill-server", notWant: attach},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, _ := busyModel(t)
+			log := fakeTmuxVersions(t, "3.8", tt.server)
+			mgr, err := session.NewManager()
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.sess = mgr
+			m.sessions = []session.Info{
+				{Name: "review~1", Action: "review", ItemKey: "1"},
+				{Name: "shell~2", Action: "shell", ItemKey: "2"},
+			}
+			m.sessByItem["1"] = m.sessions[:1]
+			m.sessByItem["2"] = m.sessions[1:]
+			settle(m, m.jump(m.items()[m.cursor]))
+
+			if tt.prompt == nil && m.mode == modeConfirm {
+				t.Fatalf("asked %q, want no prompt", m.confirm.prompt)
+			}
+			if tt.prompt != nil {
+				if m.mode != modeConfirm {
+					t.Fatal("no confirm before restarting the tmux server")
+				}
+				for _, p := range tt.prompt {
+					if !strings.Contains(m.confirm.prompt, p) {
+						t.Errorf("prompt %q does not mention %q", m.confirm.prompt, p)
+					}
+				}
+				settle(m, press(m, tt.keys...))
+			}
+			raw, _ := os.ReadFile(log)
+			if tt.want != "" && !strings.Contains(string(raw), tt.want) {
+				t.Errorf("tmux calls:\n%s\nwant one containing %q", raw, tt.want)
+			}
+			if strings.Contains(string(raw), tt.notWant) {
+				t.Errorf("tmux calls:\n%s\nwant none containing %q", raw, tt.notWant)
 			}
 		})
 	}

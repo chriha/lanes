@@ -27,7 +27,7 @@ func sessionTmux(t *testing.T, state string, failKill bool) string {
 	if failKill {
 		kill = "echo 'kill failed' >&2; exit 1"
 	}
-	script := "#!/bin/sh\n" +
+	script := versionAnswers("3.8", "3.8") +
 		"[ \"$1\" = -L ] && shift 4\n" +
 		"echo \"$*\" >> " + shq(log) + "\n" +
 		"case \"$1\" in\n" +

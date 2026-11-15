@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -176,6 +177,59 @@ func TestJumpMarks(t *testing.T) {
 				if !m.marks[id] {
 					t.Errorf("marks = %v, want %v", m.marks, tt.want)
 				}
+			}
+		})
+	}
+}
+
+func TestJumpAttachErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		exit   int
+		popup  bool
+		notice string // substring, empty = no notice
+	}{
+		{name: "popup attach fails", exit: 1, popup: true, notice: "attach: "},
+		{name: "popup detach is not an error", exit: 0, popup: true},
+		{name: "plain attach fails", exit: 1, notice: "attach: "},
+		{name: "plain detach is not an error", exit: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, _ := busyModel(t)
+			dir := t.TempDir()
+			script := fmt.Sprintf("#!/bin/sh\nexit %d\n", tt.exit)
+			if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			t.Setenv("TMUX", "")
+			if tt.popup {
+				t.Setenv("TMUX", "fake")
+			}
+			mgr, err := session.NewManager()
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.sess = mgr
+			cmd, popup := m.sess.JumpCmd("review~1")
+			if popup != tt.popup {
+				t.Fatalf("popup = %v, want %v", popup, tt.popup)
+			}
+			// the popup path runs the command itself; a plain attach is run by tea.ExecProcess, whose
+			// callback is attachDone, so feed it what running the command returned
+			var msg tea.Msg
+			if popup {
+				msg = m.jumpTo("review~1")()
+			} else {
+				msg = attachDone(cmd.Run())
+			}
+			m.Update(msg)
+			if tt.notice == "" && m.notice != "" {
+				t.Errorf("notice = %q, want none", m.notice)
+			}
+			if tt.notice != "" && (!strings.Contains(m.notice, tt.notice) || m.level != lvErr) {
+				t.Errorf("notice = %q (level %v), want an error containing %q", m.notice, m.level, tt.notice)
 			}
 		})
 	}

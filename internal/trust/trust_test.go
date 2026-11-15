@@ -385,3 +385,37 @@ func TestHashRootCoversAncestors(t *testing.T) {
 		})
 	}
 }
+
+func TestIsAlways(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	if err := TrustAlways("/a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Trust("/p", "h1"); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name, root string
+		want       bool
+	}{
+		{"always root", "/a", true},
+		{"hash root", "/p", false},
+		{"unknown root", "/r", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got, err := IsAlways(tt.root); got != tt.want || err != nil {
+				t.Errorf("IsAlways(%q) = %v, %v; want %v, nil", tt.root, got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsAlwaysCorruptStore(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	mustMkdir(t, filepath.Dir(path()))
+	mustWrite(t, path(), "{not json")
+	if got, err := IsAlways("/a"); got || err == nil {
+		t.Errorf("IsAlways on a corrupt store = %v, %v; want false and an error", got, err)
+	}
+}

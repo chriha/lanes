@@ -17,6 +17,7 @@ import (
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/filter"
 	"github.com/chriha/lanes/internal/provider"
+	"github.com/chriha/lanes/internal/trust"
 	"github.com/chriha/lanes/internal/ui"
 )
 
@@ -30,6 +31,11 @@ type doctorEnv struct {
 	load      func() (*config.Config, error)
 	overrides func() (*config.Overrides, error)
 	dirs      []namedDir
+
+	executable func() (string, error)                       // the running lanes binary, as claude hooks will call it
+	trustRoot  func() (root string, always bool, err error) // the trusted project root and how it is trusted
+	configFile func() (global, project string)              // the config files in use; project is "" without a .lanes.toml
+	checkFile  func(path string) error                      // parses one config file on its own
 }
 
 func realDoctorEnv() doctorEnv {
@@ -45,6 +51,19 @@ func realDoctorEnv() doctorEnv {
 		load:      config.Load,
 		overrides: config.LoadOverrides,
 		dirs:      []namedDir{{"state dir", app.StateDir()}, {"cache dir", app.CacheDir()}},
+
+		executable: os.Executable,
+		trustRoot: func() (string, bool, error) {
+			wd, err := os.Getwd()
+			if err != nil {
+				return "", false, err
+			}
+			root := trust.Root(wd)
+			always, err := trust.IsAlways(root)
+			return root, always, err
+		},
+		configFile: func() (string, string) { return config.Path(), config.ProjectPath() },
+		checkFile:  config.CheckFile,
 	}
 }
 
@@ -72,16 +91,21 @@ func runDoctor(w io.Writer, e doctorEnv) int {
 		line("ok", "tmux", strings.TrimSpace(out))
 	}
 
-	cfg, err := e.load()
+	checkExecutable(e, line)
+	checkTrust(e, line)
+
+	cfg, err := e.load() // first: it writes the default global config on a first run, which checkConfigFiles then finds
+	checkConfigFiles(e, line)
 	if err != nil {
-		line("fail", "config", err.Error())
+		line("fail", "config", err.Error()+" (fix the file named in the message, then run "+app.Name+" doctor again)")
 	} else {
 		line("ok", "config", "loaded")
+		checkClaude(e, cfg, line)
 		checkForgeCLIs(e, cfg, line)
 		checkTokens(e, cfg, line)
 		ov, err := e.overrides()
 		if err != nil {
-			line("fail", "overrides", err.Error())
+			line("fail", "overrides", err.Error()+" (delete that file to reset the view overrides)")
 		}
 		checkViews(cfg, ov, line)
 		names := make([]string, 0, len(cfg.Action))
@@ -92,9 +116,9 @@ func runDoctor(w io.Writer, e doctorEnv) int {
 		for _, n := range names {
 			a := cfg.Action[n]
 			if _, err := ui.ParseTemplate(a.Run); err != nil {
-				line("fail", "action "+n, "run: "+err.Error())
+				line("fail", "action "+n, "run: "+err.Error()+" (fix the template in the action's run)")
 			} else if _, err := ui.ParseCwdTemplate(a.Cwd); err != nil {
-				line("fail", "action "+n, "cwd: "+err.Error())
+				line("fail", "action "+n, "cwd: "+err.Error()+" (fix the template in the action's cwd)")
 			} else {
 				line("ok", "action "+n, "template parses")
 			}
@@ -103,12 +127,76 @@ func runDoctor(w io.Writer, e doctorEnv) int {
 
 	for _, d := range e.dirs {
 		if err := writable(d.path); err != nil {
-			line("fail", d.name, err.Error())
+			line("fail", d.name, err.Error()+" (make "+d.path+" writable, or point XDG_STATE_HOME / XDG_CACHE_HOME elsewhere)")
+		} else if st, err := os.Stat(d.path); err == nil && st.Mode().Perm() != app.DirMode {
+			line("warn", d.name, fmt.Sprintf("%s has mode %04o (chmod 700 %s)", d.path, st.Mode().Perm(), d.path))
 		} else {
 			line("ok", d.name, d.path)
 		}
 	}
 	return code
+}
+
+// checkExecutable checks that the running lanes binary still exists: Claude hooks call it by that path.
+func checkExecutable(e doctorEnv, line func(status, name, msg string)) {
+	const hint = " (reinstall lanes)"
+	exe, err := e.executable()
+	if err != nil {
+		line("fail", "lanes binary", err.Error()+hint)
+		return
+	}
+	st, err := os.Stat(exe)
+	switch {
+	case err != nil:
+		line("fail", "lanes binary", err.Error()+hint)
+	case st.IsDir() || st.Mode().Perm()&0o111 == 0:
+		line("fail", "lanes binary", exe+" is not an executable file"+hint)
+	default:
+		line("ok", "lanes binary", exe)
+	}
+}
+
+// checkTrust names the trusted root; doctor only runs after the trust gate, so this is information.
+func checkTrust(e doctorEnv, line func(status, name, msg string)) {
+	root, always, err := e.trustRoot()
+	switch {
+	case err != nil:
+		line("warn", "trust", err.Error())
+	case always:
+		line("ok", "trust", root+" (always trust)")
+	default:
+		line("ok", "trust", root+" (trusted by hash)")
+	}
+}
+
+// checkConfigFiles parses the global and the project config on their own, so a failure names the file at fault.
+func checkConfigFiles(e doctorEnv, line func(status, name, msg string)) {
+	global, project := e.configFile()
+	for _, p := range []string{global, project} {
+		if p == "" {
+			continue
+		}
+		if err := e.checkFile(p); err != nil {
+			line("fail", "config "+p, err.Error()+" (fix the syntax in that file)")
+		} else {
+			line("ok", "config "+p, "parses")
+		}
+	}
+}
+
+// checkClaude checks the claude CLI, but only when an action passes the hook settings to it.
+func checkClaude(e doctorEnv, cfg *config.Config, line func(status, name, msg string)) {
+	for _, a := range cfg.Action {
+		if !config.UsesField(a.Run, "settings") {
+			continue
+		}
+		if p, err := e.lookPath("claude"); err != nil {
+			line("fail", "claude", "not found in PATH (install Claude Code, see https://claude.com/claude-code)")
+		} else {
+			line("ok", "claude", p)
+		}
+		return
+	}
 }
 
 // checkForgeCLIs checks the CLI (glab, gh) of each forge a provider uses; an auto provider resolves its forge
@@ -195,7 +283,7 @@ func checkViews(cfg *config.Config, ov *config.Overrides, line func(status, name
 	}
 	for _, v := range views {
 		if _, err := filter.Compile(v.Filter); err != nil {
-			line("fail", "view "+v.Name, "filter: "+err.Error())
+			line("fail", "view "+v.Name, "filter: "+err.Error()+" (fix the filter in the config, or run :filter reset in the TUI)")
 		} else {
 			line("ok", "view "+v.Name, "filter compiles")
 		}

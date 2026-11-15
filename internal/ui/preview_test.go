@@ -1,11 +1,16 @@
 package ui
 
 import (
+	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/chriha/lanes/internal/filter"
 	"github.com/chriha/lanes/internal/history"
 	"github.com/chriha/lanes/internal/item"
 	"github.com/chriha/lanes/internal/session"
@@ -245,6 +250,131 @@ func TestPreviewStackFields(t *testing.T) {
 				if got := lines[at+1+i]; got != w {
 					t.Errorf("line %d after target = %q, want %q:\n%s", i+1, got, w, strings.Join(lines, "\n"))
 				}
+			}
+		})
+	}
+}
+
+// sessionsPreview opens the sessions view with its preview on m, feeds it peek and returns the preview's lines.
+func sessionsPreview(t *testing.T, m *Model, peek sessPeekMsg) []string {
+	t.Helper()
+	m.preview_ = true
+	m.openSessions()
+	m.Update(peek)
+	out := m.preview()
+	if n := strings.Count(out, "\n"); n != previewH {
+		t.Fatalf("preview has %d lines, want %d", n, previewH)
+	}
+	return strings.Split(ansi.Strip(out), "\n")
+}
+
+func TestSessionPreview(t *testing.T) {
+	created := time.Now().Add(-5 * time.Minute)
+	tests := []struct {
+		name   string
+		info   session.Info
+		peek   sessPeekMsg
+		want   []string // lines the preview must have, without the leading pad and trailing spaces
+		absent []string // line prefixes it must not have
+	}{
+		{"listed item",
+			session.Info{Name: "fix~1", Action: "fix", ItemKey: "1", Created: created, Claude: "asking"},
+			sessPeekMsg{name: "fix~1", dir: "/work/one", out: []string{"compiling", "done"}},
+			[]string{
+				"session     fix~1",
+				"action      fix",
+				"state       ? fix: asking  since " + created.Format("15:04") + " · 5m",
+				"dir         /work/one",
+				"item        1 first",
+				"url         https://example.com/1",
+				"output      compiling",
+				"            done",
+			}, nil},
+		{"orphan session",
+			session.Info{Name: "fix~9", Action: "fix", ItemKey: "9", Created: created, Dead: true, Exit: 2},
+			sessPeekMsg{name: "fix~9", dir: "/work/nine", out: []string{"boom"}},
+			[]string{
+				"session     fix~9",
+				"state       ✗ fix (2)  since " + created.Format("15:04") + " · 5m",
+				"dir         /work/nine",
+				"item        9  (not in any view)",
+				"output      boom",
+			}, []string{"url"}},
+		{"peek of another session not shown",
+			session.Info{Name: "fix~1", Action: "fix", ItemKey: "1", Created: created},
+			sessPeekMsg{name: "review~1", dir: "/elsewhere", out: []string{"other"}},
+			[]string{"session     fix~1"}, []string{"dir", "output"}},
+		{"failed peek shows no directory or output",
+			session.Info{Name: "fix~1", Action: "fix", ItemKey: "1", Created: created},
+			sessPeekMsg{name: "fix~1", dir: "/work/one", out: []string{"x"}, err: errors.New("gone")},
+			[]string{"session     fix~1", "item        1 first"}, []string{"dir", "output"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := sessModel(t, tt.info)
+			m.data["p"] = []item.Item{{ID: "1", Title: "first", URL: "https://example.com/1"}}
+			f, err := filter.Compile("true")
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.views[0].cfg.Provider, m.views[0].filter = "p", f
+			lines := sessionsPreview(t, m, tt.peek)
+			for i := range lines {
+				lines[i] = strings.TrimRight(strings.TrimPrefix(lines[i], " "), " ")
+			}
+			for _, w := range tt.want {
+				if !slices.Contains(lines, w) {
+					t.Errorf("preview lacks %q:\n%s", w, strings.Join(lines, "\n"))
+				}
+			}
+			for _, a := range tt.absent {
+				for _, l := range lines {
+					if strings.HasPrefix(l, a) {
+						t.Errorf("preview has %q:\n%s", l, strings.Join(lines, "\n"))
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestSessionPreviewKeepsLastOutputLines(t *testing.T) {
+	m := sessModel(t, session.Info{Name: "fix~9", Action: "fix", ItemKey: "9", Created: time.Now()})
+	var out []string
+	for i := 1; i <= 20; i++ {
+		out = append(out, fmt.Sprintf("line %d", i))
+	}
+	lines := sessionsPreview(t, m, sessPeekMsg{name: "fix~9", dir: "/w", out: out})
+	if got := strings.TrimSpace(lines[previewH-1]); got != "line 20" {
+		t.Errorf("last preview line = %q, want the newest output line:\n%s", got, strings.Join(lines, "\n"))
+	}
+}
+
+func TestPollPeek(t *testing.T) {
+	tests := []struct {
+		name     string
+		preview  bool
+		onTab    bool
+		sessions []session.Info
+		peeking  bool
+		want     bool
+	}{
+		{"preview on the sessions tab", true, true, names("fix~1"), false, true},
+		{"preview off", false, true, names("fix~1"), false, false},
+		{"other tab", true, false, names("fix~1"), false, false},
+		{"no session", true, true, nil, false, false},
+		{"one in flight", true, true, names("fix~1"), true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := sessModel(t, tt.sessions...)
+			m.preview_ = tt.preview
+			if tt.onTab {
+				m.openSessions()
+			}
+			m.peeking = tt.peeking
+			if got := m.pollPeek() != nil; got != tt.want {
+				t.Errorf("pollPeek() != nil = %v, want %v", got, tt.want)
 			}
 		})
 	}

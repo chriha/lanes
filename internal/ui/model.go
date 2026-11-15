@@ -675,7 +675,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.wake(time.Time(msg), nil) {
 			m.rebuild()
 		}
-		return m, tea.Batch(tick(), m.onTick(), m.pollSessions(), m.pollUsage(), m.pollUsage5h())
+		return m, tea.Batch(tick(), m.onTick(), m.pollSessions(), m.pollPeek(), m.pollUsage(), m.pollUsage5h())
 	case usageMsg:
 		m.usage = msg
 	case usage5hMsg:
@@ -683,6 +683,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.syncUsage5h()
 	case updateMsg:
 		m.onUpdate(msg)
+	case sessPeekMsg:
+		m.onPeek(msg)
 	case sessionsMsg:
 		chains := m.onSessions(msg)
 		if msg.err == nil {

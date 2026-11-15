@@ -828,3 +828,49 @@ func TestUsage5h(t *testing.T) {
 		})
 	}
 }
+
+func TestPeek(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		pathErr error
+		pane    string
+		paneErr error
+		n       int
+		wantDir string
+		wantOut []string
+		wantErr bool
+	}{
+		{"last lines, trailing blanks dropped", "/work/x\n", nil, "a\nb\n\nc\n\n\n", nil, 2, "/work/x", []string{"", "c"}, false},
+		{"fewer lines than asked", "/w\n", nil, "only\n", nil, 5, "/w", []string{"only"}, false},
+		{"empty pane", "/w\n", nil, "\n\n", nil, 3, "/w", nil, false},
+		{"gone session", "can't find session\n", errors.New("exit status 1"), "", nil, 3, "", nil, true},
+		{"capture fails", "/w\n", nil, "no pane\n", errors.New("exit status 1"), 3, "", nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var calls [][]string
+			m := fakeRun(&calls, func(args []string) ([]byte, error) {
+				if args[0] == "capture-pane" {
+					return []byte(tt.pane), tt.paneErr
+				}
+				return []byte(tt.path), tt.pathErr
+			})
+			dir, out, err := m.Peek("fix~1", tt.n)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, want error %v", err, tt.wantErr)
+			}
+			if dir != tt.wantDir || !slices.Equal(out, tt.wantOut) {
+				t.Errorf("got %q %q, want %q %q", dir, out, tt.wantDir, tt.wantOut)
+			}
+			for _, c := range calls {
+				if !slices.Contains(c, "=fix~1:") {
+					t.Errorf("call %q does not target the session exactly", c)
+				}
+			}
+			if !tt.wantErr && (len(calls) != 2 || calls[0][0] != "display-message" || calls[1][0] != "capture-pane") {
+				t.Errorf("calls = %q, want display-message then capture-pane", calls)
+			}
+		})
+	}
+}

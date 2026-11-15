@@ -913,14 +913,22 @@ func (m *Model) historyView() string {
 }
 
 func (m *Model) itemLabel(key string) string {
+	if it, ok := m.itemOf(key); ok {
+		return it.ID + " " + it.Title
+	}
+	return key
+}
+
+// itemOf is the item a provider lists whose session key is key.
+func (m *Model) itemOf(key string) (item.Item, bool) {
 	for _, items := range m.data {
 		for _, it := range items {
 			if session.Key(it.ID) == key {
-				return it.ID + " " + it.Title
+				return it, true
 			}
 		}
 	}
-	return key
+	return item.Item{}, false
 }
 
 func (m *Model) maybeNotify(prev, cur session.Info) {

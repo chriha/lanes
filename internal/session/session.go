@@ -225,7 +225,21 @@ func (m *Manager) Interrupt(name string, force bool) (signalled bool, err error)
 
 // Peek returns the session's working directory and the last n lines of its pane, trailing blank lines left out.
 func (m *Manager) Peek(name string, n int) (dir string, out []string, err error) {
-	return "", nil, nil // stub
+	target := "=" + name + ":"
+	b, err := m.run("display-message", "-p", "-t", target, "#{pane_current_path}")
+	if err != nil {
+		return "", nil, fmt.Errorf("tmux: %s", strings.TrimSpace(string(b)))
+	}
+	dir = strings.TrimSpace(string(b))
+	b, err = m.run("capture-pane", "-p", "-t", target)
+	if err != nil {
+		return "", nil, fmt.Errorf("tmux: %s", strings.TrimSpace(string(b)))
+	}
+	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return dir, lines[max(0, len(lines)-n):], nil
 }
 
 // Prune kills the dead sessions of a fresh listing (with failedOnly, only those with a non-zero exit) and

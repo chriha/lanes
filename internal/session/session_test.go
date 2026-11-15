@@ -977,3 +977,88 @@ func TestPeek(t *testing.T) {
 		})
 	}
 }
+
+// Launch starts a session; a duplicate-session error from tmux (a stale listing in the caller) is settled by a
+// fresh listing: a dead session is killed and the start retried once, a live one is left alone (ErrRunning).
+func TestLaunch(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing string // "" none, "dead" or "alive": the session tmux has before the launch
+		restart  bool   // the caller saw the session dead
+		failKill bool   // kill-session fails
+		listErr  bool   // list-panes fails
+		wantErr  error  // errors.Is target; nil = success
+		wantMsg  []string
+		want     []string // tmux commands, in order
+	}{
+		{name: "no session starts", want: []string{"new-session"}},
+		{name: "seen dead: kill then start", existing: "dead", restart: true,
+			want: []string{"kill-session", "new-session"}},
+		{name: "stale listing, dead: kill and retry once", existing: "dead",
+			want: []string{"new-session", "list-panes", "kill-session", "new-session"}},
+		{name: "stale listing, alive: left running", existing: "alive", wantErr: ErrRunning,
+			want: []string{"new-session", "list-panes"}},
+		{name: "kill fails: start error carries the kill error", existing: "dead", restart: true, failKill: true,
+			wantMsg: []string{"tmux: duplicate session: fix~1", "tmux: can't kill fix~1"},
+			want:    []string{"kill-session", "new-session", "list-panes", "kill-session", "new-session"}},
+		{name: "not listed: no kill, the start error stands", existing: "alive", listErr: true,
+			wantMsg: []string{"tmux: duplicate session: fix~1"},
+			want:    []string{"new-session", "list-panes"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateEnv(t)
+			state := tt.existing
+			var calls [][]string
+			m := fakeRun(&calls, func(args []string) ([]byte, error) {
+				switch args[0] {
+				case "new-session":
+					if state != "" {
+						return []byte("duplicate session: fix~1\n"), errors.New("exit status 1")
+					}
+					state = "alive"
+				case "kill-session":
+					if tt.failKill {
+						return []byte("can't kill fix~1\n"), errors.New("exit status 1")
+					}
+					state = ""
+				case "list-panes":
+					if tt.listErr {
+						return []byte("lost server"), errors.New("exit status 1")
+					}
+					if state == "" {
+						return nil, nil
+					}
+					dead := map[string]string{"dead": "1", "alive": "0"}[state]
+					return []byte("fix~1\t" + dead + "\t0\t1\tclaude\t0\n"), nil
+				}
+				return nil, nil
+			})
+			err := m.Launch("fix~1", "", "x", tt.restart)
+			switch {
+			case tt.wantErr != nil:
+				if !errors.Is(err, tt.wantErr) {
+					t.Errorf("err = %v, want %v", err, tt.wantErr)
+				}
+			case tt.wantMsg != nil:
+				if err == nil {
+					t.Fatal("err = nil, want an error")
+				}
+				for _, w := range tt.wantMsg {
+					if !strings.Contains(err.Error(), w) {
+						t.Errorf("err = %q, want it to contain %q", err, w)
+					}
+				}
+			case err != nil:
+				t.Errorf("err = %v, want nil", err)
+			}
+			var got []string
+			for _, c := range calls {
+				got = append(got, c[0])
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("tmux calls = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

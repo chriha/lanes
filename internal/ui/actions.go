@@ -619,7 +619,8 @@ func withNote(s, note string) string {
 	return s + ", " + note
 }
 
-// execute starts the jobs' sessions; with attach set, the doneMsg asks to attach to it once all started.
+// execute starts the jobs' sessions; with attach set, the doneMsg asks to attach to it once all started. A job
+// whose session turns out to be alive is left running and counts as already running.
 func (m *Model) execute(action string, jobs []job, skipped, busy int, skippedWhen, attach string) tea.Cmd {
 	m.marks = map[string]bool{}
 	mgr := m.sess
@@ -628,7 +629,12 @@ func (m *Model) execute(action string, jobs []job, skipped, busy int, skippedWhe
 		var errs []string
 		started := 0
 		for _, j := range jobs {
-			if err := mgr.Launch(j.name, j.cwd, j.cmd, j.restart); err != nil {
+			err := mgr.Launch(j.name, j.cwd, j.cmd, j.restart)
+			if errors.Is(err, session.ErrRunning) { // the listing missed the live session: leave it, attach still jumps to it
+				skipped++
+				continue
+			}
+			if err != nil {
 				errs = append(errs, err.Error())
 				continue
 			}
@@ -636,7 +642,9 @@ func (m *Model) execute(action string, jobs []job, skipped, busy int, skippedWhe
 			history.Append(history.Event{Item: j.itemKey, Action: action, Event: "started"})
 		}
 		note := fmt.Sprintf("started %s on %d item(s)", action, started)
-		if skipped > 0 {
+		if started == 0 && len(errs) == 0 {
+			note = action + " already running"
+		} else if skipped > 0 {
 			note += fmt.Sprintf(", %d already running", skipped)
 		}
 		if busy > 0 {

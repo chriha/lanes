@@ -40,7 +40,9 @@ skipped (`!12 busy (review)`). In a multi-item run the other items still run and
 lock ends once the session has started, so a long-running session does not block other actions on the item.
 
 If an action is already running for an item it is not started again (you are told so). If its previous session
-has ended, it is replaced by a fresh one.
+has ended, it is replaced by a fresh one. lanes checks again when tmux reports the session as existing although
+its last look at the sessions did not show it: a finished session is still restarted, a running one is left alone
+(and jumped to, see `jump`).
 
 With `jump = true`, running the action on a single item also takes you into its session, exactly like `enter`:
 lanes attaches once tmux has started it, or attaches to the running one instead of saying it is already running

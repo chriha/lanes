@@ -162,7 +162,11 @@ func (m *Manager) Start(name, cwd, command string) error {
 	}
 	args = append(args, "--", shell, "-ic", script)
 	if out, err := m.run(args...); err != nil {
-		return fmt.Errorf("tmux: %s", strings.TrimSpace(string(out)))
+		msg := strings.TrimSpace(string(out))
+		if strings.HasPrefix(msg, "duplicate session") {
+			return duplicateError{msg}
+		}
+		return fmt.Errorf("tmux: %s", msg)
 	}
 	return nil
 }
@@ -173,18 +177,57 @@ var ErrRunning = errors.New("already running")
 // Launch starts the session name; with restart it first kills the ended session of that name. When tmux still
 // reports a session of that name (the caller decided on a stale listing), a fresh listing decides: a dead
 // session is killed and the start retried once, a live one is left alone and ErrRunning returned.
+// A failed kill is part of the error only when the start fails too.
 func (m *Manager) Launch(name, cwd, command string, restart bool) error {
+	var killErr error
 	if restart {
-		_ = m.Kill(name)
+		killErr = m.Kill(name)
 	}
-	return m.Start(name, cwd, command)
+	err := m.Start(name, cwd, command)
+	if dup := (duplicateError{}); errors.As(err, &dup) {
+		infos, lerr := m.List()
+		if lerr != nil {
+			return withKillErr(err, killErr)
+		}
+		found := false
+		for _, s := range infos {
+			if s.Name != name {
+				continue
+			}
+			if !s.Dead {
+				return ErrRunning
+			}
+			found = true
+		}
+		if !found { // not listed: it may still run, so it is not killed
+			return withKillErr(err, killErr)
+		}
+		killErr = m.Kill(name)
+		err = m.Start(name, cwd, command)
+	}
+	return withKillErr(err, killErr)
 }
+
+// withKillErr adds the error of the kill before a start to the start's error; a start that succeeded is no error.
+func withKillErr(startErr, killErr error) error {
+	if startErr == nil || killErr == nil {
+		return startErr
+	}
+	return fmt.Errorf("%w (killing the ended session: %v)", startErr, killErr)
+}
+
+// duplicateError is Start's error when tmux has a session of that name already.
+type duplicateError struct{ msg string }
+
+func (e duplicateError) Error() string { return "tmux: " + e.msg }
 
 func (m *Manager) Kill(name string) error {
 	_ = os.Remove(statePath(name))
 	ForgetClaude(name)
-	_, err := m.run("kill-session", "-t", "="+name)
-	return err
+	if out, err := m.run("kill-session", "-t", "="+name); err != nil {
+		return fmt.Errorf("tmux: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // Interrupt stops the command running in the session and keeps the session (remain-on-exit), so its output

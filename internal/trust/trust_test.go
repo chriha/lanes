@@ -159,6 +159,7 @@ func mustWrite(t *testing.T, p, s string) {
 }
 
 func TestHashRootIndependentOfCwd(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir()) // HashRoot writes its walk cache there
 	top := t.TempDir()
 	mustMkdir(t, filepath.Join(top, ".git"))
 	mustMkdir(t, filepath.Join(top, "sub", "deep"))
@@ -346,6 +347,7 @@ func TestUntrustCorruptStore(t *testing.T) {
 
 // A .lanes.toml above the root is loaded by config.ProjectPath (it searches up to home), so it must be hashed.
 func TestHashRootCoversAncestors(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir()) // HashRoot writes its walk cache there
 	outer := t.TempDir()
 	home := filepath.Join(outer, "home")
 	t.Setenv("HOME", home)

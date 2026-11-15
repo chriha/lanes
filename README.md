@@ -1328,6 +1328,11 @@ does not ask again there. Anything else — an empty answer, other text, `esc`, 
   one entry per project root: the hash of the root's `.lanes.toml` files, or `"always"` for an always-trusted root.
   Use `lanes --untrust` to be asked again, or delete an entry or the whole file by hand. A corrupt file trusts
   nothing: `lanes` reports the error and leaves the file alone rather than overwriting it.
+- **The walk cache** in `trust-walk/` in the state directory holds, per project root, the directories under it, their
+  modification times and which of them hold a `.lanes.toml`, so the next start reads only the directories that
+  changed instead of walking the whole tree. It holds no trust decision and no file contents: every `.lanes.toml` it
+  finds is read and hashed again on each start. A missing, corrupt or outdated cache file just means a full walk, so
+  it is safe to delete any of them, or the whole directory, at any time.
 
 ### Full reference
 
@@ -1455,6 +1460,7 @@ on reload, and `lanes doctor` reports a failing `config` line.
 | Global config                          | `~/.config/lanes/config.toml`                           |
 | Project config                         | `.lanes.toml` in the project (or a parent)              |
 | Trusted projects                       | `~/.local/state/lanes/trust.json` (all projects)        |
+| Trust check walk cache                 | `~/.local/state/lanes/trust-walk/` (one file per root)  |
 | In-app views and filter edits          | `~/.local/state/lanes/<project>/views.json`             |
 | Item history                           | `~/.local/state/lanes/<project>/history.jsonl`          |
 | Item notes                             | `~/.local/state/lanes/<project>/notes.json`             |

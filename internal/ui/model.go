@@ -740,6 +740,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.setNote(msg.id, msg.text)
 	case pollNow:
+		if msg.err != nil {
+			m.say(lvErr, "attach: "+msg.err.Error())
+		}
 		return m, m.pollSessions()
 	case detailMsg:
 		m.onDetail(msg)

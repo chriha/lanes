@@ -48,6 +48,8 @@ type busyState struct {
 	action  string
 	refetch map[string]bool
 }
+
+// pollNow re-polls the sessions; err is the failure of the attach that preceded it, nil after a normal detach.
 type pollNow struct{ err error }
 
 type job struct {
@@ -857,15 +859,14 @@ func (m *Model) jumpTo(name string) tea.Cmd {
 	cmd, popup := m.sess.JumpCmd(name)
 	if popup {
 		return func() tea.Msg {
-			_ = cmd.Run()
-			return pollNow{}
+			return attachDone(cmd.Run())
 		}
 	}
-	return tea.ExecProcess(cmd, func(error) tea.Msg { return pollNow{} })
+	return tea.ExecProcess(cmd, attachDone)
 }
 
-// attachDone is the message after an attach ended.
-func attachDone(error) tea.Msg { return pollNow{} }
+// attachDone is the message after an attach ended; a failed attach carries its error to the footer.
+func attachDone(err error) tea.Msg { return pollNow{err: err} }
 
 func (m *Model) showHistory() {
 	it := m.items()

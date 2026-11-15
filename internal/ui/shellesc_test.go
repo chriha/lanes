@@ -166,16 +166,25 @@ func TestCwdIsNotShellQuoted(t *testing.T) {
 	}
 }
 
-// The examples lanes ships (default config, lanes init template, README) still render to valid shell.
+// The examples lanes ships (default config, lanes init template, README and docs/*.md) still render to valid shell.
 func TestShippedRunExamplesRender(t *testing.T) {
-	readme, err := os.ReadFile("../../README.md")
-	if err != nil {
-		t.Fatal(err)
-	}
 	sources := map[string]string{
 		"default": config.Default,
 		"init":    config.ProjectTemplate("github", "o/r"),
-		"README":  string(readme),
+	}
+	docs, err := filepath.Glob("../../docs/*.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(docs) == 0 {
+		t.Fatal("no docs/*.md files found")
+	}
+	for _, path := range append([]string{"../../README.md"}, docs...) {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sources[filepath.Base(path)] = string(b)
 	}
 	data := map[string]any{
 		"id": "!1", "iid": 1, "number": 2, "key": "ENG-3", "title": "it's $(bad)", "url": "https://x/y/1",

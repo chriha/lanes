@@ -1,7 +1,7 @@
 # lanes
 
 A vim-style terminal UI (Go, Bubble Tea) that lists work items from providers (GitLab, or any command printing
-JSON) and runs actions on them in tmux sessions. Read `README.md` for usage and `docs/design.md` for the design.
+JSON) and runs actions on them in tmux sessions. Read `README.md` for an overview, `docs/` for usage (`usage.md`, `actions.md`, `configuration.md`, …) and `docs/design.md` for the design.
 
 ## Commands
 

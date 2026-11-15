@@ -609,7 +609,7 @@ func hasTomlKey(rt reflect.Type, key string) bool {
 	return false
 }
 
-const Default = `# lanes — global config. A ".lanes.toml" in a project overlays this file (see README).
+const Default = `# lanes — global config. A ".lanes.toml" in a project overlays this file (see docs/configuration.md).
 
 [settings]
 poll_interval = "30s"

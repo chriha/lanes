@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/chriha/lanes/internal/app"
+	"github.com/chriha/lanes/internal/cache"
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/provider"
 	"github.com/chriha/lanes/internal/quietterm"
@@ -65,6 +66,9 @@ func main() {
 		doctor:  func() int { return runDoctor(os.Stdout, realDoctorEnv()) },
 		init: func() int {
 			return runInit(os.Stdin, stdinIsTerminal(), os.Stdout, os.Stderr, wd, provider.OriginForge)
+		},
+		filterTest: func(expr, view string) int {
+			return runFilterTest(os.Stdout, os.Stderr, config.Load, cache.Load, expr, view)
 		},
 		tui: runTUI,
 	}))
@@ -128,6 +132,7 @@ type env struct {
 	status         func()
 	doctor         func() int
 	init           func() int                                                   // writes .lanes.toml
+	filterTest     func(expr, view string) int                                  // evaluates expr against a view's cached items
 	tui            func(root string, ready func() (update.Checker, string)) int // checks trust, then ready, loads the config and runs the TUI
 }
 
@@ -224,6 +229,10 @@ func run(args []string, e env) int {
 			fmt.Fprintf(e.stderr, "%s: %v\n", app.Name, err)
 		}
 		return code
+	case "filter": // reads the config and the cache: only once trusted; never fetches
+		expr, view, _ := parseFilterTest(args[1:]) // usageError checked them
+		e.initApp(e.wd)
+		return e.filterTest(expr, view)
 	}
 	// ponytail: no terminal but trusted: the TUI's gate checks (walks) again; one walk if non-TTY starts ever matter
 	return e.tui(root, e.ready)
@@ -287,6 +296,12 @@ func usageError(args []string) string {
 		return ""
 	}
 	want := map[string]int{"hook": 1, "doctor": 0, "init": 0, "status": 0, "version": 0, "--version": 0, "--untrust": 0}
+	if args[0] == "filter" {
+		if _, _, ok := parseFilterTest(args[1:]); !ok {
+			return filterUsage
+		}
+		return ""
+	}
 	n, ok := want[args[0]]
 	if !ok || len(args)-1 == n {
 		return ""

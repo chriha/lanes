@@ -69,3 +69,24 @@ func For(itemID string) []Event {
 	}
 	return out
 }
+
+// Key names the events of one action on one item.
+type Key struct{ Item, Action string }
+
+// LastOf reads the history once and returns the time of the newest event of kind event for each item and action.
+func LastOf(event string) map[Key]time.Time {
+	out := map[Key]time.Time{}
+	f, err := os.Open(path())
+	if err != nil {
+		return out
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		var e Event
+		if json.Unmarshal(sc.Bytes(), &e) == nil && e.Event == event {
+			out[Key{e.Item, e.Action}] = e.Time
+		}
+	}
+	return out
+}

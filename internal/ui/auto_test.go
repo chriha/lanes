@@ -331,3 +331,38 @@ func TestAutoCommand(t *testing.T) {
 		})
 	}
 }
+
+// A fetch with many arrivals reads the history file once, not once per arrival.
+func TestAutoReadsHistoryOncePerFetch(t *testing.T) {
+	m, log := limitModel(t, nil, nil)
+	m.cfg.Settings.MaxSessions = intp(0)
+	act := config.Action{Run: "echo review"}
+	if err := act.CompileWhen(); err != nil {
+		t.Fatal(err)
+	}
+	m.cfg.Action = map[string]config.Action{"review": act}
+	m.cfg.View = []config.View{{Name: "review", Provider: "p", Filter: "true", OnEnter: "review"}}
+	m.ov = &config.Overrides{}
+	m.applyBuilt(m.cfg, map[string]provider.Provider{"p": m.providers["p"]}, nil)
+	m.data["p"] = nil
+
+	reads := 0
+	old := historyLastOf
+	historyLastOf = func(event string) map[history.Key]time.Time {
+		reads++
+		return old(event)
+	}
+	t.Cleanup(func() { historyLastOf = old })
+
+	now := time.Now()
+	for _, step := range []autoStep{full("1"), full("1", "2", "3", "4", "5")} {
+		step(t, m, &now)
+	}
+
+	if reads != 1 {
+		t.Errorf("history read %d times over a fetch with 4 arrivals, want 1", reads)
+	}
+	if got := started(t, log); len(got) != 4 {
+		t.Errorf("started %v, want the 4 arrivals", got)
+	}
+}

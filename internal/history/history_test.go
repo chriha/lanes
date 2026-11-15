@@ -197,3 +197,35 @@ func TestTokensField(t *testing.T) {
 		t.Errorf("lines = %q, want %s only where set", lines, want)
 	}
 }
+
+func TestLastOf(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	at := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
+	for i, e := range []Event{
+		{Item: "a", Action: "review", Event: "auto"},
+		{Item: "a", Action: "review", Event: "auto"},
+		{Item: "a", Action: "review", Event: "started"},
+		{Item: "a", Action: "fix", Event: "auto"},
+		{Item: "b", Action: "review", Event: "auto"},
+	} {
+		e.Time = at.Add(time.Duration(i) * time.Hour)
+		Append(e)
+	}
+	want := map[Key]time.Time{
+		{"a", "review"}: at.Add(time.Hour),
+		{"a", "fix"}:    at.Add(3 * time.Hour),
+		{"b", "review"}: at.Add(4 * time.Hour),
+	}
+	got := LastOf("auto")
+	if len(got) != len(want) {
+		t.Fatalf("LastOf = %v, want %v", got, want)
+	}
+	for k, w := range want {
+		if !got[k].Equal(w) {
+			t.Errorf("LastOf[%v] = %v, want %v", k, got[k], w)
+		}
+	}
+	if got := LastOf("none"); len(got) != 0 {
+		t.Errorf("LastOf of an unknown event = %v, want empty", got)
+	}
+}

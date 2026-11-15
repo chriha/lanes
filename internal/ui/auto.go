@@ -47,17 +47,18 @@ func (m *Model) autoFetched(prov string) tea.Cmd {
 	}
 	m.auto.queue = keep
 	cmds := []tea.Cmd{m.drainAuto()}
+	var last autoLast
 	for _, v := range m.views {
 		if v.cfg.OnEnter != "" && v.cfg.Provider == prov && v.err == nil {
-			cmds = append(cmds, m.autoView(v))
+			cmds = append(cmds, m.autoView(v, &last))
 		}
 	}
 	return tea.Batch(cmds...)
 }
 
 // autoView diffs the view's items against the ones seen before and fires its on_enter action on the arrivals
-// that are due (see autoDue). The view's first full fetch only seeds what it has seen.
-func (m *Model) autoView(v *view) tea.Cmd {
+// that are due (see autoLast.due). The view's first full fetch only seeds what it has seen.
+func (m *Model) autoView(v *view, last *autoLast) tea.Cmd {
 	name := v.cfg.Name
 	in := map[string]bool{}
 	for _, it := range v.members {
@@ -97,22 +98,29 @@ func (m *Model) autoView(v *view) tea.Cmd {
 		default:
 			continue
 		}
-		if !m.auto.off && autoDue(session.Key(it.ID), v.cfg.OnEnter, cooldown) {
+		if !m.auto.off && last.due(session.Key(it.ID), v.cfg.OnEnter, cooldown) {
 			fire = append(fire, it)
 		}
 	}
-	return m.autoStart(name, v.cfg.OnEnter, fire)
+	return m.autoStart(name, v.cfg.OnEnter, fire, last)
 }
 
-// autoDue says whether the item with history key fires action: never auto-started it, or, with a cooldown, its
-// last auto start is older than that.
-func autoDue(key, action string, cooldown time.Duration) bool {
-	var last time.Time
-	for _, e := range history.For(key) {
-		if e.Event == autoEvent && e.Action == action {
-			last = e.Time
-		}
+// historyLastOf reads the last auto start of each item and action; a variable so tests can count the reads.
+var historyLastOf = history.LastOf
+
+// autoLast is the time of the last auto start of each history key and action, read from the history file the
+// first time it is needed, so a fetch reads the file once however many items arrive.
+type autoLast struct {
+	at map[history.Key]time.Time
+}
+
+// due says whether the item with history key fires action: never auto-started it, or, with a cooldown, its last
+// auto start is older than that.
+func (l *autoLast) due(key, action string, cooldown time.Duration) bool {
+	if l.at == nil {
+		l.at = historyLastOf(autoEvent)
 	}
+	last := l.at[history.Key{Item: key, Action: action}]
 	if last.IsZero() {
 		return true
 	}
@@ -122,7 +130,7 @@ func autoDue(key, action string, cooldown time.Duration) bool {
 // autoStart starts action on its, the arrivals of view: items its when skips, busy items and items already running
 // or queued for it are left out; the rest are recorded in the history, then started while max_claude_sessions has
 // room and queued after that.
-func (m *Model) autoStart(view, action string, its []item.Item) tea.Cmd {
+func (m *Model) autoStart(view, action string, its []item.Item, last *autoLast) tea.Cmd {
 	act, ok := m.cfg.Action[action]
 	if !ok || len(its) == 0 {
 		return nil
@@ -133,7 +141,11 @@ func (m *Model) autoStart(view, action string, its []item.Item) tea.Cmd {
 		if m.autoBlocked(action, act, it) || m.queued(it.ID) != "" {
 			continue
 		}
-		history.Append(history.Event{Time: clock(), Item: session.Key(it.ID), Action: action, Event: autoEvent})
+		now := clock()
+		history.Append(history.Event{Time: now, Item: session.Key(it.ID), Action: action, Event: autoEvent})
+		if last.at != nil {
+			last.at[history.Key{Item: session.Key(it.ID), Action: action}] = now // a later view of this fetch sees it
+		}
 		ready = append(ready, it)
 	}
 	n := m.autoRoom(act, len(ready))

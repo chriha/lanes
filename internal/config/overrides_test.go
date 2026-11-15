@@ -48,6 +48,17 @@ func ptr(s string) *string { return &s }
 func TestConfigFilesArePrivate(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	// Load also merges the nearest project config, and ProjectPath walks up from the working
+	// directory. Without isolating that lookup, a developer's .lanes.toml in the checkout or in
+	// any parent of it leaks in and selects profiles the test's global config does not define.
+	proj := t.TempDir()
+	t.Setenv("HOME", proj)
+	t.Setenv("USERPROFILE", proj) // os.UserHomeDir reads USERPROFILE on Windows
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(proj); err != nil {
+		t.Fatal(err)
+	}
 	write(t, overridesPath(), `{}`)
 	if err := os.Chmod(overridesPath(), 0o644); err != nil {
 		t.Fatal(err)

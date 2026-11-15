@@ -542,6 +542,104 @@ func TestPrune(t *testing.T) {
 	}
 }
 
+func TestVersionMismatch(t *testing.T) {
+	tests := []struct {
+		name         string
+		clientOut    string
+		clientErr    error
+		serverOut    string
+		serverErr    error
+		wantClient   string
+		wantServer   string
+		wantMismatch bool
+		wantErr      bool
+	}{
+		{"equal", "tmux 3.8\n", nil, "3.8\n", nil, "3.8", "3.8", false, false},
+		{"differing", "tmux 3.8\n", nil, "3.5a\n", nil, "3.8", "3.5a", true, false},
+		{"no server running", "tmux 3.8\n", nil, "no server running on /tmp/tmux-501/lanes\n", errors.New("exit status 1"), "3.8", "", false, false},
+		{"protocol version mismatch", "tmux 3.8\n", nil, "protocol version mismatch (client 8, server 7)\n", errors.New("exit status 1"), "3.8", "", true, false},
+		{"client version fails", "", errors.New("exec: tmux not found"), "", nil, "", "", false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var calls [][]string
+			m := fakeRun(&calls, func(args []string) ([]byte, error) {
+				switch {
+				case slices.Equal(args, []string{"-V"}):
+					return []byte(tt.clientOut), tt.clientErr
+				case slices.Equal(args, []string{"display-message", "-p", "#{version}"}):
+					return []byte(tt.serverOut), tt.serverErr
+				}
+				t.Fatalf("unexpected tmux call %q", args)
+				return nil, nil
+			})
+			client, server, mismatch, err := m.VersionMismatch()
+			if client != tt.wantClient || server != tt.wantServer || mismatch != tt.wantMismatch || (err != nil) != tt.wantErr {
+				t.Errorf("VersionMismatch = %q, %q, %v, %v; want %q, %q, %v, error %v",
+					client, server, mismatch, err, tt.wantClient, tt.wantServer, tt.wantMismatch, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestRestartServer(t *testing.T) {
+	tests := []struct {
+		name     string
+		killErr  error
+		wantErr  bool
+		wantGone bool // the sessions' state files are removed
+	}{
+		{"kills the server and forgets its sessions", nil, false, true},
+		{"failing kill-server keeps the state", errors.New("exit status 1"), true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateEnv(t)
+			for _, name := range []string{"fix~1", "fix~2"} {
+				if err := os.WriteFile(statePath(name), []byte(`{"state":"waiting"}`), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(claudePath(name), []byte(`{}`), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var killed bool
+			m := fakeRun(nil, func(args []string) ([]byte, error) {
+				switch args[0] {
+				case "list-panes":
+					return []byte("fix~1\t0\t0\t1\tclaude\t0\nfix~2\t1\t0\t2\tclaude\t0\n"), nil
+				case "kill-server":
+					killed = true
+					if tt.killErr != nil {
+						return []byte("server busy"), tt.killErr
+					}
+					return nil, nil
+				}
+				t.Fatalf("unexpected tmux call %q", args)
+				return nil, nil
+			})
+			err := m.RestartServer()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("RestartServer error = %v, want error %v", err, tt.wantErr)
+			}
+			if tt.wantErr && !strings.Contains(err.Error(), "server busy") {
+				t.Errorf("error %q does not carry tmux's message", err)
+			}
+			if !killed {
+				t.Error("kill-server was not called")
+			}
+			for _, name := range []string{"fix~1", "fix~2"} {
+				for _, p := range []string{statePath(name), claudePath(name)} {
+					_, statErr := os.Stat(p)
+					if gone := errors.Is(statErr, os.ErrNotExist); gone != tt.wantGone {
+						t.Errorf("%s removed = %v, want %v", filepath.Base(p), gone, tt.wantGone)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestUsage(t *testing.T) {
 	tests := []struct {
 		name, dir, file, want string

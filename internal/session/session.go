@@ -267,6 +267,45 @@ func (m *Manager) Prune(failedOnly bool) (int, error) {
 	return n, first
 }
 
+// VersionMismatch compares the installed tmux (the client lanes runs) with the version of the running lanes
+// tmux server. After a tmux upgrade the server started by the old binary keeps running, and attaching to it
+// with the new client fails at once (tmux 3.5a server, 3.8 client: "open terminal failed: not a terminal")
+// while the other commands still work. No server running is no mismatch; tmux's "protocol version mismatch"
+// error is one, with the server version unknown.
+func (m *Manager) VersionMismatch() (client, server string, mismatch bool, err error) {
+	out, err := m.run("-V")
+	if err != nil {
+		return "", "", false, fmt.Errorf("tmux -V: %s", strings.TrimSpace(string(out)))
+	}
+	client = strings.TrimPrefix(strings.TrimSpace(string(out)), "tmux ")
+	out, err = m.run("display-message", "-p", "#{version}")
+	if err != nil {
+		return client, "", strings.Contains(string(out), "protocol version mismatch"), nil
+	}
+	server = strings.TrimSpace(string(out))
+	return client, server, client != server, nil
+}
+
+// RestartServer kills the lanes tmux server, and with it every session, and forgets the sessions' hook
+// state. The next Start starts a new server with the installed tmux.
+func (m *Manager) RestartServer() error {
+	infos, err := m.List()
+	if err != nil {
+		return err
+	}
+	if out, err := m.run("kill-server"); err != nil {
+		return fmt.Errorf("tmux: %s", strings.TrimSpace(string(out)))
+	}
+	var errs []error
+	for _, s := range infos {
+		if err := os.Remove(statePath(s.Name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, err)
+		}
+		ForgetClaude(s.Name)
+	}
+	return errors.Join(errs...)
+}
+
 // JumpCmd returns a command that attaches to the session: in a popup when the user is inside tmux,
 // otherwise a plain attach (the caller suspends the TUI around it).
 func (m *Manager) JumpCmd(name string) (cmd *exec.Cmd, popup bool) {

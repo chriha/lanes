@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chriha/lanes/internal/history"
@@ -154,6 +155,22 @@ func (m *Model) preview() string {
 	}
 	return strings.Join(lines[:previewH], "\n") + "\n"
 }
+
+// sessPeekMsg carries the working directory and last output lines of the session called name, for the preview of
+// the sessions view.
+type sessPeekMsg struct {
+	name string
+	dir  string
+	out  []string
+	err  error
+}
+
+// pollPeek reads the working directory and last output lines of the session under the cursor of the sessions view
+// while its preview shows; nil otherwise.
+func (m *Model) pollPeek() tea.Cmd { return nil } // stub
+
+// sessionPreview is the preview of the session under the cursor of the sessions view.
+func (m *Model) sessionPreview() []string { return nil } // stub
 
 func (m *Model) previewSessions(it item.Item) []string {
 	var out []string

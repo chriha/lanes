@@ -223,6 +223,11 @@ func (m *Manager) Interrupt(name string, force bool) (signalled bool, err error)
 	return first == nil, first
 }
 
+// Peek returns the session's working directory and the last n lines of its pane, trailing blank lines left out.
+func (m *Manager) Peek(name string, n int) (dir string, out []string, err error) {
+	return "", nil, nil // stub
+}
+
 // Prune kills the dead sessions of a fresh listing (with failedOnly, only those with a non-zero exit) and
 // never touches running ones. A failing kill does not stop the others: it returns the number of sessions
 // killed and the first error.

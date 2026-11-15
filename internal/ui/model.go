@@ -137,6 +137,8 @@ type Model struct {
 	sessions   []session.Info
 	sessByItem map[string][]session.Info
 	polling    bool
+	peek       sessPeekMsg // working directory and last output lines of a session, for the sessions view preview
+	peeking    bool        // a pollPeek is in flight
 	confirm    *confirmState
 	histTitle  string
 	hist       []string

@@ -188,7 +188,7 @@ func TestSessionsCommand(t *testing.T) {
 	}
 }
 
-// The sessions view is the last tab, after the queue, set apart by a divider; its label counts every session and,
+// The sessions view is the last tab, after the queue, with no divider between the two; its label counts every session and,
 // in the attention colour, the live ones asking or waiting.
 func TestSessionsTabLabel(t *testing.T) {
 	at := func(name, claude string, dead bool) session.Info {
@@ -199,11 +199,11 @@ func TestSessionsTabLabel(t *testing.T) {
 		infos []session.Info
 		want  string
 	}{
-		{"none", nil, "v 0 ¦ queue ¦ sessions 0"},
-		{"no attention", []session.Info{at("a", "working", false), at("b", "", true)}, "v 0 ¦ queue ¦ sessions 2"},
+		{"none", nil, "v 0 ¦ queue sessions 0"},
+		{"no attention", []session.Info{at("a", "working", false), at("b", "", true)}, "v 0 ¦ queue sessions 2"},
 		{"asking and waiting count, dead ones not",
 			[]session.Info{at("a", "asking", false), at("b", "waiting", false), at("c", "asking", true), at("d", "working", false)},
-			"v 0 ¦ queue ¦ sessions 4 2"},
+			"v 0 ¦ queue sessions 4 2"},
 	}
 	for _, tt := range tests {
 		for _, active := range []bool{false, true} {
@@ -213,7 +213,7 @@ func TestSessionsTabLabel(t *testing.T) {
 				press(m, "S")
 			}
 			got := strings.Join(strings.Fields(ansi.Strip(m.header())), " ")
-			if !strings.Contains(got, tt.want) || !strings.HasSuffix(strings.SplitN(got, "sessions", 2)[0], "¦ queue ¦ ") {
+			if !strings.Contains(got, tt.want) || !strings.HasSuffix(strings.SplitN(got, "sessions", 2)[0], "¦ queue ") {
 				t.Errorf("%s (active %v): header %q lacks %q", tt.name, active, got, tt.want)
 			}
 		}

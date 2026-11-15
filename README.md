@@ -775,7 +775,7 @@ when = '"auto-review" in labels'   # optional gate: only items with this label a
   items stay handled; run the action by hand.
 - **Queue view.** The last tab, `queue`, lists the queue: one row per entry, oldest first, `on_enter` starts and
   [starts you queued by hand](#running-on-many-items) alike, each the normal item row with `queued <action>`.
-  `Q` jumps to it from anywhere (`1`-`9` address the configured views only). The tab is muted, set apart from the views by a `¦`, and shows a count only while entries wait; it is always there, and an empty queue shows an empty-state line.
+  The built-in tabs (`queue`, then `sessions`) are set apart from the views as a group by one `¦`, none between them. `Q` jumps to it from anywhere (`1`-`9` address the configured views only). The tab is muted, and shows a count only while entries wait; it is always there, and an empty queue shows an empty-state line.
   Navigation, marks, search, `o`, `y`, `enter` and `d` work as in other views. `r` starts the entry under the
   cursor (or the marked ones) now, past the limit, without asking or jumping, and takes it off the queue; an
   entry whose item is busy, already runs the action or no longer matches its `when` is reported and dropped. In

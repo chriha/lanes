@@ -112,6 +112,34 @@ func TestHeaderDividerBeforeQueue(t *testing.T) {
 	}
 }
 
+// the built-in tabs form one group: a divider sets it apart from the views, none splits it
+func TestHeaderBuiltinTabsAreOneGroup(t *testing.T) {
+	tests := []struct {
+		name  string
+		views []config.View
+		want  string
+		count int
+	}{
+		{"views, queue and sessions", []config.View{{Name: "a"}, {Name: "b"}}, "a 0 b 0 ¦ queue sessions 0", 1},
+		{"no views", nil, "lanes queue sessions 0", 0},
+		{"divider on a view", []config.View{{Name: "a"}, {Name: "b", Divider: true}}, "a 0 ¦ b 0 ¦ queue sessions 0", 2},
+	}
+	for _, tt := range tests {
+		m := &Model{width: 200, fetchedAt: map[string]time.Time{}}
+		for _, v := range tt.views {
+			m.views = append(m.views, &view{cfg: v})
+		}
+		m.views = append(m.views, newQueueView(), newSessionsView())
+		got := strings.Join(strings.Fields(ansi.Strip(m.header())), " ")
+		if !strings.Contains(got, tt.want) {
+			t.Errorf("%s: header %q lacks %q", tt.name, got, tt.want)
+		}
+		if n := strings.Count(got, "¦"); n != tt.count {
+			t.Errorf("%s: header %q has %d dividers, want %d", tt.name, got, n, tt.count)
+		}
+	}
+}
+
 // dividers are not views: keys and numbering skip them
 func TestDividerDoesNotChangeViewSwitching(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())

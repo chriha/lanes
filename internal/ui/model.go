@@ -1327,7 +1327,8 @@ func (m *Model) attention(items []item.Item) (n int) {
 func (m *Model) header() string {
 	var tabs []string
 	for i, v := range m.views {
-		if (v.cfg.Divider || v.builtin()) && i > 0 { // the built-in tabs are always set apart
+		// the built-in tabs are set apart from the views as one group: no divider between two of them
+		if i > 0 && (v.cfg.Divider || v.builtin() && !m.views[i-1].builtin()) {
 			tabs = append(tabs, sDim.Render("¦"))
 		}
 		name := v.cfg.Name

@@ -903,15 +903,20 @@ func (m *Model) onJumpChecked(msg jumpChecked) tea.Cmd {
 	m.ask(fmt.Sprintf("lanes tmux server runs %s, installed tmux is %s: restart it, closing %s?", server, msg.client, lost),
 		func() tea.Cmd {
 			return func() tea.Msg {
-				for _, s := range infos {
+				// the sessions now, not when asked: some may have started or ended while the prompt was open
+				now, err := mgr.List()
+				if err == nil {
+					err = mgr.RestartServer()
+				}
+				if err != nil {
+					return doneMsg{notice: "restart tmux server: " + err.Error(), level: lvErr}
+				}
+				for _, s := range now {
 					if !s.Dead {
 						recordEnd(s, "killed", 0)
 					}
 				}
-				if err := mgr.RestartServer(); err != nil {
-					return doneMsg{notice: "restart tmux server: " + err.Error(), level: lvErr}
-				}
-				return doneMsg{notice: fmt.Sprintf("restarted the tmux server, closed %d session(s)", len(infos))}
+				return doneMsg{notice: fmt.Sprintf("restarted the tmux server, closed %d session(s)", len(now))}
 			}
 		})
 	return nil

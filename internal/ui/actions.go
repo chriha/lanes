@@ -628,10 +628,7 @@ func (m *Model) execute(action string, jobs []job, skipped, busy int, skippedWhe
 		var errs []string
 		started := 0
 		for _, j := range jobs {
-			if j.restart {
-				_ = mgr.Kill(j.name)
-			}
-			if err := mgr.Start(j.name, j.cwd, j.cmd); err != nil {
+			if err := mgr.Launch(j.name, j.cwd, j.cmd, j.restart); err != nil {
 				errs = append(errs, err.Error())
 				continue
 			}

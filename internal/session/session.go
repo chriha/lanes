@@ -167,6 +167,19 @@ func (m *Manager) Start(name, cwd, command string) error {
 	return nil
 }
 
+// ErrRunning is returned by Launch when a live session of that name exists already; Launch leaves it alone.
+var ErrRunning = errors.New("already running")
+
+// Launch starts the session name; with restart it first kills the ended session of that name. When tmux still
+// reports a session of that name (the caller decided on a stale listing), a fresh listing decides: a dead
+// session is killed and the start retried once, a live one is left alone and ErrRunning returned.
+func (m *Manager) Launch(name, cwd, command string, restart bool) error {
+	if restart {
+		_ = m.Kill(name)
+	}
+	return m.Start(name, cwd, command)
+}
+
 func (m *Manager) Kill(name string) error {
 	_ = os.Remove(statePath(name))
 	ForgetClaude(name)

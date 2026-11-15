@@ -66,6 +66,12 @@ an env var).
   detail panel.
 - **Badges** — extra per-row status icons from provider fields: CI failed/running/passed, threads open,
   approvals, draft, conflicts.
+- **Filter test** — `lanes filter test '<expr>' [--view <name>]` evaluates one expression against the cached items of
+  a view's provider (`cache.Load`, the view's own filter not applied; no fetch, no network) and prints `match` /
+  `no match` per item. For a non-match it names the failed top-level operand: `filter.Split` cuts the parsed
+  expression at its top-level `&&` / `||` / `!` and `filter.Failed` evaluates each operand alone (`&&`: the false ones;
+  `||` and `!`: all). Deeper nesting stays whole. Exit 2 on a compile error, 1 on a config or view error, else 0. It
+  runs behind the trust gate like `doctor`.
 
 ## UI
 
@@ -97,7 +103,7 @@ an env var).
   finds every provider idle, so at most one runs and none while idle. The 1 s tick advances the elapsed text.
 - Startup: the TUI's first model is the trust gate `ui.Startup`; `trust.Check` (the tree walk) runs in a `tea.Cmd`
   behind a checking frame, the trust dialog runs in the same program, and `initApp`, `config.Load` and `ui.New` run
-  only after the trusted result. `status`, `hook`, `version`, `doctor`, `init` and a start without a terminal check
+  only after the trusted result. `status`, `hook`, `version`, `doctor`, `init`, `filter` and a start without a terminal check
   synchronously in `run`.
 - Reload: trust check, `config.Load` and provider construction run in a `tea.Cmd`; the old config stays active
   until its `reloadedMsg` lands, which cancels the old config's in-flight fetches (their results are dropped by

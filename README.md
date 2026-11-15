@@ -193,6 +193,7 @@ Besides the TUI, `lanes` has these commands:
 |------------------|-------------------------------------------------------------------------------------------|
 | `lanes init`     | write a commented `.lanes.toml` to the current directory; asks before overwriting one, with a backup (see [Global and project config](#global-and-project-config)); asks for trust first, like the TUI |
 | `lanes doctor`   | check tmux, the forge CLIs, the config and the state dirs (see [Troubleshooting](#troubleshooting)); asks for trust first, like the TUI |
+| `lanes filter test '<expr>' [--view <name>]` | run a filter expression against the cached items of a view (the first one, or `--view`), print `match` or `no match` per item and, for a non-match, the failed top-level `&&` / `\|\|` / `!` operand (see [Filters](#filters)); never fetches; asks for trust first, like `doctor`; exits 2 when the expression does not compile |
 | `lanes status`   | print the current project's sessions that need input (see [tmux and lanes](#tmux-and-lanes)); prints nothing in an untrusted project and never asks |
 | `lanes --version`| print the version; never asks for trust                                                   |
 | `lanes --untrust`| forget the trust of the current project, so the next start asks again (see [Trusting a project](#trusting-a-project)); never asks, works without a terminal |
@@ -257,6 +258,20 @@ Useful building blocks:
 | `title matches "^feat"`        | regular expression                         |
 | `len(reviewers) >= 2`          | list length                                |
 | `open_threads > 0`             | numbers                                    |
+
+**Debugging a filter:** `lanes filter test '<expr>'` runs an expression against the cached items of one view's
+provider (the first view, or `--view <name>`) and prints `match` or `no match` for each item. The view's own filter is
+not applied, so every cached item shows up. For a non-match it names the failed top-level operand: for `&&` the
+operands that are false, for `||` all of them, for `!` its operand. Deeper nesting is not split further. It reads only
+the cache (start `lanes` once to fill it), never fetches, and exits 2 when the expression does not compile.
+
+```
+$ lanes filter test '"waiting-for-review" in labels && !draft' --view review
+match  !12 Add retry to the uploader
+no match  !15 WIP: new parser
+  failed: !draft
+1 of 2 items match
+```
 
 **Fields** are the item's own (`id`, `title`, `url`, `author`, `draft`), your [note](#preview-pane-and-item-history)
 (`note`, empty when there is none, e.g. `note != ""`), whether you [snoozed](#snoozing) it (`snoozed`), whether it changed since you last saw it

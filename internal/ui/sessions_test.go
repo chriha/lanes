@@ -268,6 +268,7 @@ func TestSessionsTabView(t *testing.T) {
 
 // enter on the sessions view jumps into the session under the cursor.
 func TestSessionsTabJump(t *testing.T) {
+	t.Setenv("TMUX", "fake") // inside tmux the jump is a popup the test helpers can run
 	m := sessModel(t, session.Info{Name: "fix~1", ItemKey: "1"}, session.Info{Name: "fix~2", ItemKey: "2"})
 	log := paneTmux(t, 0)
 	mgr, err := session.NewManager()

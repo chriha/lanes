@@ -1307,3 +1307,50 @@ provider = "gl"
 		})
 	}
 }
+
+func TestCheckFile(t *testing.T) {
+	tests := []struct {
+		name, body string
+		wantErr    string // substring; "" = no error
+	}{
+		{"valid", "[[view]]\nname = \"a\"\nprovider = \"p\"\n", ""},
+		{"valid without views: only the merged config checks that", "[settings]\npoll_interval = \"45s\"\n", ""},
+		{"bad toml", "[[view]\n", "config.toml"},
+		{"bare on_enter_repeat", "[[view]]\nname = \"a\"\non_enter_repeat = 5\n", "on_enter_repeat"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "config.toml")
+			write(t, p, tt.body)
+			err := CheckFile(p)
+			switch {
+			case tt.wantErr == "" && err != nil:
+				t.Errorf("CheckFile = %v, want nil", err)
+			case tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)):
+				t.Errorf("CheckFile = %v, want an error with %q", err, tt.wantErr)
+			}
+		})
+	}
+	if err := CheckFile(filepath.Join(t.TempDir(), "missing.toml")); err == nil {
+		t.Error("CheckFile of a missing file = nil, want an error")
+	}
+}
+
+func TestUsesFieldExported(t *testing.T) {
+	tests := []struct {
+		text string
+		want bool
+	}{
+		{"claude --settings {{.settings}}", true},
+		{"echo {{.iid | q}}", false},
+		{"{{if .x}}{{$.settings}}{{end}}", true},
+		{"{{.settings", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.text, func(t *testing.T) {
+			if got := UsesField(tt.text, "settings"); got != tt.want {
+				t.Errorf("UsesField(%q) = %v, want %v", tt.text, got, tt.want)
+			}
+		})
+	}
+}

@@ -17,12 +17,21 @@ func TestDoctor(t *testing.T) {
 	if err := os.WriteFile(file, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	exe := filepath.Join(dir, "lanes")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	cfg := func() *config.Config {
 		return &config.Config{
 			Provider: map[string]config.Provider{"gitlab": {Type: "gitlab"}},
 			View:     []config.View{{Name: "review", Provider: "gitlab", Filter: "!draft"}},
 			Action:   map[string]config.Action{"ready": {Type: "run", Run: "glab mr update {{.iid | q}} --ready"}},
 		}
+	}
+	withSettings := func() (*config.Config, error) {
+		c := cfg()
+		c.Action["claude"] = config.Action{Type: "session", Run: "claude --settings {{.settings}}"}
+		return c, nil
 	}
 	good := func() doctorEnv {
 		return doctorEnv{
@@ -37,7 +46,19 @@ func TestDoctor(t *testing.T) {
 			load:      func() (*config.Config, error) { return cfg(), nil },
 			overrides: func() (*config.Overrides, error) { return &config.Overrides{Filters: map[string]string{}}, nil },
 			dirs:      []namedDir{{"state dir", filepath.Join(dir, "state")}, {"cache dir", filepath.Join(dir, "cache")}},
+
+			executable: func() (string, error) { return exe, nil },
+			trustRoot:  func() (string, bool, error) { return "/work/proj", false, nil },
+			configFile: func() (string, string) { return "/cfg/config.toml", "" },
+			checkFile:  func(string) error { return nil },
 		}
+	}
+	loose := filepath.Join(dir, "loose")
+	if err := os.Mkdir(loose, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(loose, 0o755); err != nil { // the umask may have narrowed it
+		t.Fatal(err)
 	}
 	notFound := func(string) (string, error) { return "", errors.New("not found") }
 	missing := func(cli string) func(string) (string, error) {
@@ -230,6 +251,91 @@ func TestDoctor(t *testing.T) {
 					return c, nil
 				}
 			}},
+		{name: "claude missing with a settings action", code: 1, want: []string{"fail  claude: not found in PATH (install"},
+			edit: func(e *doctorEnv) {
+				e.load = withSettings
+				e.lookPath = missing("claude")
+			}},
+		{name: "claude found with a settings action", code: 0, want: []string{"ok    claude: /usr/bin/claude"},
+			avoid: []string{"fail", "warn"}, edit: func(e *doctorEnv) { e.load = withSettings }},
+		{name: "claude not needed without a settings action", code: 0, avoid: []string{"claude", "fail"},
+			edit: func(e *doctorEnv) { e.lookPath = missing("claude") }},
+		{name: "executable resolves", code: 0, want: []string{"ok    lanes binary: " + exe}, avoid: []string{"fail"},
+			edit: func(*doctorEnv) {}},
+		{name: "executable moved", code: 1, want: []string{"fail  lanes binary", "(reinstall lanes)"},
+			edit: func(e *doctorEnv) { e.executable = func() (string, error) { return filepath.Join(dir, "gone"), nil } }},
+		{name: "executable lookup fails", code: 1, want: []string{"fail  lanes binary: boom (reinstall lanes)"},
+			edit: func(e *doctorEnv) { e.executable = func() (string, error) { return "", errors.New("boom") } }},
+		{name: "executable not executable", code: 1, want: []string{"fail  lanes binary", "(reinstall lanes)"},
+			edit: func(e *doctorEnv) { e.executable = func() (string, error) { return file, nil } }},
+		{name: "executable is a directory", code: 1, want: []string{"fail  lanes binary"},
+			edit: func(e *doctorEnv) { e.executable = func() (string, error) { return dir, nil } }},
+		{name: "trust by hash", code: 0, want: []string{"ok    trust: /work/proj (trusted by hash)"}, avoid: []string{"fail"},
+			edit: func(*doctorEnv) {}},
+		{name: "trust always", code: 0, want: []string{"ok    trust: /work/proj (always trust)"},
+			edit: func(e *doctorEnv) { e.trustRoot = func() (string, bool, error) { return "/work/proj", true, nil } }},
+		{name: "global config line", code: 0, want: []string{"ok    config /cfg/config.toml: parses"}, avoid: []string{"project"},
+			edit: func(*doctorEnv) {}},
+		{name: "global and project config lines", code: 0,
+			want: []string{"ok    config /cfg/config.toml: parses", "ok    config /p/.lanes.toml: parses"},
+			edit: func(e *doctorEnv) {
+				e.configFile = func() (string, string) { return "/cfg/config.toml", "/p/.lanes.toml" }
+			}},
+		{name: "project config does not parse", code: 1,
+			want:  []string{"ok    config /cfg/config.toml: parses", "fail  config /p/.lanes.toml: bad toml (fix the syntax"},
+			avoid: []string{"fail  config /cfg"},
+			edit: func(e *doctorEnv) {
+				e.configFile = func() (string, string) { return "/cfg/config.toml", "/p/.lanes.toml" }
+				e.checkFile = func(p string) error {
+					if strings.HasSuffix(p, ".lanes.toml") {
+						return errors.New("bad toml")
+					}
+					return nil
+				}
+			}},
+		{name: "global config does not parse", code: 1, want: []string{"fail  config /cfg/config.toml: bad toml (fix the syntax"},
+			edit: func(e *doctorEnv) { e.checkFile = func(string) error { return errors.New("bad toml") } }},
+		{name: "merged config error stays on the config line", code: 1, want: []string{"ok    config /cfg/config.toml: parses", "fail  config: no [[view]] defined (fix"},
+			edit: func(e *doctorEnv) {
+				e.load = func() (*config.Config, error) { return nil, errors.New("no [[view]] defined") }
+			}},
+		{name: "config hint", code: 1, want: []string{"fail  config: boom (fix"},
+			edit: func(e *doctorEnv) { e.load = func() (*config.Config, error) { return nil, errors.New("boom") } }},
+		{name: "overrides hint", code: 1, want: []string{"fail  overrides: views.json: invalid JSON (delete"},
+			edit: func(e *doctorEnv) {
+				e.overrides = func() (*config.Overrides, error) {
+					return &config.Overrides{Filters: map[string]string{}}, errors.New("views.json: invalid JSON")
+				}
+			}},
+		{name: "view filter hint", code: 1, want: []string{"fail  view review: filter: ", "(fix the filter"},
+			edit: func(e *doctorEnv) {
+				e.load = func() (*config.Config, error) {
+					c := cfg()
+					c.View[0].Filter = "draft &&"
+					return c, nil
+				}
+			}},
+		{name: "action template hint", code: 1, want: []string{"fail  action ready: run: ", "(fix the template"},
+			edit: func(e *doctorEnv) {
+				e.load = func() (*config.Config, error) {
+					c := cfg()
+					c.Action["ready"] = config.Action{Run: "echo {{.iid"}
+					return c, nil
+				}
+			}},
+		{name: "action cwd hint", code: 1, want: []string{"fail  action ready: cwd: ", "(fix the template"},
+			edit: func(e *doctorEnv) {
+				e.load = func() (*config.Config, error) {
+					c := cfg()
+					c.Action["ready"] = config.Action{Run: "true", Cwd: "{{.nope | nofunc}}"}
+					return c, nil
+				}
+			}},
+		{name: "dir not writable hint", code: 1, want: []string{"fail  state dir: ", "(make "},
+			edit: func(e *doctorEnv) { e.dirs[0].path = filepath.Join(file, "state") }},
+		{name: "dir mode too open warns", code: 0, want: []string{"warn  state dir: " + loose + " has mode 0755 (chmod 700 " + loose + ")", "ok    cache dir"},
+			avoid: []string{"fail"},
+			edit:  func(e *doctorEnv) { e.dirs[0].path = loose }},
 		{name: "dir not writable", code: 1, want: []string{"fail  state dir"},
 			edit: func(e *doctorEnv) { e.dirs[0].path = filepath.Join(file, "state") }},
 	}
@@ -280,6 +386,11 @@ func TestDoctorBadThemeColor(t *testing.T) {
 		getenv:    func(string) string { return "" },
 		load:      config.Load,
 		overrides: func() (*config.Overrides, error) { return &config.Overrides{Filters: map[string]string{}}, nil },
+
+		executable: func() (string, error) { return os.Args[0], nil },
+		trustRoot:  func() (string, bool, error) { return tmp, false, nil },
+		configFile: func() (string, string) { return config.Path(), config.ProjectPath() },
+		checkFile:  config.CheckFile,
 	}
 	var b bytes.Buffer
 	if code := runDoctor(&b, e); code != 1 {

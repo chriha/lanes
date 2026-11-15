@@ -56,8 +56,7 @@ func Hash(path string) (string, error) {
 // path and content, in path order), or "" when there is none. Unlike Hash of the cwd's nearest file it does not depend on where lanes was started, so one
 // trust entry covers every cwd in the root, and a change to any of those files still changes the hash.
 func HashRoot(root string) (string, error) {
-	h, _, err := hashRootWith(root, nil, time.Now(), os.ReadDir)
-	return h, err
+	return hashRootCached(root, time.Now(), os.ReadDir)
 }
 
 // hashFiles is the HashRoot of the files found under root: it adds the ones in root's parents up to home and hashes

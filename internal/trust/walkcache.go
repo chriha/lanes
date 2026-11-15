@@ -16,6 +16,8 @@ const racyWindow = 2 * time.Second
 // walkCache is what HashRoot learned about the directory structure under a root. It never holds a trust decision
 // or file contents: it only lets the next walk skip reading directories that did not change.
 type walkCache struct {
+	Version int                `json:"version"` // walkCacheVersion of the lanes that wrote it
+	Root    string             `json:"root"`    // the root it describes
 	Written int64              `json:"written"` // Unix nanoseconds the walk that produced it started
 	Dirs    map[string]walkDir `json:"dirs"`    // slash path relative to the root ("." for the root itself)
 }
@@ -25,6 +27,15 @@ type walkDir struct {
 	ModTime int64    `json:"mtime"`            // Unix nanoseconds
 	Dirs    []string `json:"dirs,omitempty"`   // names of child directories that are walked
 	Config  bool     `json:"config,omitempty"` // holds a regular .lanes.toml
+}
+
+// walkCachePath is the file holding root's walkCache.
+func walkCachePath(root string) string { return "" }
+
+// hashRootCached is HashRoot reading directories through readDir, at now.
+func hashRootCached(root string, now time.Time, readDir readDirFunc) (string, error) {
+	h, _, err := hashRootWith(root, nil, now, readDir)
+	return h, err
 }
 
 type readDirFunc func(string) ([]fs.DirEntry, error)

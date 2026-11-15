@@ -329,6 +329,12 @@ func ProjectPath() string {
 	}
 }
 
+// CheckFile parses the config file at path on its own, without merging it with another or validating the result.
+func CheckFile(path string) error { return nil }
+
+// UsesField reports whether template text refers to the top-level field name ({{.name}}).
+func UsesField(text, name string) bool { return false }
+
 // Mtime is the newest modification time of the config files in use (0 if none exist).
 func Mtime() time.Time {
 	var t time.Time

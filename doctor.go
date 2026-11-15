@@ -17,6 +17,7 @@ import (
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/filter"
 	"github.com/chriha/lanes/internal/provider"
+	"github.com/chriha/lanes/internal/trust"
 	"github.com/chriha/lanes/internal/ui"
 )
 
@@ -30,6 +31,11 @@ type doctorEnv struct {
 	load      func() (*config.Config, error)
 	overrides func() (*config.Overrides, error)
 	dirs      []namedDir
+
+	executable func() (string, error)                       // the running lanes binary, as claude hooks will call it
+	trustRoot  func() (root string, always bool, err error) // the trusted project root and how it is trusted
+	configFile func() (global, project string)              // the config files in use; project is "" without a .lanes.toml
+	checkFile  func(path string) error                      // parses one config file on its own
 }
 
 func realDoctorEnv() doctorEnv {
@@ -45,6 +51,19 @@ func realDoctorEnv() doctorEnv {
 		load:      config.Load,
 		overrides: config.LoadOverrides,
 		dirs:      []namedDir{{"state dir", app.StateDir()}, {"cache dir", app.CacheDir()}},
+
+		executable: os.Executable,
+		trustRoot: func() (string, bool, error) {
+			wd, err := os.Getwd()
+			if err != nil {
+				return "", false, err
+			}
+			root := trust.Root(wd)
+			always, err := trust.IsAlways(root)
+			return root, always, err
+		},
+		configFile: func() (string, string) { return config.Path(), config.ProjectPath() },
+		checkFile:  config.CheckFile,
 	}
 }
 

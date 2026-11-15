@@ -413,18 +413,22 @@ run = "echo shell"
 	}
 }
 
-func TestReservedQueueView(t *testing.T) {
+func TestReservedViewNames(t *testing.T) {
 	tests := []struct {
 		name    string
 		global  string // extra TOML appended to the global config
 		project string // project .lanes.toml, empty = none
-		wantErr bool
+		wantErr string // the reserved view name the error must name, empty = no error
 	}{
-		{"global queue view", "[[view]]\nname = \"queue\"\nprovider = \"gl\"\n", "", true},
-		{"project queue view", "", "[[view]]\nname = \"queue\"\nprovider = \"gl\"\n", true},
-		{"similar name queue2", "[[view]]\nname = \"queue2\"\nprovider = \"gl\"\n", "", false},
-		{"names are case-sensitive", "[[view]]\nname = \"Queue\"\nprovider = \"gl\"\n", "", false},
-		{"project queue2", "", "[[view]]\nname = \"queue2\"\nprovider = \"gl\"\n", false},
+		{"global queue view", "[[view]]\nname = \"queue\"\nprovider = \"gl\"\n", "", "queue"},
+		{"project queue view", "", "[[view]]\nname = \"queue\"\nprovider = \"gl\"\n", "queue"},
+		{"similar name queue2", "[[view]]\nname = \"queue2\"\nprovider = \"gl\"\n", "", ""},
+		{"names are case-sensitive", "[[view]]\nname = \"Queue\"\nprovider = \"gl\"\n", "", ""},
+		{"project queue2", "", "[[view]]\nname = \"queue2\"\nprovider = \"gl\"\n", ""},
+		{"global sessions view", "[[view]]\nname = \"sessions\"\nprovider = \"gl\"\n", "", "sessions"},
+		{"project sessions view", "", "[[view]]\nname = \"sessions\"\nprovider = \"gl\"\n", "sessions"},
+		{"similar name session", "[[view]]\nname = \"session\"\nprovider = \"gl\"\n", "", ""},
+		{"sessions is case-sensitive", "[[view]]\nname = \"Sessions\"\nprovider = \"gl\"\n", "", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -451,14 +455,14 @@ provider = "gl"
 				write(t, filepath.Join(proj, ProjectFile), tt.project)
 			}
 			_, err := Load()
-			if !tt.wantErr {
+			if tt.wantErr == "" {
 				if err != nil {
 					t.Fatalf("err = %v, want none", err)
 				}
 				return
 			}
-			if err == nil || !strings.Contains(err.Error(), `view "queue"`) || !strings.Contains(err.Error(), "reserved") {
-				t.Fatalf("err = %v, want it to say view \"queue\" is reserved", err)
+			if want := `view "` + tt.wantErr + `"`; err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), "reserved") {
+				t.Fatalf("err = %v, want it to say %s is reserved", err, want)
 			}
 		})
 	}

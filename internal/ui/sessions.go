@@ -16,7 +16,7 @@ import (
 
 // sessionsName is the name of the built-in view that lists every session. It is always the last view, after the
 // queue view, is not configurable and is reached with S.
-const sessionsName = "sessions"
+const sessionsName = config.SessionsView
 
 // newSessionsView is the built-in view of every session; it has no items, its rows are m.sessions.
 func newSessionsView() *view { return &view{cfg: config.View{Name: sessionsName}, sessions: true} }

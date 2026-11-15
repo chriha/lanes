@@ -82,7 +82,7 @@ an env var).
 - Vim keys: `h j k l`, `gg G`, `ctrl-d/u`, `space` mark, `V` mark all, `esc` clear.
 - `/` fuzzy filter, `:` command line, `?` help, `enter` open session/jump in, `o` open URL, `x` close session
   (always confirms), `X` interrupt the session's command and keep its output (confirm; again: SIGKILL), `R` refresh, `i` item history, `d` item details (every field untruncated, CI jobs one per line, plus description, pipeline, threads and comments fetched on demand; `J`/`K` thread cursor, `enter`/`space` fold one, `za`/`zA` fold/unfold all), `n` jump to the next session asking/waiting (asking first, oldest
-  first, cycles), `S` sessions screen (every session, also of items no longer listed; jump / close), `A` agent view
+  first, cycles), `S` sessions tab (the last tab: every session, also of items no longer listed; jump / close / interrupt, marks, search, preview), `A` agent view
   (below), `q` quit.
 - Live: background poll (default 30s) diffs into the list, preserving cursor + marks. First paint from disk
   cache (stale-while-revalidate). Terminal focus reporting (`tea.WithReportFocus`) slows the poll to
@@ -103,7 +103,7 @@ an env var).
   until its `reloadedMsg` lands, which cancels the old config's in-flight fetches (their results are dropped by
   fetch generation) and fetches every provider at once.
 - Jump into a session: `tmux display-popup` / `switch-client` when inside tmux, `attach` otherwise.
-- **Agent view** (`A` on an item or on the sessions screen) — a full-screen animated diagram of a Claude
+- **Agent view** (`A` on an item or on the sessions tab) — a full-screen animated diagram of a Claude
   session as a dense dashboard: a full-height session column as the lead's dashboard (context bar, effort meter,
   tool-call sparkline over 15 min, hook states on a `┆` timeline, counters incl. the token split, the lead's 5h share and agent counts,
   last 4 files touched, last text, advisor), lead box with the tools box left of it and the processes box right of it, layered agent tree, session log and a status line

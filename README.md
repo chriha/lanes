@@ -215,12 +215,15 @@ zero.
 
 Views come from three places: the global config, the project config, and views you create inside the app with
 `:newview` (stored outside your config, see [The command line](#the-command-line)). A view whose filter was
-edited inside the app shows a `*` in the tab bar. The name `queue` is reserved for the built-in
-[queue view](#running-on-many-items): a view with that name fails the config load.
+edited inside the app shows a `*` in the tab bar. The names `queue` and `sessions` are reserved for the built-in
+[queue view](#running-on-many-items) and [sessions view](#sessions-jump-close-status): a view with either name fails
+the config load.
 
 To group tabs, set `divider = true` on a view: a dim `¦` is drawn before its tab. A divider is not a view, so
-`h`/`l`, `1`–`9` and `:view` skip it and the numbering is unchanged. The built-in [queue tab](#running-on-many-items)
-always has one before it (unless it is the only tab); there is no setting for that.
+`h`/`l`, `1`–`9` and `:view` skip it and the numbering is unchanged. The built-in tabs come last, the
+[queue tab](#running-on-many-items) and then the [sessions tab](#sessions-jump-close-status), set apart from the
+views as one group by a divider before the queue tab; there is no setting for that. `1`–`9` address the configured
+views only; `Q` and `S` reach the built-in tabs.
 
 ```toml
 [[view]]
@@ -378,10 +381,10 @@ compile, is a config error. Groups are set in the config only (global or project
 | `enter`             | jump into the item's newest session (opens the URL if it has none) |
 | `o`                 | open the item's URL in the browser                 |
 | `y`                 | copy the item's ID to the clipboard (all marked IDs, space-separated, if any are marked) |
-| `Q`                 | switch to the [queue view](#running-on-many-items) (the last tab) |
-| `x`                 | close the item's sessions (asks first); in the queue view: drop the entry from the queue             |
+| `Q`                 | switch to the [queue view](#running-on-many-items) (the tab before the sessions tab) |
+| `x`                 | close the item's sessions (asks first); in the queue view: drop the entry from the queue; in the sessions view: close the marked sessions or the one under the cursor |
 | `r`                 | in the queue view: start the entry (all marked entries, if any are marked) now, past the [session limit](#running-on-many-items); elsewhere `r` is free for an action key |
-| `X`                 | interrupt the item's running sessions and keep their output (asks first; again: `SIGKILL`) |
+| `X`                 | interrupt the item's running sessions and keep their output (asks first; again: `SIGKILL`); in the sessions view: of the marked sessions or the one under the cursor |
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](#shell-sessions)) |
 | `gr`                | resume the item's newest finished Claude session (see [Resuming a Claude session](#resuming-a-claude-session)) |
 | `i`                 | show the item's history                            |
@@ -390,7 +393,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `m`                 | mark the item unread (all marked items, if any are marked); when all of them are unread: mark them read (see [Row badges](#row-badges)) |
 | `z`                 | [snooze](#snoozing) the item (all marked items, if any are marked); on a snoozed item: unsnooze it |
 | `n`                 | jump into the next session that is asking or waiting (any view) |
-| `S`                 | sessions screen: every session, also of items no longer listed |
+| `S`                 | switch to the [sessions view](#sessions-jump-close-status) (the last tab): every session, also of items no longer listed |
 | `A`                 | [agent view](#agent-view) of the item's newest Claude session |
 | `p`                 | toggle the preview pane                            |
 | `F`                 | edit the current view's filter                     |
@@ -432,7 +435,7 @@ narrows the view; it does not change its filter.
 | `:run <action>`           | run an action by name, even if it has no key                          |
 | `:auto [on\|off]`         | pause / resume the views' [`on_enter`](#running-on-arrival-on_enter) actions; bare: show their state |
 | `:resume`                 | resume the selected item's newest finished Claude session (same as `gr`) |
-| `:sessions`               | open the sessions screen (same as `S`)                                |
+| `:sessions`               | switch to the sessions view (same as `S`)                             |
 | `:prune`                  | kill every finished session; running ones are never touched           |
 | `:prune failed`           | kill only finished sessions that exited non-zero                      |
 | `:refresh`                | refetch now                                                           |
@@ -773,7 +776,7 @@ when = '"auto-review" in labels'   # optional gate: only items with this label a
   starts the next entry when a session ends or goes `waiting`, or a fetch lands, and there is room again, checking `when` once more;
   an entry whose item left the view is dropped. The queue lives in memory only: on quit it is lost, and the
   items stay handled; run the action by hand.
-- **Queue view.** The last tab, `queue`, lists the queue: one row per entry, oldest first, `on_enter` starts and
+- **Queue view.** The tab before the sessions tab, `queue`, lists the queue: one row per entry, oldest first, `on_enter` starts and
   [starts you queued by hand](#running-on-many-items) alike, each the normal item row with `queued <action>`.
   The built-in tabs (`queue`, then `sessions`) are set apart from the views as a group by one `¦`, none between them. `Q` jumps to it from anywhere (`1`-`9` address the configured views only). The tab is muted, and shows a count only while entries wait; it is always there, and an empty queue shows an empty-state line.
   Navigation, marks, search, `o`, `y`, `enter` and `d` work as in other views. `r` starts the entry under the
@@ -830,11 +833,23 @@ positive duration or is set without `on_enter`.
   running the footer says `no running sessions here`. The command gets `SIGTERM`; the session stays, shows
   `✗ <action> (143)` and keeps its output, so you can still read it with `enter` and close it with `x`. If a
   command ignores `SIGTERM`, `X` on it again sends `SIGKILL`. The item history records `interrupted`.
-- **Sessions screen** — `S` (or `:sessions`) lists every session on the `lanes` tmux server, newest first:
-  item ID and title (or the item key when no provider returns the item any more), status badge and age.
-  Sessions whose item is in no view — filtered out, or merged/closed — are marked `(not in any view)`. `enter`
-  jumps in, `A` opens its [agent view](#agent-view), `X` interrupts, `x` closes (after confirming), `j`/`k`,
-  `gg`/`G` move, `q` / `esc` / `S` go back.
+- **Sessions view** — the last tab, `sessions`, after the [queue tab](#running-on-many-items), lists every
+  session on the `lanes` tmux server, newest first: item ID and title (or the item key when no provider returns
+  the item any more), status badge and age. Sessions whose item is in no view — filtered out, or merged/closed —
+  are marked `(not in any view)`. `S` (or `:sessions`) switches to it from anywhere; `h`/`l` reach it like any
+  tab. Its label is `sessions <n>`, n counting every session, plus the yellow count of sessions asking or
+  waiting; both update with the session refresh. With no sessions it shows an empty-state line and stays
+  reachable. It is built in: not configurable, and `:newview` / `:delview` do not touch it.
+  - `enter` jumps in, `A` opens the session's [agent view](#agent-view) (closing it returns here), `j`/`k`,
+    `gg`/`G`, `ctrl-d`/`ctrl-u` move.
+  - `space` marks a session (marks follow the session, survive the refresh and drop when it ends); `x` closes
+    and `X` interrupts the marked sessions, or the one under the cursor, with the same confirmations as above.
+  - `/` filters the rows by label; `esc` clears the marks and the search. The cursor stays on its session
+    across refreshes.
+  - `p` toggles a preview of the session: name, action, state, age, working directory and its last output
+    lines, plus the item's title and URL when a view lists the item; orphan sessions get one too.
+  - Item keys (`o`, `y`, `N`, `t`, …) and configured action keys do nothing here.
+  - `q` quits (after confirming) as on any tab; there is no separate screen to go back from.
 - **Resume** — `gr` (or `:resume`) starts the item's newest finished Claude session again, see
   [Resuming a Claude session](#resuming-a-claude-session).
 - **Quit** — `q` asks first (`y`/`enter` quits, any other key cancels); `ctrl-c` and `:quit` leave at once. Sessions keep running and reappear when you start it again.
@@ -902,8 +917,8 @@ The [agent view](#agent-view) splits `session` (the account's 5h usage in %) ove
 
 ### Agent view
 
-`A` on an item opens a full-screen, animated view of its newest Claude session; on the sessions screen, of the
-selected session. `esc`, `q` or `A` go back. It needs the [hooks](#claude-code-integration)
+`A` on an item opens a full-screen, animated view of its newest Claude session; on the sessions tab, of the
+selected session (closing it returns to the tab). `esc`, `q` or `A` go back. It needs the [hooks](#claude-code-integration)
 (`--settings {{.settings}}`): they record where Claude keeps the session's transcript. Without them, or before
 Claude has started, the footer says `no Claude session for this item`.
 
@@ -911,7 +926,7 @@ The view is a dashboard across the whole terminal, with one layout at every size
 anything because the terminal is small. It shows, top to bottom:
 
 - **header** — `AGENT VIEW · <title>`: the item's title, or the session's name when the view was opened from the
-  sessions screen (or the title is unknown); under its rule a **legend** of the model family colors
+  sessions tab (or the title is unknown); under its rule a **legend** of the model family colors
   (`■ opus  ■ sonnet  ■ haiku`), always drawn.
 
 - **session** (left column, full height) — the lead's dashboard:

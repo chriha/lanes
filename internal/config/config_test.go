@@ -1354,3 +1354,317 @@ func TestUsesFieldExported(t *testing.T) {
 		})
 	}
 }
+
+func TestProfiles(t *testing.T) {
+	const global = `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+filter = "global"
+[[view]]
+name = "b"
+provider = "gl"
+filter = "global"
+[action.x]
+run = "echo global"
+[keymap]
+r = "x"
+s = "x"
+[profile.p1]
+[[profile.p1.view]]
+name = "b"
+provider = "gl"
+filter = "p1"
+[[profile.p1.view]]
+name = "c"
+provider = "gl"
+filter = "p1"
+[profile.p1.action.x]
+run = "echo p1"
+[profile.p1.action.y]
+run = "echo p1"
+[profile.p1.keymap]
+s = "y"
+t = "y"
+[profile.p2]
+[[profile.p2.view]]
+name = "c"
+provider = "gl"
+filter = "p2"
+[profile.p2.action.y]
+type = "run"
+run = "echo p2"
+[profile.p2.keymap]
+t = "x"
+`
+	type view struct{ name, filter string }
+	tests := []struct {
+		name        string
+		global      string // config.toml body; "" = global above
+		project     string // .lanes.toml body; "" = none
+		wantViews   []view
+		wantActions map[string]string // name -> run
+		wantKeymap  map[string]string
+		wantErr     []string // substrings the error must contain; nil = no error
+	}{
+		{name: "no project ignores profiles",
+			wantViews:   []view{{"a", "global"}, {"b", "global"}},
+			wantActions: map[string]string{"x": "echo global"},
+			wantKeymap:  map[string]string{"r": "x", "s": "x"}},
+		{name: "project without profiles", project: "[[view]]\nname = \"d\"\nprovider = \"gl\"\nfilter = \"project\"\n",
+			wantViews:   []view{{"a", "global"}, {"b", "global"}, {"d", "project"}},
+			wantActions: map[string]string{"x": "echo global"},
+			wantKeymap:  map[string]string{"r": "x", "s": "x"}},
+		{name: "one profile over global", project: `profiles = ["p1"]`,
+			wantViews:   []view{{"a", "global"}, {"b", "p1"}, {"c", "p1"}},
+			wantActions: map[string]string{"x": "echo p1", "y": "echo p1"},
+			wantKeymap:  map[string]string{"r": "x", "s": "y", "t": "y"}},
+		{name: "later profile wins", project: `profiles = ["p1", "p2"]`,
+			wantViews:   []view{{"a", "global"}, {"b", "p1"}, {"c", "p2"}},
+			wantActions: map[string]string{"x": "echo p1", "y": "echo p2"},
+			wantKeymap:  map[string]string{"r": "x", "s": "y", "t": "x"}},
+		{name: "order of profiles matters", project: `profiles = ["p2", "p1"]`,
+			wantViews:   []view{{"a", "global"}, {"b", "p1"}, {"c", "p1"}},
+			wantActions: map[string]string{"x": "echo p1", "y": "echo p1"},
+			wantKeymap:  map[string]string{"r": "x", "s": "y", "t": "y"}},
+		{name: "project wins over profiles", project: `profiles = ["p1", "p2"]
+[[view]]
+name = "c"
+provider = "gl"
+filter = "project"
+[action.y]
+run = "echo project"
+[keymap]
+t = "y"
+`,
+			wantViews:   []view{{"a", "global"}, {"b", "p1"}, {"c", "project"}},
+			wantActions: map[string]string{"x": "echo p1", "y": "echo project"},
+			wantKeymap:  map[string]string{"r": "x", "s": "y", "t": "y"}},
+		{name: "profile view uses a project provider", project: `profiles = ["p"]
+[provider.proj]
+type = "gitlab"
+`, global: `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[[profile.p.view]]
+name = "b"
+provider = "proj"
+filter = "p"
+`,
+			wantViews:   []view{{"a", ""}, {"b", "p"}},
+			wantActions: map[string]string{},
+			wantKeymap:  map[string]string{}},
+		{name: "profile view with an unknown provider", project: `profiles = ["p"]`, global: `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[[profile.p.view]]
+name = "b"
+provider = "nope"
+`, wantErr: []string{`profile "p"`, `view "b"`, `unknown provider "nope"`}},
+		{name: "unknown profile", project: `profiles = ["p1", "zz"]`,
+			wantErr: []string{ProjectFile, `unknown profile "zz"`, "defined: p1, p2"}},
+		{name: "unknown profile without any defined", project: `profiles = ["zz"]`, global: `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+`, wantErr: []string{ProjectFile, `unknown profile "zz"`, "defined: none"}},
+		{name: "profile defined in the project", project: "[profile.mine]\n[[profile.mine.view]]\nname = \"z\"\nprovider = \"gl\"\n",
+			wantErr: []string{ProjectFile, "profile", "global config only"}},
+		{name: "profiles selected in the global config", global: "profiles = [\"p1\"]\n" + global,
+			wantErr: []string{"profiles", ProjectFile}},
+		{name: "profile action without run", project: `profiles = ["p"]`, global: `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[profile.p.action.bad]
+type = "run"
+`, wantErr: []string{`profile "p"`, `action "bad"`, "run command"}},
+		{name: "profile action with a bad when", project: `profiles = ["p"]`, global: `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[profile.p.action.bad]
+run = "echo"
+when = "(("
+`, wantErr: []string{`profile "p"`, `action "bad"`, "when"}},
+		{name: "profile action with a reserved name", project: `profiles = ["p"]`, global: `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[profile.p.action.shell]
+run = "echo"
+`, wantErr: []string{`profile "p"`, `action "shell"`, "reserved"}},
+		{name: "profile view with a reserved name", project: `profiles = ["p"]`, global: `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[[profile.p.view]]
+name = "queue"
+provider = "gl"
+`, wantErr: []string{`profile "p"`, `view "queue"`, "reserved"}},
+		{name: "profile view with an unknown on_enter", project: `profiles = ["p"]`, global: `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[[profile.p.view]]
+name = "b"
+provider = "gl"
+on_enter = "nope"
+`, wantErr: []string{`profile "p"`, `view "b"`, "on_enter", `"nope"`}},
+		{name: "profile view with a bare integer repeat", project: `profiles = ["p"]`, global: `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[profile.p.action.x]
+run = "echo"
+[[profile.p.view]]
+name = "b"
+provider = "gl"
+on_enter = "x"
+on_enter_repeat = 5
+`, wantErr: []string{`profile "p"`, `view "b"`, "on_enter_repeat", `"24h"`}},
+		{name: "profile action chain to an unknown action", project: `profiles = ["p"]`, global: `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[profile.p.action.x]
+run = "echo"
+on_success = "nope"
+`, wantErr: []string{`profile "p"`, `action "x"`, "on_success", `"nope"`}},
+		{name: "profile keymap to an unknown action", project: `profiles = ["p"]`, global: `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[profile.p.keymap]
+k = "nope"
+`, wantErr: []string{`profile "p"`, `keymap "k"`, `"nope"`}},
+		{name: "project replaces an invalid profile action", project: "profiles = [\"p\"]\n[action.bad]\nrun = \"echo project\"\n", global: `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+[profile.p.action.bad]
+type = "run"
+`,
+			wantViews:   []view{{"a", ""}},
+			wantActions: map[string]string{"bad": "echo project"},
+			wantKeymap:  map[string]string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+			t.Setenv("HOME", tmp)
+			old, _ := os.Getwd()
+			defer os.Chdir(old)
+			if err := os.Chdir(tmp); err != nil {
+				t.Fatal(err)
+			}
+			body := tt.global
+			if body == "" {
+				body = global
+			}
+			write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), body)
+			if tt.project != "" {
+				write(t, filepath.Join(tmp, ProjectFile), tt.project+"\n")
+			}
+			c, err := Load()
+			if tt.wantErr != nil {
+				if err == nil {
+					t.Fatal("Load() succeeded, want an error")
+				}
+				for _, s := range tt.wantErr {
+					if !strings.Contains(err.Error(), s) {
+						t.Errorf("error %q does not contain %q", err, s)
+					}
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var views []view
+			for _, v := range c.View {
+				views = append(views, view{v.Name, v.Filter})
+			}
+			if !reflect.DeepEqual(views, tt.wantViews) {
+				t.Errorf("views = %v, want %v", views, tt.wantViews)
+			}
+			actions := map[string]string{}
+			for name, a := range c.Action {
+				actions[name] = a.Run
+			}
+			if !reflect.DeepEqual(actions, tt.wantActions) {
+				t.Errorf("actions = %v, want %v", actions, tt.wantActions)
+			}
+			keymap := map[string]string{}
+			for k, v := range c.Keymap {
+				keymap[k] = v
+			}
+			if !reflect.DeepEqual(keymap, tt.wantKeymap) {
+				t.Errorf("keymap = %v, want %v", keymap, tt.wantKeymap)
+			}
+		})
+	}
+}
+
+func TestProfilesReload(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+	t.Setenv("HOME", tmp)
+	old, _ := os.Getwd()
+	defer os.Chdir(old)
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	globalPath := filepath.Join(tmp, "cfg", "lanes", "config.toml")
+	globalWith := func(run string) string {
+		return "[provider.gl]\ntype = \"gitlab\"\n[[view]]\nname = \"a\"\nprovider = \"gl\"\n" +
+			"[profile.p.action.x]\nrun = \"" + run + "\"\n[profile.q.action.x]\nrun = \"echo q\"\n"
+	}
+	steps := []struct {
+		name, global, project, wantRun string
+	}{
+		{name: "initial", global: globalWith("echo 1"), project: `profiles = ["p"]`, wantRun: "echo 1"},
+		{name: "global profile edited", global: globalWith("echo 2"), project: `profiles = ["p"]`, wantRun: "echo 2"},
+		{name: "project selects another profile", global: globalWith("echo 2"), project: `profiles = ["q"]`, wantRun: "echo q"},
+	}
+	for _, s := range steps {
+		write(t, globalPath, s.global)
+		write(t, filepath.Join(tmp, ProjectFile), s.project+"\n")
+		c, err := Load()
+		if err != nil {
+			t.Fatalf("%s: %v", s.name, err)
+		}
+		if got := c.Action["x"].Run; got != s.wantRun {
+			t.Errorf("%s: action x runs %q, want %q", s.name, got, s.wantRun)
+		}
+	}
+}

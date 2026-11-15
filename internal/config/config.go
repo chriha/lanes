@@ -301,6 +301,67 @@ type Config struct {
 	Keymap   map[string]string   `toml:"keymap"`
 	Action   map[string]Action   `toml:"action"`
 	Theme    Theme               `toml:"theme"`
+	// Profile holds the global config's named bundles of views, actions and keymap ([profile.<name>]).
+	Profile map[string]Profile `toml:"profile"`
+	// Profiles names the profiles the project file selects, applied in order over the global top-level config.
+	Profiles []string `toml:"profiles"`
+}
+
+// Profile is a named set of views, actions and keymap entries in the global config that a project selects with
+// profiles = [...]; it adds or replaces global top-level items by name, and the project's own items win over it.
+type Profile struct {
+	View   []View            `toml:"view"`
+	Action map[string]Action `toml:"action"`
+	Keymap map[string]string `toml:"keymap"`
+}
+
+// origins records which profile a view, action or keymap key came from, so validation errors can name it.
+type origins struct{ view, action, key map[string]string }
+
+// label is the error prefix for an item: p alone, or p followed by the profile it came from.
+func label(p string, from map[string]string, name string) string {
+	if prof, ok := from[name]; ok {
+		return fmt.Sprintf("%s: profile %q", p, prof)
+	}
+	return p
+}
+
+// applyProfiles folds the named profiles of c, in order, over its top-level views, actions and keymap (later wins,
+// by name as the project overlay does) and returns where each item came from. path is the file that selects them.
+func applyProfiles(c *Config, names []string, path string) (origins, error) {
+	o := origins{view: map[string]string{}, action: map[string]string{}, key: map[string]string{}}
+	for _, name := range names {
+		prof, ok := c.Profile[name]
+		if !ok {
+			defined := make([]string, 0, len(c.Profile))
+			for d := range c.Profile {
+				defined = append(defined, d)
+			}
+			sort.Strings(defined)
+			list := strings.Join(defined, ", ")
+			if list == "" {
+				list = "none"
+			}
+			return o, fmt.Errorf("%s: unknown profile %q (defined: %s)", path, name, list)
+		}
+		c.View = mergeViews(c.View, prof.View)
+		for _, v := range prof.View {
+			o.view[v.Name] = name
+		}
+		if len(prof.Action) > 0 && c.Action == nil {
+			c.Action = map[string]Action{}
+		}
+		for n, a := range prof.Action {
+			c.Action[n], o.action[n] = a, name
+		}
+		if len(prof.Keymap) > 0 && c.Keymap == nil {
+			c.Keymap = map[string]string{}
+		}
+		for k, a := range prof.Keymap {
+			c.Keymap[k], o.key[k] = a, name
+		}
+	}
+	return o, nil
 }
 
 // ProjectFile is the per-project config, found in the working directory or the nearest parent
@@ -388,18 +449,38 @@ func (c Config) PollBlurred() time.Duration {
 // rejectBareRepeat fails when a view in the file at path sets on_enter_repeat to a bare integer: the TOML decoder
 // reads it into a time.Duration as nanoseconds (5 = 5ns), which silently disables the cooldown.
 func rejectBareRepeat(path string) error {
+	type views []struct {
+		Name          string `toml:"name"`
+		OnEnterRepeat any    `toml:"on_enter_repeat"`
+	}
 	var raw struct {
-		View []struct {
-			Name          string `toml:"name"`
-			OnEnterRepeat any    `toml:"on_enter_repeat"`
-		} `toml:"view"`
+		View    views `toml:"view"`
+		Profile map[string]struct {
+			View views `toml:"view"`
+		} `toml:"profile"`
 	}
 	if _, err := toml.DecodeFile(path, &raw); err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
-	for _, v := range raw.View {
-		if n, ok := v.OnEnterRepeat.(int64); ok {
-			return fmt.Errorf("%s: view %q: on_enter_repeat = %d: must be a duration string such as \"24h\", not a bare number", path, v.Name, n)
+	check := func(prefix string, vs views) error {
+		for _, v := range vs {
+			if n, ok := v.OnEnterRepeat.(int64); ok {
+				return fmt.Errorf("%s: view %q: on_enter_repeat = %d: must be a duration string such as \"24h\", not a bare number", prefix, v.Name, n)
+			}
+		}
+		return nil
+	}
+	if err := check(path, raw.View); err != nil {
+		return err
+	}
+	names := make([]string, 0, len(raw.Profile))
+	for name := range raw.Profile {
+		names = append(names, name)
+	}
+	sort.Strings(names) // deterministic error
+	for _, name := range names {
+		if err := check(fmt.Sprintf("%s: profile %q", path, name), raw.Profile[name].View); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -424,6 +505,10 @@ func Load() (*Config, error) {
 	if err := rejectBareRepeat(p); err != nil {
 		return nil, err
 	}
+	if len(c.Profiles) > 0 {
+		return nil, fmt.Errorf("%s: profiles: select profiles in a project's %s, not in the global config", p, ProjectFile)
+	}
+	var from origins
 	if pp := ProjectPath(); pp != "" {
 		var pc Config
 		if _, err := toml.DecodeFile(pp, &pc); err != nil {
@@ -431,6 +516,9 @@ func Load() (*Config, error) {
 		}
 		if err := rejectBareRepeat(pp); err != nil {
 			return nil, err
+		}
+		if len(pc.Profile) > 0 {
+			return nil, fmt.Errorf("%s: [profile.*]: profiles are defined in the global config only (%s)", pp, p)
 		}
 		// the global tables must not collide on their own, even when a project key is about to shadow them
 		for prefix, labels := range map[string]map[string]string{
@@ -440,12 +528,26 @@ func Load() (*Config, error) {
 				return nil, fmt.Errorf("%s: %w", p, err)
 			}
 		}
+		var err error
+		if from, err = applyProfiles(&c, pc.Profiles, pp); err != nil {
+			return nil, err
+		}
 		global := append([]View(nil), c.View...) // copy: decoding below reuses the backing array
 		// decoding over c only touches the keys the file defines; slices are replaced, so views merge by hand
 		if _, err := toml.DecodeFile(pp, &c); err != nil {
 			return nil, fmt.Errorf("%s: %w", pp, err)
 		}
 		c.View = mergeViews(global, pc.View)
+		// the project's own items win over the profiles, so their errors name the project file alone
+		for _, v := range pc.View {
+			delete(from.view, v.Name)
+		}
+		for name := range pc.Action {
+			delete(from.action, name)
+		}
+		for key := range pc.Keymap {
+			delete(from.key, key)
+		}
 		dropShadowedLabels(&c.Theme.Colors, pc.Theme.Colors)
 		dropShadowedLabels(&c.Theme.Light, pc.Theme.Light)
 		dropShadowedLabels(&c.Theme.Dark, pc.Theme.Dark)
@@ -458,6 +560,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("%s: no [[view]] defined", p)
 	}
 	for _, v := range c.View {
+		p := label(p, from.view, v.Name)
 		if v.Name == QueueView {
 			return nil, fmt.Errorf("%s: view %q: the name is reserved for the built-in queue view (Q); rename the view", p, v.Name)
 		}
@@ -491,6 +594,7 @@ func Load() (*Config, error) {
 		}
 	}
 	for name, a := range c.Action {
+		p := label(p, from.action, name)
 		if strings.Contains(name, "~") || a.Run == "" || (a.Type != "" && a.Type != "session" && a.Type != "run") {
 			return nil, fmt.Errorf("%s: action %q needs a run command, type session|run, and no ~ in its name", p, name)
 		}
@@ -513,23 +617,24 @@ func Load() (*Config, error) {
 		}
 		c.Action[name] = a // a is a copy: store the compiled filter
 	}
-	if err := validateChains(c.Action); err != nil {
-		return nil, fmt.Errorf("%s: %w", p, err)
+	if name, err := validateChains(c.Action); err != nil {
+		return nil, fmt.Errorf("%s: %w", label(p, from.action, name), err)
 	}
 	if err := c.Theme.validate(); err != nil {
 		return nil, fmt.Errorf("%s: %w", p, err)
 	}
 	for key, name := range c.Keymap {
 		if _, ok := c.Action[name]; !ok {
-			return nil, fmt.Errorf("%s: keymap %q -> unknown action %q%s", p, key, name, misplacedKeyHint(key))
+			return nil, fmt.Errorf("%s: keymap %q -> unknown action %q%s", label(p, from.key, key), key, name, misplacedKeyHint(key))
 		}
 	}
 	return &c, nil
 }
 
 // validateChains checks on_success / on_failure: each names an existing action that does not ask for confirmation
-// (a follow-up starts unattended), and following them never leads back to an action already on the path.
-func validateChains(actions map[string]Action) error {
+// (a follow-up starts unattended), and following them never leads back to an action already on the path. On failure
+// it also returns the name of the action the error starts at.
+func validateChains(actions map[string]Action) (string, error) {
 	names := make([]string, 0, len(actions))
 	for name := range actions {
 		names = append(names, name)
@@ -543,10 +648,10 @@ func validateChains(actions map[string]Action) error {
 			}
 			t, ok := actions[o.target]
 			if !ok {
-				return fmt.Errorf("action %q: %s: unknown action %q", name, o.field, o.target)
+				return name, fmt.Errorf("action %q: %s: unknown action %q", name, o.field, o.target)
 			}
 			if t.Confirm == "single" {
-				return fmt.Errorf("action %q: %s: %q has confirm = \"single\", but a follow-up starts without asking", name, o.field, o.target)
+				return name, fmt.Errorf("action %q: %s: %q has confirm = \"single\", but a follow-up starts without asking", name, o.field, o.target)
 			}
 		}
 	}
@@ -571,10 +676,10 @@ func validateChains(actions map[string]Action) error {
 	}
 	for _, name := range names {
 		if err := visit(name, nil); err != nil {
-			return err
+			return name, err
 		}
 	}
-	return nil
+	return "", nil
 }
 
 // misplacedKeyHint names the likely cause when a [keymap] key is a [theme] or [settings] key, which happens when

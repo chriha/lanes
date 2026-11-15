@@ -65,7 +65,7 @@ func TestGitHubIssuesFetch(t *testing.T) {
 		t.Errorf("items:\n got %#v\nwant %#v", items, want)
 	}
 
-	// The README's example view: my open, unblocked issues that are not being planned.
+	// The docs/providers.md example view: my open, unblocked issues that are not being planned.
 	f, err := filter.Compile(`me in assignees && !blocked && !("planning" in labels)`)
 	if err != nil {
 		t.Fatal(err)

@@ -3,12 +3,12 @@
 ```sh
 make build        # ./bin/lanes
 make test         # go vet + go test
-make version      # tag and push the next release
+make release      # tag and push the next release
 ```
 
 ## Releasing
 
-`make version` tags the next release from the [Conventional Commits](https://www.conventionalcommits.org) since
+`make release` tags the next release from the [Conventional Commits](https://www.conventionalcommits.org) since
 the last `v*` tag: a `feat` bumps the minor version, anything else the patch; the first release is `v1.0.0`. It
 checks that you are on `main` with a clean tree, in sync with `origin/main`, that the tag doesn't exist yet and that
 the `ci` workflow succeeded on HEAD (needs `gh`). It then shows the version and the commits and asks before it
@@ -27,9 +27,9 @@ GoReleaser and publishes the GitHub release with a grouped changelog.
 The release workflow also pushes the formula to the tap `chriha/homebrew-lanes` (install: `brew install
 chriha/lanes/lanes`). That needs a fine-grained personal access token with *Contents: read and write* on the tap
 repo only, stored as the `HOMEBREW_TAP_TOKEN` secret of this repo: `gh secret set HOMEBREW_TAP_TOKEN`. `make
-version` refuses to tag while the secret is missing.
+release` refuses to tag while the secret is missing.
 
-Example: `make version DRY_RUN=1`.
+Example: `make release DRY_RUN=1`.
 
 The code is organised by concern under `internal/`: `config` (TOML, project overlay, in-app overrides),
 `provider` (GitLab, GitHub, command), `filter` (expressions), `session` (tmux, Claude hooks), `history`, `cache` and

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Tag the next release from the Conventional Commits since the last v* tag and push the tag; the release workflow
-# (.github/workflows/release.yml) builds the GitHub release from it. Run via `make version`.
+# (.github/workflows/release.yml) builds the GitHub release from it. Run via `make release`.
 #
 #   MAJOR=1     allow a major bump (v2+ needs a /v2 module path, or `go install …@latest` stops seeing releases)
 #   V=vX.Y.Z    tag this version instead of the computed one (must be greater than the last tag)
@@ -9,7 +9,7 @@
 set -eu
 
 die() {
-	echo "version: $*" >&2
+	echo "release: $*" >&2
 	exit 1
 }
 

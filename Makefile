@@ -26,7 +26,7 @@ bench:
 	go test -run '^$$' -bench TimeToFirstList -count=6 ./internal/ui
 
 # Tag the next release from the Conventional Commits since the last tag (see docs/development.md).
-version:
-	@scripts/version.sh
+release:
+	@scripts/release.sh
 
-.PHONY: build install dev test lint bench version
+.PHONY: build install dev test lint bench release

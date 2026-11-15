@@ -65,10 +65,10 @@ func (r *repo) remoteTags() string {
 	return strings.TrimSpace(r.git("ls-remote", "--tags", "origin"))
 }
 
-// script runs version.sh in the repo with the extra env vars and stdin, returning combined output and success.
+// script runs release.sh in the repo with the extra env vars and stdin, returning combined output and success.
 func (r *repo) script(stdin string, env ...string) (string, bool) {
 	r.t.Helper()
-	path, err := filepath.Abs("version.sh")
+	path, err := filepath.Abs("release.sh")
 	if err != nil {
 		r.t.Fatal(err)
 	}

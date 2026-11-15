@@ -287,13 +287,14 @@ func (m *Manager) VersionMismatch() (client, server string, mismatch bool, err e
 }
 
 // RestartServer kills the lanes tmux server, and with it every session, and forgets the sessions' hook
-// state. The next Start starts a new server with the installed tmux.
+// state. The next Start starts a new server with the installed tmux. No server running is the wanted state
+// already, not an error.
 func (m *Manager) RestartServer() error {
 	infos, err := m.List()
 	if err != nil {
 		return err
 	}
-	if out, err := m.run("kill-server"); err != nil {
+	if out, err := m.run("kill-server"); err != nil && !noServer(out) {
 		return fmt.Errorf("tmux: %s", strings.TrimSpace(string(out)))
 	}
 	var errs []error
@@ -304,6 +305,14 @@ func (m *Manager) RestartServer() error {
 		ForgetClaude(s.Name)
 	}
 	return errors.Join(errs...)
+}
+
+// noServer reports whether tmux's output says there is no server to talk to: none running, or its socket
+// is gone.
+func noServer(out []byte) bool {
+	msg := string(out)
+	return strings.Contains(msg, "no server running") ||
+		(strings.Contains(msg, "error connecting to") && strings.Contains(msg, "No such file or directory"))
 }
 
 // JumpCmd returns a command that attaches to the session: in a popup when the user is inside tmux,

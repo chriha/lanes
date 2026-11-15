@@ -586,11 +586,16 @@ func TestRestartServer(t *testing.T) {
 	tests := []struct {
 		name     string
 		killErr  error
+		killOut  string
 		wantErr  bool
 		wantGone bool // the sessions' state files are removed
 	}{
-		{"kills the server and forgets its sessions", nil, false, true},
-		{"failing kill-server keeps the state", errors.New("exit status 1"), true, false},
+		{"kills the server and forgets its sessions", nil, "", false, true},
+		{"failing kill-server keeps the state", errors.New("exit status 1"), "server busy", true, false},
+		{"no server running is already restarted", errors.New("exit status 1"),
+			"no server running on /tmp/tmux-501/lanes", false, true},
+		{"missing socket is already restarted", errors.New("exit status 1"),
+			"error connecting to /tmp/tmux-501/lanes (No such file or directory)", false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -611,7 +616,7 @@ func TestRestartServer(t *testing.T) {
 				case "kill-server":
 					killed = true
 					if tt.killErr != nil {
-						return []byte("server busy"), tt.killErr
+						return []byte(tt.killOut), tt.killErr
 					}
 					return nil, nil
 				}
@@ -622,7 +627,7 @@ func TestRestartServer(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("RestartServer error = %v, want error %v", err, tt.wantErr)
 			}
-			if tt.wantErr && !strings.Contains(err.Error(), "server busy") {
+			if tt.wantErr && !strings.Contains(err.Error(), tt.killOut) {
 				t.Errorf("error %q does not carry tmux's message", err)
 			}
 			if !killed {

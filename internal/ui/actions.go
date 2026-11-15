@@ -627,11 +627,11 @@ func (m *Model) execute(action string, jobs []job, skipped, busy int, skippedWhe
 	keys := jobKeys(jobs)
 	return func() tea.Msg {
 		var errs []string
-		started := 0
+		started, running := 0, 0
 		for _, j := range jobs {
 			err := mgr.Launch(j.name, j.cwd, j.cmd, j.restart)
 			if errors.Is(err, session.ErrRunning) { // the listing missed the live session: leave it, attach still jumps to it
-				skipped++
+				running++
 				continue
 			}
 			if err != nil {
@@ -642,7 +642,8 @@ func (m *Model) execute(action string, jobs []job, skipped, busy int, skippedWhe
 			history.Append(history.Event{Item: j.itemKey, Action: action, Event: "started"})
 		}
 		note := fmt.Sprintf("started %s on %d item(s)", action, started)
-		if started == 0 && len(errs) == 0 {
+		skipped += running
+		if running > 0 && started == 0 && len(errs) == 0 {
 			note = action + " already running"
 		} else if skipped > 0 {
 			note += fmt.Sprintf(", %d already running", skipped)

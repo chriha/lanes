@@ -48,7 +48,7 @@ type busyState struct {
 	action  string
 	refetch map[string]bool
 }
-type pollNow struct{}
+type pollNow struct{ err error }
 
 type job struct {
 	name, label, itemKey, cwd, cmd string
@@ -863,6 +863,9 @@ func (m *Model) jumpTo(name string) tea.Cmd {
 	}
 	return tea.ExecProcess(cmd, func(error) tea.Msg { return pollNow{} })
 }
+
+// attachDone is the message after an attach ended.
+func attachDone(error) tea.Msg { return pollNow{} }
 
 func (m *Model) showHistory() {
 	it := m.items()

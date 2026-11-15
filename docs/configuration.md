@@ -26,6 +26,9 @@ The project config **overlays** the global one — it does not replace it. You o
 | `[action.<n>]`     | by name, as a whole                                                    |
 | `[[view]]`         | by `name` — same name replaces the global view, new names are appended |
 
+To share views, actions and keys between some projects (not all), define them once as a [profile](#profiles) in the
+global config and select it with `profiles = [...]` in each project.
+
 Example project config:
 
 ```toml
@@ -49,6 +52,55 @@ running app**: views, keymap, actions, theme and poll interval update, lists ref
 footer shows the error. The reload (trust check, reading the files, building the providers) runs in the background:
 the keys keep working and the old configuration stays active until the new one is ready. Applying it cancels the
 fetches still running for the old configuration and fetches every provider again at once.
+
+## Profiles
+
+A profile is a named set of views, actions and keymap entries, defined once in the **global** config and selected
+by the projects that want it — instead of copying the same blocks into every `.lanes.toml`. A profile mirrors the
+top-level shape under `[profile.<name>]`:
+
+```toml
+# ~/.config/lanes/config.toml
+[[profile.go.view]]
+name = "go"
+provider = "forge"
+filter = '"go" in labels'
+
+[profile.go.action.fix-ci]
+run = 'claude "/fix-ci {{.url}}"'
+
+[profile.go.keymap]
+f = "fix-ci"
+
+[[profile.review.view]]
+name = "review"
+provider = "forge"
+filter = '"needs-review" in labels && author != me'
+```
+
+A project selects profiles with a top-level `profiles` key in its `.lanes.toml` (before any `[table]`, as TOML
+requires for top-level keys):
+
+```toml
+# .lanes.toml
+profiles = ["review", "go"]
+```
+
+**Precedence:** global top-level items < each selected profile, in listed order (later wins) < the project's own
+items. Every level merges the same way as the project overlay: views by `name`, actions by name as a whole, keymap
+per key. The global top-level views, actions and keymap stay active in a project that selects profiles; a profile
+only adds items or replaces them by name. A project without `profiles` loads exactly as before, and profiles nobody
+selects are ignored.
+
+- **Providers** are not part of a profile. A profile's view names a provider defined globally or in the project
+  (typically `forge`, which the project may redefine); an unknown provider is an error as for any view.
+- **Validation** is the same as for top-level items (reserved view names, `on_enter`, `when`, action chains, keymap
+  targets); errors name the profile they come from (`…: profile "go": …`).
+- **Unknown profile:** selecting a name the global config does not define fails to load with
+  `.lanes.toml: unknown profile "x" (defined: go, review)`.
+- **Global only:** `[profile.*]` in a `.lanes.toml` is an error (profiles are defined in the global config only),
+  and so is `profiles` in the global config.
+- **Reload:** editing either file reloads like any other change; on an error the old configuration stays active.
 
 ## Trusting a project
 
@@ -114,6 +166,8 @@ does not ask again there. Anything else — an empty answer, other text, `esc`, 
 ## Full reference
 
 ```toml
+profiles = ["<name>", ...]  # project config only, before any [table]: select global profiles (see Profiles)
+
 [settings]
 poll_interval = "30s"   # how often lists refresh (minimum 5s)
 poll_interval_blurred = "5m"  # how often lists refresh while the terminal is unfocused (never below poll_interval)
@@ -151,6 +205,9 @@ confirm = "none"            # or "single"
 vars    = { key = "value" }
 refresh = false
 when    = '<expression>'    # only run on items it matches; empty = every item
+
+[profile.<name>]             # global config only; see Profiles
+# [[profile.<name>.view]], [profile.<name>.action.<n>], [profile.<name>.keymap]: same keys as [[view]], [action.<n>], [keymap]
 
 [theme]
 accent = "#A78BFA"          # also: ok, warn, bad, info, text, dim, selection

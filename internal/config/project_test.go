@@ -115,6 +115,40 @@ func TestProjectTemplateDocumentsEveryField(t *testing.T) {
 	}
 }
 
+// The template offers profiles = [...] commented out, at the top level so that uncommenting it selects profiles.
+func TestProjectTemplateProfiles(t *testing.T) {
+	line := regexp.MustCompile(`(?m)^# (profiles = .*)$`)
+	tests := []struct {
+		name      string
+		typ, repo string
+	}{
+		{"forge detected", "github", "o/r"},
+		{"no origin", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl := ProjectTemplate(tt.typ, tt.repo)
+			var c Config
+			if _, err := toml.Decode(tmpl, &c); err != nil {
+				t.Fatalf("template does not parse: %v", err)
+			}
+			if len(c.Profiles) != 0 {
+				t.Errorf("profiles = %v, want none selected", c.Profiles)
+			}
+			if !line.MatchString(tmpl) {
+				t.Fatalf("template has no commented-out profiles = [...] line:\n%s", tmpl)
+			}
+			var u Config
+			if _, err := toml.Decode(line.ReplaceAllString(tmpl, "$1"), &u); err != nil {
+				t.Fatalf("template with profiles uncommented does not parse: %v", err)
+			}
+			if len(u.Profiles) == 0 {
+				t.Errorf("uncommented profiles line selects nothing; it must come before the first table")
+			}
+		})
+	}
+}
+
 func TestInitProject(t *testing.T) {
 	t.Run("creates the file", func(t *testing.T) {
 		dir := t.TempDir()

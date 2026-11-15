@@ -26,7 +26,7 @@ you what each session is doing (running, working, asking a question, waiting for
 - [Actions](docs/actions.md) — session, shell and run actions, templates, multi-select, `when`, chaining, `on_enter`, notifications
 - [Claude Code](docs/claude.md) — session status from Claude's hooks, resuming, usage in the footer, the agent view
 - [Providers](docs/providers.md) — gitlab, github, github-issues, linear, auto and the `command` provider
-- [Configuration](docs/configuration.md) — global and project config, trusting a project, the full reference, theme, where things live
+- [Configuration](docs/configuration.md) — global and project config, profiles, trusting a project, the full reference, theme, where things live
 - [How it works](docs/how-it-works.md) — the architecture, and how lanes uses tmux
 - [Troubleshooting](docs/troubleshooting.md) — `lanes doctor` and common problems
 - [Development](docs/development.md) — building, testing and releasing

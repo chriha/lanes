@@ -169,6 +169,24 @@ an env var).
   forks away from its shell lands on the lead. The view draws the top 5 by CPU in the processes box right of the
   lead, each agent's summed share in its usage row and the tree's total in the status line.
 
+## Startup
+
+- Goal: **time to first list under 100 ms** on a warm tree, i.e. one whose trust walk is cached (#237). The first
+  frame is not the metric: `ui.Startup` draws its checking frame before any work, so it is always instant. What the
+  user waits for is the list.
+- Metric: `BenchmarkTimeToFirstList` (`internal/ui/startup_bench_test.go`) runs one start in-process, from
+  `Startup.Init` over the trust walk of a fixture project tree, `config.Load` and `ui.New` to the first rendered
+  frame that shows a fake provider's item, and fails when that frame never shows it. State lives in temp dirs; no
+  tmux, network or terminal. `lanes status` / `hook` latency is not covered (#238).
+- Gate: the `bench` job of `.github/workflows/ci.yml` runs the benchmark (`-count=6`) on a pull request's head and
+  on its base on the same runner (the head's benchmark file copied into the base) and `scripts/bench-check.sh`
+  compares the medians: more than **2x** the base fails the job; both medians go into the job summary. A base where
+  the benchmark does not compile or run gives "no comparison", not a failure. The gate is a ratio, not a ns/op
+  budget, because shared runners differ in speed; the fixture is far smaller than a real large tree, so it catches
+  relative regressions while the 100 ms stays a documented target until #237 lands and it can be enforced by number.
+- Locally: `make bench` (the same benchmark and count as CI); compare two runs' outputs with
+  `scripts/bench-check.sh <base.txt> <head.txt>`.
+
 ## Config (`~/.config/lanes/config.toml`, hot reloaded)
 
 ```toml

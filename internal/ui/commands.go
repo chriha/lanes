@@ -54,7 +54,7 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 			}
 		}
 		cmd := exec.Command("/bin/sh", "-c", editor()+" "+shq(path))
-		return m, tea.ExecProcess(cmd, func(error) tea.Msg { return editorDone{project: arg == "project"} })
+		return m, tea.ExecProcess(m.onTerminal(cmd), func(error) tea.Msg { return editorDone{project: arg == "project"} })
 	case "view", "v":
 		for i, v := range m.views {
 			if v.cfg.Name == arg {

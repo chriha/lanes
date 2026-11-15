@@ -41,5 +41,8 @@ func WithSyncOut(o *SyncOut) Option {
 // bubbletea hands the child the program's output, which is not an *os.File here, so exec pipes it and the child
 // (tmux attach: "open terminal failed: not a terminal") sees no terminal.
 func (m *Model) onTerminal(cmd *exec.Cmd) *exec.Cmd {
+	if cmd.Stdout == nil && m.syncOut != nil {
+		cmd.Stdout = m.syncOut.File
+	}
 	return cmd
 }

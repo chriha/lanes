@@ -861,7 +861,7 @@ func (m *Model) jumpTo(name string) tea.Cmd {
 			return pollNow{}
 		}
 	}
-	return tea.ExecProcess(cmd, func(error) tea.Msg { return pollNow{} })
+	return tea.ExecProcess(m.onTerminal(cmd), func(error) tea.Msg { return pollNow{} })
 }
 
 func (m *Model) showHistory() {

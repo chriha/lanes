@@ -43,7 +43,7 @@ func (m *Model) editNote(id string) tea.Cmd {
 		return nil
 	}
 	cmd := exec.Command("/bin/sh", "-c", editor()+" "+shq(path))
-	return tea.ExecProcess(cmd, func(err error) tea.Msg { return readNote(id, path, err) })
+	return tea.ExecProcess(m.onTerminal(cmd), func(err error) tea.Msg { return readNote(id, path, err) })
 }
 
 // noteFile writes the item's current note to a temp file for the editor.

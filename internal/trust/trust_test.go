@@ -412,8 +412,8 @@ func TestIsAlways(t *testing.T) {
 }
 
 func TestIsAlwaysCorruptStore(t *testing.T) {
-	state := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", state)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	mustMkdir(t, filepath.Dir(path()))
 	mustWrite(t, path(), "{not json")
 	if got, err := IsAlways("/a"); got || err == nil {
 		t.Errorf("IsAlways on a corrupt store = %v, %v; want false and an error", got, err)

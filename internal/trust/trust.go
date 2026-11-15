@@ -129,7 +129,13 @@ func IsTrusted(root, hash string) (bool, error) {
 }
 
 // IsAlways reports whether root is trusted whatever its .lanes.toml says.
-func IsAlways(root string) (bool, error) { return false, nil }
+func IsAlways(root string) (bool, error) {
+	m, err := load()
+	if err != nil {
+		return false, err
+	}
+	return m[root] == Always, nil
+}
 
 // Check reports whether root is trusted and returns the HashRoot it checked. An Always root is trusted without
 // walking the tree, which on a large root costs seconds, so its hash is "". On error it is false.

@@ -192,7 +192,7 @@ Besides the TUI, `lanes` has these commands:
 | Command          | Does                                                                                      |
 |------------------|-------------------------------------------------------------------------------------------|
 | `lanes init`     | write a commented `.lanes.toml` to the current directory; asks before overwriting one, with a backup (see [Global and project config](#global-and-project-config)); asks for trust first, like the TUI |
-| `lanes doctor`   | check tmux, the forge CLIs, the config and the state dirs (see [Troubleshooting](#troubleshooting)); asks for trust first, like the TUI |
+| `lanes doctor`   | check tmux, the forge CLIs, `claude` and the lanes binary (for hooks), the trust state, the global and project config, and the state dirs (see [Troubleshooting](#troubleshooting)); asks for trust first, like the TUI |
 | `lanes status`   | print the current project's sessions that need input (see [tmux and lanes](#tmux-and-lanes)); prints nothing in an untrusted project and never asks |
 | `lanes --version`| print the version; never asks for trust                                                   |
 | `lanes --untrust`| forget the trust of the current project, so the next start asks again (see [Trusting a project](#trusting-a-project)); never asks, works without a terminal |
@@ -1542,9 +1542,15 @@ two projects never share history, views or sessions. The `$XDG_*` variables are 
 Run `lanes doctor` first. Without starting the TUI or touching any tmux server, it checks `tmux` (in `PATH`,
 ≥ 3.2), `glab` and `glab auth status` (only when a `gitlab` provider is configured) and likewise `gh` and
 `gh auth status` for `github` and `github-issues` (an `auto` provider counts as the forge its `origin` resolves to here; without an
-`origin` it warns), that the config loads, that
+`origin` it warns), that the global config and the project `.lanes.toml` each parse (one line per file, with its
+path), that the merged config loads, that
 every view filter compiles and every action template parses, and that the state and cache directories are
-writable. It prints one `ok` / `warn` / `fail` line per check, naming the view or action, and exits 1 on any fail.
+writable (it warns when their mode is not `0700`; fix with `chmod 700 <dir>`). When an action's `run` uses
+`{{.settings}}` it also checks that `claude` is in `PATH`, and it always checks that the running `lanes` binary
+still exists and is executable, since Claude hooks call it by that path (reinstall lanes if it moved). A `trust`
+line names the trusted project root and whether it is "always trust" or trusted by hash. It prints one
+`ok` / `warn` / `fail` line per check, naming the view or action, exits 1 on any fail, and puts the fix at the end of
+a failing line in parentheses.
 
 - **`glab: …` / `gh: …` error in the list** — run `glab auth status` / `gh auth status`; `lanes` needs a
   logged-in CLI. For a project that cannot be detected from the git remote, set `project` on the provider.

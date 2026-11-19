@@ -165,8 +165,8 @@ an env var).
   state changes on `HookEvent`. Context % uses one model-id table (`session.ContextWindow`, 200k default, 1M for
   `[1m]`). Effort is the newest `effort` field per transcript (absent → the meter is omitted). An ended session is
   read once more and frozen.
-  **Processes:** `session.Sampler` (`internal/session/procs.go`) runs `ps -A -o pid=,ppid=,time=,rss=,command=` and
-  keeps the tree under the session's pane pid (`#{pane_pid}`); it parses both `time` formats (Linux `[dd-]hh:mm:ss`,
+  **Processes:** `session.Sampler` (`internal/session/procs.go`) lists `ps -A -o pid=,ppid=` to find the tree under
+  the session's pane pid (`#{pane_pid}`), then reads only those processes with `ps -p … -o pid=,ppid=,time=,rss=,command=`; it parses both `time` formats (Linux `[dd-]hh:mm:ss`,
   macOS `mm:ss.ss`) and turns the CPU-time delta of two samples over the wall-time delta into a CPU % (`ps`'s
   `%cpu` is a lifetime average on Linux, a decaying one on macOS). A pid's first sample, or a reused pid, has no
   share; a vanished root, empty output or a `ps` error give an empty tree. `agents.go` samples every 3 s in a

@@ -3,7 +3,7 @@
 - **Data flow.** On start `lanes` paints the cached list, then fetches each provider in the background and
   re-fetches every `poll_interval`. While the terminal is unfocused it re-fetches only every `poll_interval_blurred`
   (default 5m, so desktop notifications lag by up to that much), and when it regains focus every provider older than
-  `poll_interval` is fetched at once. This needs a terminal that reports focus; inside tmux add `set -g focus-events on`
+  `poll_interval` is fetched at once. Blurred, the tmux session poll, the usage reads and the config check slow to every 10s (the session preview stops), and focus polls them at once. This needs a terminal that reports focus; inside tmux add `set -g focus-events on`
   to `~/.tmux.conf`. Without focus reports lanes polls at `poll_interval` throughout. A failing provider is retried after `poll_interval`, doubling per consecutive failure up to 5 minutes (`R` / `:refresh` retry at once). New data is diffed into the list by item `id`, so the cursor and your marks
   stay put. Every view re-applies its filter on each refresh.
 - **Fetch status.** The right of the header shows each provider's status, updated every second:

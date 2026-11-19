@@ -93,7 +93,8 @@ an env var).
   (below), `q` quit.
 - Live: background poll (default 30s) diffs into the list, preserving cursor + marks. First paint from disk
   cache (stale-while-revalidate). Terminal focus reporting (`tea.WithReportFocus`) slows the poll to
-  `poll_interval_blurred` (default 5m) while blurred; focus-in fetches every provider older than `poll_interval`.
+  `poll_interval_blurred` (default 5m) while blurred; focus-in fetches every provider older than `poll_interval`. The session poll, usage reads and config stat
+  slow to `blurredPoll` (10s) while blurred, `pollPeek` is skipped, and focus-in runs them at once.
   lanes starts focused, so terminals without focus events poll as before.
 - Fetch status: per provider (`fetchState` in `internal/ui/fetchstate.go`, changed only on the UI goroutine) —
   cached / fetching with spinner and elapsed / failed / updated, plus the last fetch duration, at the right of the

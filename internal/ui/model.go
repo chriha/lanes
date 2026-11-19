@@ -138,6 +138,7 @@ type Model struct {
 	sessByItem map[string][]session.Info
 	polling    bool
 	lastPoll   time.Time   // when the last session poll started, for the idle interval
+	lastSlow   time.Time   // when the usage reads and the config stat last ran, for the blurred interval
 	peek       sessPeekMsg // working directory and last output lines of a session, for the sessions view preview
 	peeking    bool        // a pollPeek is in flight
 	confirm    *confirmState
@@ -542,6 +543,12 @@ const (
 	sessPollFast = time.Second
 	sessPollIdle = 3 * time.Second
 )
+
+const blurredPoll = 10 * time.Second
+
+func (m *Model) slowPollDue(now time.Time) bool { return true }
+
+func (m *Model) peekDue() bool { return true }
 
 // sessPollDue says whether the tick at now should poll the tmux sessions.
 func (m *Model) sessPollDue(now time.Time) bool {

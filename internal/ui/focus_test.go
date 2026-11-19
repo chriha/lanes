@@ -81,7 +81,9 @@ func TestFocusSkipsLoadingProvider(t *testing.T) {
 	m.fetchedAt["p"] = time.Now().Add(-time.Minute)
 	setFetching(m, "p", true)
 	m.spinning = true // the running fetch's animation tick
-	if _, cmd := m.Update(tea.FocusMsg{}); cmd != nil {
+	started := m.fetchStateOf("p").started
+	m.Update(tea.FocusMsg{}) // its command also polls usage: only the fetch bookkeeping is under test
+	if got := m.fetchStateOf("p").started; !got.Equal(started) {
 		t.Error("focus started a second fetch for a provider already loading")
 	}
 }

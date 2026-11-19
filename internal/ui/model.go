@@ -544,20 +544,30 @@ const (
 	sessPollIdle = 3 * time.Second
 )
 
+// blurredPoll is the interval of the session poll, the usage reads and the config stat while the terminal is
+// unfocused; session ends still show up within it.
 const blurredPoll = 10 * time.Second
-
-func (m *Model) slowPollDue(now time.Time) bool { return true }
-
-func (m *Model) peekDue() bool { return true }
 
 // sessPollDue says whether the tick at now should poll the tmux sessions.
 func (m *Model) sessPollDue(now time.Time) bool {
 	every := sessPollIdle
-	if m.onSessionsTab() || m.agents != nil {
+	switch {
+	case m.blurred:
+		every = blurredPoll
+	case m.onSessionsTab() || m.agents != nil:
 		every = sessPollFast
 	}
 	return now.Sub(m.lastPoll) >= every-sessPollFast/2
 }
+
+// slowPollDue says whether the tick at now should read the usage and stat the config files: every tick while the
+// terminal is focused, every blurredPoll otherwise.
+func (m *Model) slowPollDue(now time.Time) bool {
+	return !m.blurred || now.Sub(m.lastSlow) >= blurredPoll-sessPollFast/2
+}
+
+// peekDue says whether the tick should poll the session preview: nobody sees it while the terminal is unfocused.
+func (m *Model) peekDue() bool { return !m.blurred }
 
 // tickSessions is the tick's session poll, skipped while the idle interval has not elapsed.
 func (m *Model) tickSessions(now time.Time) tea.Cmd {
@@ -690,7 +700,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.blurred = true
 	case tea.FocusMsg:
 		m.blurred = false
-		return m, tea.Batch(m.fetchStale(m.cfg.Poll()), m.queryBackground())
+		now := time.Now()
+		m.lastSlow = now
+		return m, tea.Batch(m.fetchStale(m.cfg.Poll()), m.queryBackground(), m.reloadIfChanged(), m.pollSessions(), m.pollPeek(), m.pollUsage(), m.pollUsage5h())
 	case bgSentMsg:
 		return m.onBgSent(msg)
 	case bgTimeoutMsg:
@@ -707,7 +719,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.wake(time.Time(msg), nil) {
 			m.rebuild()
 		}
-		return m, tea.Batch(tick(), m.onTick(), m.tickSessions(time.Time(msg)), m.pollPeek(), m.pollUsage(), m.pollUsage5h())
+		return m, tea.Batch(tick(), m.onTickPolls(time.Time(msg)))
 	case usageMsg:
 		m.usage = msg
 	case usage5hMsg:
@@ -947,16 +959,43 @@ func inherit(old, fresh []item.Item) []item.Item {
 	return fresh
 }
 
-func (m *Model) onTick() tea.Cmd {
-	var cmds []tea.Cmd
-	if config.Mtime().After(m.cfgMod) {
-		cmds = append(cmds, m.reload())
+// onTickPolls starts the periodic polls a tick is due for; see slowPollDue and peekDue.
+func (m *Model) onTickPolls(now time.Time) tea.Cmd {
+	cmds := []tea.Cmd{m.tickSessions(now)}
+	slow := m.slowPollDue(now)
+	if slow {
+		m.lastSlow = now
+		cmds = append(cmds, m.pollUsage(), m.pollUsage5h())
 	}
+	if m.peekDue() {
+		cmds = append(cmds, m.pollPeek())
+	}
+	if slow {
+		cmds = append(cmds, m.reloadIfChanged())
+	}
+	return tea.Batch(append(cmds, m.fetchDue())...)
+}
+
+// reloadIfChanged reloads the config when its files changed since the last load.
+func (m *Model) reloadIfChanged() tea.Cmd {
+	if config.Mtime().After(m.cfgMod) {
+		return m.reload()
+	}
+	return nil
+}
+
+// onTick reloads a changed config and fetches the stale providers.
+func (m *Model) onTick() tea.Cmd {
+	return tea.Batch(m.reloadIfChanged(), m.fetchDue())
+}
+
+// fetchDue fetches the providers stale for the current poll interval.
+func (m *Model) fetchDue() tea.Cmd {
 	interval := m.cfg.Poll()
 	if m.blurred {
 		interval = m.cfg.PollBlurred()
 	}
-	return tea.Batch(append(cmds, m.fetchStale(interval))...)
+	return m.fetchStale(interval)
 }
 
 // fetchStale fetches every provider whose data is older than interval and that is not waiting out a failure.

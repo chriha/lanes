@@ -326,7 +326,7 @@ func (s State) drawLead(c *Canvas, r Rect) {
 	switch {
 	case s.Ended:
 		mark = '■'
-	case s.Hook == "working":
+	case s.Hook == "working" || s.Hook == "background":
 		mark = s.spin()
 	}
 	c.center(r, r.Y+3, strings.TrimSpace(fmt.Sprintf("%c %s %s", mark, s.leadState(), since(s.Start, s.Now))), role)

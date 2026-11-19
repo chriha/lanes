@@ -398,7 +398,7 @@ func TestBackgroundHookIsShownAsTheLeadState(t *testing.T) {
 	if got := m.frame().Hook; got != "background" {
 		t.Errorf("hook %q, want background", got)
 	}
-	if frame := ansi.Strip(m.View()); !strings.Contains(frame, "background") {
+	if frame := ansi.Strip(m.View()); !strings.Contains(frame, string(m.frame().spin())+" background") {
 		t.Errorf("frame lacks the background state:\n%s", frame)
 	}
 }

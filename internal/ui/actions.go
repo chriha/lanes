@@ -64,6 +64,7 @@ func (m *Model) pollSessions() tea.Cmd {
 		return nil
 	}
 	m.polling = true
+	m.lastPoll = time.Now()
 	mgr := m.sess
 	return func() tea.Msg {
 		in, err := mgr.List()

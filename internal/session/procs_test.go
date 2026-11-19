@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -73,7 +74,8 @@ func TestSamplerTree(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Sampler{ps: func() ([]byte, error) { return []byte(tt.out), tt.err }, now: time.Now}
+			out, err := tt.out, tt.err
+			s, _ := fakeSampler(&out, &err, time.Now)
 			if got := s.Sample(tt.root); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Sample(%d) = %+v\nwant %+v", tt.root, got, tt.want)
 			}
@@ -126,7 +128,8 @@ func TestSamplerCPU(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			clock := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 			out := tt.first
-			s := &Sampler{ps: func() ([]byte, error) { return []byte(out), nil }, now: func() time.Time { return clock }}
+			noErr := error(nil)
+			s, _ := fakeSampler(&out, &noErr, func() time.Time { return clock })
 			for _, p := range s.Sample(100) {
 				if p.HasCPU || p.CPU != 0 {
 					t.Errorf("first sample: pid %d has CPU %v (%v), want none", p.PID, p.CPU, p.HasCPU)
@@ -147,7 +150,7 @@ func TestSamplerCPU(t *testing.T) {
 func TestSamplerKeepsHistoryOverAFailedSample(t *testing.T) {
 	clock := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	out, fail := "100 1 00:00:00 1 claude\n", error(nil)
-	s := &Sampler{ps: func() ([]byte, error) { return []byte(out), fail }, now: func() time.Time { return clock }}
+	s, _ := fakeSampler(&out, &fail, func() time.Time { return clock })
 	s.Sample(100)
 	clock, fail = clock.Add(time.Second), errors.New("ps failed")
 	if got := s.Sample(100); got != nil {
@@ -247,5 +250,55 @@ func TestAttribute(t *testing.T) {
 				t.Errorf("Attribute() = %v\nwant %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// fakeSampler is a Sampler over a fake process table: *out holds "pid ppid time rss command" lines, *fail makes
+// ps fail. The returned slice collects the pids each detail call asked for.
+func fakeSampler(out *string, fail *error, now func() time.Time) (*Sampler, *[][]int) {
+	var asked [][]int
+	s := &Sampler{
+		now: now,
+		listPIDs: func() ([]byte, error) {
+			var b strings.Builder
+			for _, line := range strings.Split(*out, "\n") {
+				if p, _, ok := parsePsLine(line); ok {
+					fmt.Fprintf(&b, "%d %d\n", p.PID, p.PPID)
+				}
+			}
+			return []byte(b.String()), *fail
+		},
+		psPIDs: func(pids []int) ([]byte, error) {
+			asked = append(asked, pids)
+			want := map[int]bool{}
+			for _, pid := range pids {
+				want[pid] = true
+			}
+			var b strings.Builder
+			for _, line := range strings.Split(*out, "\n") {
+				if p, _, ok := parsePsLine(line); ok && want[p.PID] {
+					b.WriteString(line + "\n")
+				}
+			}
+			return []byte(b.String()), *fail
+		},
+	}
+	return s, &asked
+}
+
+func TestSamplerAsksPsForTheTreeOnly(t *testing.T) {
+	out := "1 0 0:01 1 init\n100 1 0:01 1 claude\n200 100 0:01 1 go test\n300 200 0:01 1 a.test\n400 1 0:01 1 vim\n"
+	noErr := error(nil)
+	s, asked := fakeSampler(&out, &noErr, time.Now)
+	if got := s.Sample(100); len(got) != 3 {
+		t.Fatalf("Sample(100) = %+v, want 3 processes", got)
+	}
+	want := [][]int{{100, 200, 300}}
+	if !reflect.DeepEqual(*asked, want) {
+		t.Errorf("ps asked for %v, want %v", *asked, want)
+	}
+	*asked = nil
+	if got := s.Sample(999); got != nil || len(*asked) != 0 {
+		t.Errorf("vanished root: got %+v, asked %v; want empty and no detail call", got, *asked)
 	}
 }

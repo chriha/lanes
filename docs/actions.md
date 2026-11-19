@@ -137,7 +137,8 @@ Each item gets its own session; items that already have the action running are s
 **Session limit.** `max_claude_sessions` under `[settings]` (default `3`, `0` = no limit) caps how many live
 sessions lanes' actions run at once; starts beyond it wait in a queue. Every live session lanes started counts, a
 [shell](#shell-sessions) included, whatever its command; a Claude session that is `waiting` (finished its turn,
-idle at the prompt), finished (dead) sessions and [run actions](#run-actions) do not. Resuming a waiting session
+idle at the prompt), finished (dead) sessions and [run actions](#run-actions) do not. A session that is `background` (turn ended, a background job still runs) counts, since work is
+running. Resuming a waiting session
 makes it `working` and it counts again, so the count can end above the limit; nothing is stopped. Restarting a
 finished session counts as a new one.
 

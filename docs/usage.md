@@ -307,8 +307,15 @@ are dimmed too.
 | `◐ review: working`  | a Claude session is working                             |
 | `? review: asking`   | a Claude session asks a question / needs permission     |
 | `● review: waiting`  | a Claude session finished its turn and waits for you    |
+| `◐ review: background` | a Claude session finished its turn while a background job still runs (see below) |
 | `✓ review`     | the session's command exited with status 0                    |
 | `✗ review (3)` | the session's command exited with status 3                    |
+
+`background` is its own state, not one that needs you: it is not counted in the top-right summary's `?` / `●`, not
+offered by `n`, not announced by a desktop notification and not in `lanes status`. lanes spots a launch from the
+`run_in_background` Bash option or a background subagent and clears it when Claude acts again. Limit: `background` can
+show a little too long when a job ends without Claude reacting to it yet; a Claude version that renames that option
+falls back to `waiting`.
 
 The top right of the screen summarizes live sessions (`◐ 2  ? 1  ● 1`) and when the list was last refreshed.
 

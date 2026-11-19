@@ -60,8 +60,9 @@ an env var).
 - **Session** — tmux session on dedicated socket (`tmux -L <Name>`), one per (action, item). Never touches the
   user's own tmux server. `remain-on-exit` keeps exit status.
 - **Status** — session: `running | exited(0) | failed(n)`. Claude sessions additionally:
-  `working | waiting-input | question | done`, reported by hooks injected via `--settings` that write
-  `state/<session>.json`.
+  `working | waiting-input | question | background | done`, reported by hooks injected via `--settings` that write
+  `state/<session>.json`. `background` (turn ended while a background job runs, tracked by a launch marker in that
+  file) is shown as an info badge and is not an attention state.
 - **Item history** — per-item log of actions run, when, outcome (JSON-lines in state dir), viewable in a
   detail panel.
 - **Badges** — extra per-row status icons from provider fields: CI failed/running/passed, threads open,

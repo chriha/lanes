@@ -20,7 +20,11 @@
   crashing `lanes`.
 - **Claude status** is written by hooks to a small file per session in the state directory; `lanes` reads those
   files together with the tmux pane state. The state is ignored once only a shell is left in the pane (Claude
-  quit or crashed), so the session counts as running again.
+  quit or crashed), so the session counts as running again. When Claude ends its turn while a background job (Bash
+  `run_in_background`, a background subagent) is still running, the `Stop` hook writes `background` instead of
+  `waiting`: a `PreToolUse` hook records the launch in the state file, and the next prompt, tool use or `SubagentStop`
+  clears it. `background` is not counted as needing you. It can show a little too long when a job ends before Claude
+  acts on it.
 - **Config reload** compares the modification time of the global and project files every second.
 
 

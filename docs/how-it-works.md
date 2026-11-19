@@ -16,7 +16,7 @@
   shows its error instead of items.
 - **Sessions** are tmux sessions on a dedicated tmux server named `lanes-<project>` (`tmux -L …`). The session
   name is `<action>~<item id>`, which is how `lanes` maps sessions back to items without any database — the
-  list of sessions is simply asked from tmux once per second. This also means sessions survive quitting or
+  list of sessions is simply asked from tmux every three seconds (every second while the sessions tab or the agent view is open). This also means sessions survive quitting or
   crashing `lanes`.
 - **Claude status** is written by hooks to a small file per session in the state directory; `lanes` reads those
   files together with the tmux pane state. The state is ignored once only a shell is left in the pane (Claude

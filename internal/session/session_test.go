@@ -1062,3 +1062,80 @@ func TestLaunch(t *testing.T) {
 		})
 	}
 }
+
+// hookRun feeds payload to RunHook(event) and returns the state file the hook left.
+func hookRun(t *testing.T, event, payload string) (st struct {
+	State      string
+	Background bool
+}) {
+	t.Helper()
+	feedStdin(t, payload)
+	RunHook(event)
+	if b, err := os.ReadFile(statePath("fix~1")); err == nil {
+		_ = json.Unmarshal(b, &st)
+	}
+	return st
+}
+
+func TestHookBackgroundMarker(t *testing.T) {
+	const bg = `{"tool_name":"Bash","tool_input":{"command":"sleep 9","run_in_background":true}}`
+	tests := []struct {
+		name   string
+		events [][2]string // event, stdin
+		want   string
+		wantBg bool
+	}{
+		{"stop without launch waits", [][2]string{{"PreToolUse", "{}"}, {"Stop", "{}"}}, "waiting", false},
+		{"stop after bash launch is background", [][2]string{{"PreToolUse", bg}, {"Stop", "{}"}}, "background", true},
+		{"agent launch counts", [][2]string{{"PreToolUse", `{"tool_name":"Agent","tool_input":{"run_in_background":true}}`}, {"Stop", "{}"}}, "background", true},
+		{"foreground bash does not", [][2]string{{"PreToolUse", `{"tool_name":"Bash","tool_input":{"run_in_background":false}}`}, {"Stop", "{}"}}, "waiting", false},
+		{"launch marks working until stop", [][2]string{{"PreToolUse", bg}}, "working", true},
+		{"prompt clears", [][2]string{{"PreToolUse", bg}, {"UserPromptSubmit", "{}"}, {"Stop", "{}"}}, "waiting", false},
+		{"later tool clears", [][2]string{{"PreToolUse", bg}, {"PreToolUse", `{"tool_input":{"command":"ls"}}`}, {"Stop", "{}"}}, "waiting", false},
+		{"subagent stop clears and keeps state", [][2]string{{"PreToolUse", bg}, {"SubagentStop", "{}"}}, "working", false},
+		{"idle notification keeps background", [][2]string{{"PreToolUse", bg}, {"Notification", `{"notification_type":"idle_prompt"}`}}, "background", true},
+		{"permission prompt asks", [][2]string{{"PreToolUse", bg}, {"Notification", `{"notification_type":"permission_prompt"}`}}, "asking", true},
+		{"subagent stop alone writes nothing", [][2]string{{"SubagentStop", "{}"}}, "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateEnv(t)
+			t.Setenv("LANES_SESSION", "fix~1")
+			var got struct {
+				State      string
+				Background bool
+			}
+			for _, e := range tt.events {
+				got = hookRun(t, e[0], e[1])
+			}
+			if got.State != tt.want || got.Background != tt.wantBg {
+				t.Errorf("state = %q background = %v, want %q %v", got.State, got.Background, tt.want, tt.wantBg)
+			}
+		})
+	}
+}
+
+func TestHookSessionEndRemovesBackgroundMarker(t *testing.T) {
+	stateEnv(t)
+	t.Setenv("LANES_SESSION", "fix~1")
+	hookRun(t, "PreToolUse", `{"tool_input":{"run_in_background":true}}`)
+	hookRun(t, "SessionEnd", "{}")
+	if _, err := os.Stat(statePath("fix~1")); !os.IsNotExist(err) {
+		t.Errorf("state file left behind: %v", err)
+	}
+}
+
+func TestSettingsFileRegistersSubagentStop(t *testing.T) {
+	stateEnv(t)
+	p, err := SettingsFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), " hook SubagentStop") {
+		t.Errorf("settings lack the SubagentStop hook: %s", b)
+	}
+}

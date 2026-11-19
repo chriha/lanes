@@ -58,14 +58,31 @@ func ClaudeTranscript(name string) string { return readClaudeIDs(name).Transcrip
 // ForgetClaude removes the Claude session ids the hooks recorded for the session.
 func ForgetClaude(name string) { _ = os.Remove(claudePath(name)) }
 
+// hookState is the content of a session's state file. Background marks a launched background job (Bash or
+// subagent) that Claude has not been re-invoked for since; older lanes ignore the field.
+type hookState struct {
+	State      string `json:"state"`
+	At         int64  `json:"at"`
+	Background bool   `json:"background,omitempty"`
+}
+
 func readState(name string) string {
 	b, err := os.ReadFile(statePath(name))
 	if err != nil {
 		return ""
 	}
-	var s struct{ State string }
+	var s hookState
 	_ = json.Unmarshal(b, &s)
 	return s.State
+}
+
+// readHookState reads the state file from inside the session; a missing or corrupt one gives the zero value.
+func readHookState(name string) hookState {
+	var s hookState
+	if b, err := os.ReadFile(hookStatePath(name)); err == nil {
+		_ = json.Unmarshal(b, &s)
+	}
+	return s
 }
 
 // RunHook is the `<app> hook <event>` entry point called by Claude Code hooks. It maps the event to a
@@ -81,6 +98,9 @@ func RunHook(event string) {
 		claudeIDs
 		NotificationType string `json:"notification_type"`
 		Reason           string `json:"reason"`
+		ToolInput        struct {
+			RunInBackground bool `json:"run_in_background"`
+		} `json:"tool_input"`
 	}
 	if b, err := io.ReadAll(os.Stdin); err == nil {
 		_ = json.Unmarshal(b, &in)
@@ -101,14 +121,31 @@ func RunHook(event string) {
 		"PreToolUse":       "working",
 		"Stop":             "waiting",
 		"Notification":     "asking",
+		"SubagentStop":     "", // only clears the marker; the state stays
 	}[event]
-	if event == "Notification" && in.NotificationType == "idle_prompt" {
+	// A launch sets the marker; Claude acting again (a prompt, another tool, a finished subagent) clears it.
+	prev := readHookState(name)
+	background := prev.Background
+	switch event {
+	case "PreToolUse":
+		background = in.ToolInput.RunInBackground
+	case "UserPromptSubmit", "SubagentStop":
+		background = false
+	}
+	idle := event == "Notification" && in.NotificationType == "idle_prompt"
+	if idle {
 		state = "waiting"
+	}
+	if background && (event == "Stop" || idle) {
+		state = "background"
+	}
+	if event == "SubagentStop" {
+		state = prev.State // keep the state, drop the marker
 	}
 	if state == "" {
 		return
 	}
-	b, _ := json.Marshal(map[string]any{"state": state, "at": time.Now().Unix()})
+	b, _ := json.Marshal(hookState{State: state, At: time.Now().Unix(), Background: background})
 	_ = app.WriteFile(hookStatePath(name), b)
 }
 
@@ -128,6 +165,7 @@ func SettingsFile() (string, error) {
 		"UserPromptSubmit": hook("UserPromptSubmit"),
 		"PreToolUse":       hook("PreToolUse"),
 		"Stop":             hook("Stop"),
+		"SubagentStop":     hook("SubagentStop"),
 		"Notification":     hook("Notification"),
 		"SessionEnd":       hook("SessionEnd"),
 	}}

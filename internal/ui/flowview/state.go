@@ -51,7 +51,7 @@ type LogLine struct {
 }
 
 // hookStates are the session column's checkpoints, in order.
-var hookStates = [...]string{"working", "asking", "waiting"}
+var hookStates = [...]string{"working", "asking", "waiting", "background"}
 
 var spinner = [...]rune{'◐', '◓', '◑', '◒'}
 

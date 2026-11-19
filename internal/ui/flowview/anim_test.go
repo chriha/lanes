@@ -403,6 +403,20 @@ func TestBackgroundHookIsShownAsTheLeadState(t *testing.T) {
 	}
 }
 
+func TestBackgroundHookMarksItsOwnCheckpoint(t *testing.T) {
+	m := liveModel()
+	m.Apply(HookEvent{"background"})
+	frame := ansi.Strip(m.View())
+	if !strings.Contains(frame, "◆ background") {
+		t.Errorf("frame lacks the marked background checkpoint:\n%s", frame)
+	}
+	for _, h := range []string{"working", "asking", "waiting"} {
+		if !strings.Contains(frame, "◇ "+h) {
+			t.Errorf("frame lacks the unmarked %q checkpoint", h)
+		}
+	}
+}
+
 func TestUsageEventSetsThe5hUsage(t *testing.T) {
 	tests := []struct {
 		name string

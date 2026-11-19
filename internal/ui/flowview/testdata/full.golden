@@ -14,27 +14,27 @@
 ┃ ◇ asking          █┃  ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  42% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   7% ┃  █
 ┃ ┆                 █┃  ┃ 412.3k tok  37 calls 5h 7% ┃   ┃ 23.5k tok   8 calls  5h 0% ┃  █
 ┃ ◇ waiting         █┃  ┃      slice 2 of #196       ┃   ┃        triage #201         ┃  █
-┃                   █┃  ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  █
-┃ turns           12█┃  ┗━ ◓ 9m00s ▸ Bash go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛  █
-┃ tools           48█┃                 │                                                 █
-┃ tokens   1,234,567█┃                 └────────────────┐                                █
-┃   in        12,345█┃                                  ▼                                █
-┃   out       98,765█┃                   ┏━ code-reviewer ━━━━━━━━━━━━┓                  █
-┃   cache  1,123,457█┃                   ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                  █
-┃ 5h             21%█┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   -- ┃                  █
-┃ agents    ◓2 ✓1 ✗1█┃                   ┃ 98.8k tok  21 calls  5h 2% ┃                  █
-┃                   █┃                   ┃      review the diff       ┃                  █
-┃ files             █┃                   ┃                            ┃                  █
-┃ render_panels.go  █┃                   ┗━ ◓ 2m00s ▸ Grep drawAgent ━┛                  █
-┃ state.go          █┃                                  │                                █
-┃ layout.go         █┃                                  │                                █
-┃ README.md         █┃                                  ▼                                █
-┃                   █┃                   ┏━ validator ━━━━━━━━━━━━━━━━┓                  █
-┃ last:             █┃                   ┃         sonnet 4.5         ┃                  █
-┃ Slice 2 is next:  █┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  12% ┃                  █
-┃ the layered layout█┃                   ┃ 5.4k tok   3 calls   5h 0% ┃                  █
-┃ and the static…   ░┃                   ┃     validate a finding     ┃                  █
-┃                   ░┃                   ┃                            ┃                  ░
+┃ ┆                 █┃  ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃  █
+┃ ◇ background      █┃  ┗━ ◓ 9m00s ▸ Bash go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛  █
+┃                   █┃                 │                                                 █
+┃ turns           12█┃                 └────────────────┐                                █
+┃ tools           48█┃                                  ▼                                █
+┃ tokens   1,234,567█┃                   ┏━ code-reviewer ━━━━━━━━━━━━┓                  █
+┃   in        12,345█┃                   ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                  █
+┃   out       98,765█┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   -- ┃                  █
+┃   cache  1,123,457█┃                   ┃ 98.8k tok  21 calls  5h 2% ┃                  █
+┃ 5h             21%█┃                   ┃      review the diff       ┃                  █
+┃ agents    ◓2 ✓1 ✗1█┃                   ┃                            ┃                  █
+┃                   █┃                   ┗━ ◓ 2m00s ▸ Grep drawAgent ━┛                  █
+┃ files             █┃                                  │                                █
+┃ render_panels.go  █┃                                  │                                █
+┃ state.go          █┃                                  ▼                                █
+┃ layout.go         █┃                   ┏━ validator ━━━━━━━━━━━━━━━━┓                  █
+┃ README.md         █┃                   ┃         sonnet 4.5         ┃                  █
+┃                   ░┃                   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  12% ┃                  █
+┃ last:             ░┃                   ┃ 5.4k tok   3 calls   5h 0% ┃                  █
+┃ Slice 2 is next:  ░┃                   ┃     validate a finding     ┃                  █
+┃ the layered layout░┃                   ┃                            ┃                  ░
 ┗━━━━━━━━━━━━━━━━━━━━┛ ██████████████████████████████████████████████████████████░░░░░░░░ 
                                                      diagram  lines 1-34/35  cols 1-66/75 
 ┌─ session log ──────────────────────────────────────────────────────────────────── 6/6 ─┐

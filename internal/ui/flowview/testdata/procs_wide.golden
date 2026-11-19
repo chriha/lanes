@@ -14,31 +14,31 @@
 ┃ ◇ asking           ┃        ┃     opus 4.1 ▮▮▮▯ high     ┃   ┃     haiku 4.5 ▮▯▯▯ low     ┃   ┃         haiku 4.5          ┃ │ ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃       █
 ┃ ┆                  ┃        ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  42% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   7% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  10% ┃ │ ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  11% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  12% ┃       █
 ┃ ◇ waiting          ┃        ┃ 412.3k  37  5h 7% cpu 276% ┃   ┃ 23.5k tok   8 calls  5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃ │ ┃ 0 tok     0 calls    5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃       █
-┃                    ┃        ┃      slice 2 of #196       ┃   ┃        triage #201         ┃   ┃       scan a package       ┃ │ ┃       scan a package       ┃   ┃       scan a package       ┃       █
-┃ turns           12 ┃        ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃   ┃                            ┃ │ ┃                            ┃   ┃                            ┃       █
-┃ tools           48 ┃        ┗━ ◓ 9m00s ▸ Bash go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛ │ ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛       █
-┃ tokens   1,234,567 ┃                       │                                                                                 │                                                                       █
-┃   in        12,345 ┃                       ├───────────────┬────────────────┬────────────────────────────────┬───────────────┴────────────────┬────────────────────────────────┐                     █
-┃   out       98,765 ┃                       ▼               │                ▼                                ▼                                ▼                                ▼                     █
-┃   cache  1,123,457 ┃        ┏━ worker-3 ━━━━━━━━━━━━━━━━━┓ │ ┏━ worker-4 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-5 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-6 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-7 ━━━━━━━━━━━━━━━━━┓       █
-┃ 5h             21% ┃        ┃         haiku 4.5          ┃ │ ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃       █
-┃ agents   ◓10 ✓1 ✗1 ┃        ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  13% ┃ │ ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  14% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  15% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  16% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  17% ┃       █
-┃                    ┃        ┃ 0 tok     0 calls    5h 0% ┃ │ ┃ 0 tok     0 calls    5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃       █
-┃ files              ┃        ┃       scan a package       ┃ │ ┃       scan a package       ┃   ┃       scan a package       ┃   ┃       scan a package       ┃   ┃       scan a package       ┃       █
-┃ render_panels.go   ┃        ┃                            ┃ │ ┃                            ┃   ┃                            ┃   ┃                            ┃   ┃                            ┃       █
-┃ state.go           ┃        ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛ │ ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛       █
-┃ layout.go          ┃                                       │                                                                                                                                         █
-┃ README.md          ┃                                       └─────────────────────────────────────────────────┐                                                                                       █
-┃                    ┃                                                                                         ▼                                                                                       █
-┃ last:              ┃                                                                          ┏━ code-reviewer ━━━━━━━━━━━━┓                                                                         █
-┃ Slice 2 is next:   ┃                                                                          ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                                                                         █
-┃ the layered layout ┃                                                                          ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   -- ┃                                                                         █
-┃ and the static…    ┃                                                                          ┃ 98.8k tok  21 calls  5h 2% ┃                                                                         █
-┃                    ┃                                                                          ┃      review the diff       ┃                                                                         ░
-┃ advisor   opus 4.1 ┃                                                                          ┃                            ┃                                                                         ░
-┃   calls          3 ┃                                                                          ┗━ ◓ 2m00s ▸ Grep drawAgent ━┛                                                                         ░
-┃                    ┃                                                                                         │                                                                                       ░
-┃                    ┃                                                                                         │                                                                                       ░
+┃ ┆                  ┃        ┃      slice 2 of #196       ┃   ┃        triage #201         ┃   ┃       scan a package       ┃ │ ┃       scan a package       ┃   ┃       scan a package       ┃       █
+┃ ◇ background       ┃        ┃» Running the whole test su…┃   ┃   » Labelled it as a bug   ┃   ┃                            ┃ │ ┃                            ┃   ┃                            ┃       █
+┃                    ┃        ┗━ ◓ 9m00s ▸ Bash go test … ━┛   ┗━ ✓ done 1m00s ━━━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛ │ ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛       █
+┃ turns           12 ┃                       │                                                                                 │                                                                       █
+┃ tools           48 ┃                       ├───────────────┬────────────────┬────────────────────────────────┬───────────────┴────────────────┬────────────────────────────────┐                     █
+┃ tokens   1,234,567 ┃                       ▼               │                ▼                                ▼                                ▼                                ▼                     █
+┃   in        12,345 ┃        ┏━ worker-3 ━━━━━━━━━━━━━━━━━┓ │ ┏━ worker-4 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-5 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-6 ━━━━━━━━━━━━━━━━━┓   ┏━ worker-7 ━━━━━━━━━━━━━━━━━┓       █
+┃   out       98,765 ┃        ┃         haiku 4.5          ┃ │ ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃   ┃         haiku 4.5          ┃       █
+┃   cache  1,123,457 ┃        ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  13% ┃ │ ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  14% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  15% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  16% ┃   ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  17% ┃       █
+┃ 5h             21% ┃        ┃ 0 tok     0 calls    5h 0% ┃ │ ┃ 0 tok     0 calls    5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃   ┃ 0 tok     0 calls    5h 0% ┃       █
+┃ agents   ◓10 ✓1 ✗1 ┃        ┃       scan a package       ┃ │ ┃       scan a package       ┃   ┃       scan a package       ┃   ┃       scan a package       ┃   ┃       scan a package       ┃       █
+┃                    ┃        ┃                            ┃ │ ┃                            ┃   ┃                            ┃   ┃                            ┃   ┃                            ┃       █
+┃ files              ┃        ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛ │ ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛   ┗━ ◓ 1m00s ▸ Read ━━━━━━━━━━━┛       █
+┃ render_panels.go   ┃                                       │                                                                                                                                         █
+┃ state.go           ┃                                       └─────────────────────────────────────────────────┐                                                                                       █
+┃ layout.go          ┃                                                                                         ▼                                                                                       █
+┃ README.md          ┃                                                                          ┏━ code-reviewer ━━━━━━━━━━━━┓                                                                         █
+┃                    ┃                                                                          ┃   sonnet 4.5 ▮▮▯▯ medium   ┃                                                                         █
+┃ last:              ┃                                                                          ┃ ctx ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬   -- ┃                                                                         █
+┃ Slice 2 is next:   ┃                                                                          ┃ 98.8k tok  21 calls  5h 2% ┃                                                                         █
+┃ the layered layout ┃                                                                          ┃      review the diff       ┃                                                                         ░
+┃ and the static…    ┃                                                                          ┃                            ┃                                                                         ░
+┃                    ┃                                                                          ┗━ ◓ 2m00s ▸ Grep drawAgent ━┛                                                                         ░
+┃ advisor   opus 4.1 ┃                                                                                         │                                                                                       ░
+┃   calls          3 ┃                                                                                         │                                                                                       ░
 ┗━━━━━━━━━━━━━━━━━━━━┛                                                                                         ▼                                                                                       ░
                                                                                                                                                                                  diagram  lines 1-39/46 
 ┌─ session log ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 6/6 ─┐

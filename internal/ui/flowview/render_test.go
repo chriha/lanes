@@ -261,8 +261,8 @@ func TestBarsFillTheirRow(t *testing.T) {
 		return c
 	}
 	col := func(w int) *Canvas {
-		c := NewCanvas(w, 37, nil)
-		fixtureState().drawSession(c, Rect{0, 0, w, 37})
+		c := NewCanvas(w, 39, nil)
+		fixtureState().drawSession(c, Rect{0, 0, w, 39})
 		return c
 	}
 	tools := func(w int) *Canvas {
@@ -566,7 +566,7 @@ func TestSessionColumn(t *testing.T) {
 		want    map[int]string // row → what it holds, spaces collapsed
 		without []string       // must not appear anywhere in the column
 	}{
-		{"the whole dashboard", fixtureState(), 37, map[int]string{
+		{"the whole dashboard", fixtureState(), 39, map[int]string{
 			0:  "┏━ session ━",
 			1:  "┃ issue-196 12m03s ┃",
 			2:  "┃ ctx ▬▬▬▬▬▬▬▬▬ 61% ┃",
@@ -578,30 +578,32 @@ func TestSessionColumn(t *testing.T) {
 			10: "┃ ◇ asking ┃",
 			11: "┃ ┆ ┃",
 			12: "┃ ◇ waiting ┃",
-			14: "┃ turns 12 ┃",
-			15: "┃ tools 48 ┃",
-			16: "┃ tokens 1,234,567 ┃",
-			17: "┃ in 12,345 ┃",
-			18: "┃ out 98,765 ┃",
-			19: "┃ cache 1,123,457 ┃",
-			20: "┃ 5h 21% ┃",
-			21: "┃ agents ◓2 ✓1 ✗1 ┃",
-			23: "┃ files ┃",
-			24: "┃ render_panels.go ┃",
-			27: "┃ README.md ┃",
-			29: "┃ last: ┃",
-			30: "┃ Slice 2 is next: ┃",
-			34: "┃ advisor opus 4.1 ┃",
-			35: "┃ calls 3 ┃",
-			36: "┗━━",
+			13: "┃ ┆ ┃",
+			14: "┃ ◇ background ┃",
+			16: "┃ turns 12 ┃",
+			17: "┃ tools 48 ┃",
+			18: "┃ tokens 1,234,567 ┃",
+			19: "┃ in 12,345 ┃",
+			20: "┃ out 98,765 ┃",
+			21: "┃ cache 1,123,457 ┃",
+			22: "┃ 5h 21% ┃",
+			23: "┃ agents ◓2 ✓1 ✗1 ┃",
+			25: "┃ files ┃",
+			26: "┃ render_panels.go ┃",
+			29: "┃ README.md ┃",
+			31: "┃ last: ┃",
+			32: "┃ Slice 2 is next: ┃",
+			36: "┃ advisor opus 4.1 ┃",
+			37: "┃ calls 3 ┃",
+			38: "┗━━",
 		}, nil},
-		{"unknown effort omits its row", noEffort, 37, map[int]string{3: "", 4: "┃ activity 3/min ┃"}, []string{"effort", "▮"}},
-		{"unknown context", noCtx, 37, map[int]string{2: "┃ ctx ▬▬▬▬▬▬▬▬▬ -- ┃"}, nil},
-		{"no advisor, no advisor rows", noAdvisor, 37, map[int]string{34: "", 35: ""}, []string{"advisor"}},
-		{"no files, no files rows", noFiles, 37, map[int]string{23: "┃ last: ┃"}, []string{"files"}},
-		{"ended: no checkpoint is active and no agent runs", ended, 37, map[int]string{8: "┃ ◇ working ┃", 21: "┃ agents ■0 ✓1 ✗1 ┃"}, []string{"◆", "◓"}},
-		{"double-digit agent counts fit", tenAgents, 37, map[int]string{21: "┃ agents ◓10 ✓1 ✗1 ┃"}, nil},
-		{"unknown 5h usage omits its row", no5h, 37, map[int]string{20: "┃ agents ◓2 ✓1 ✗1 ┃"}, []string{"5h"}},
+		{"unknown effort omits its row", noEffort, 39, map[int]string{3: "", 4: "┃ activity 3/min ┃"}, []string{"effort", "▮"}},
+		{"unknown context", noCtx, 39, map[int]string{2: "┃ ctx ▬▬▬▬▬▬▬▬▬ -- ┃"}, nil},
+		{"no advisor, no advisor rows", noAdvisor, 39, map[int]string{36: "", 37: ""}, []string{"advisor"}},
+		{"no files, no files rows", noFiles, 39, map[int]string{25: "┃ last: ┃"}, []string{"files"}},
+		{"ended: no checkpoint is active and no agent runs", ended, 39, map[int]string{8: "┃ ◇ working ┃", 23: "┃ agents ■0 ✓1 ✗1 ┃"}, []string{"◆", "◓"}},
+		{"double-digit agent counts fit", tenAgents, 39, map[int]string{23: "┃ agents ◓10 ✓1 ✗1 ┃"}, nil},
+		{"unknown 5h usage omits its row", no5h, 39, map[int]string{22: "┃ agents ◓2 ✓1 ✗1 ┃"}, []string{"5h"}},
 		{"rows past the bottom are left out", fixtureState(), 10, map[int]string{8: "┃ ◆ working ┃", 9: "┗━━"}, []string{"asking", "last:"}},
 	}
 	for _, tt := range tests {
@@ -627,8 +629,8 @@ func TestSessionColumn(t *testing.T) {
 }
 
 func TestSessionColumnHighlightsTheHookState(t *testing.T) {
-	c := NewCanvas(22, 37, nil)
-	fixtureState().drawSession(c, Rect{0, 0, 22, 37})
+	c := NewCanvas(22, 39, nil)
+	fixtureState().drawSession(c, Rect{0, 0, 22, 39})
 	for x := 1; x < 21; x++ {
 		if got := c.At(x, 8).Role; got != RoleSelected {
 			t.Fatalf("cell %d of the working row has role %d, want the selection", x, got)

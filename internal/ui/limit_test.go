@@ -104,6 +104,8 @@ func TestSessionLimit(t *testing.T) {
 		{name: "waiting Claude sessions are not counted", live: withClaude("waiting", others(3, false)), wantStarts: 1},
 		{name: "working Claude sessions are counted", live: withClaude("working", others(3, false)),
 			wantQueued: []string{"1"}, wantNotice: "Limit of 3 reached (3 live)"},
+		{name: "background Claude sessions are counted", live: withClaude("background", others(3, false)),
+			wantQueued: []string{"1"}, wantNotice: "Limit of 3 reached (3 live)"},
 		{name: "asking Claude sessions are counted", live: withClaude("asking", others(3, false)),
 			wantQueued: []string{"1"}, wantNotice: "Limit of 3 reached (3 live)"},
 		{name: "waiting sessions are left out of the live count", limit: intp(2),

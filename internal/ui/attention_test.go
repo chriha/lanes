@@ -28,6 +28,7 @@ func TestHeaderAttentionCount(t *testing.T) {
 		"d": {{Dead: true}},
 		"e": {{Claude: "waiting"}, {Claude: "asking"}},
 		"f": {{Dead: true, Claude: "waiting"}},
+		"g": {{Claude: "background"}},
 	}
 	tests := []struct {
 		name  string
@@ -41,6 +42,7 @@ func TestHeaderAttentionCount(t *testing.T) {
 		{"failed session", []item.Item{{ID: "c"}}, "1"},
 		{"ok session", []item.Item{{ID: "d"}}, "1"},
 		{"dead session", []item.Item{{ID: "f"}}, "1"},
+		{"background session", []item.Item{{ID: "g"}}, "1"},
 		{"counted once", []item.Item{{ID: "e"}}, "1 1"},
 		{"several items", []item.Item{{ID: "a"}, {ID: "b"}, {ID: "e"}}, "3 2"},
 	}

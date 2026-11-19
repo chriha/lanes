@@ -28,7 +28,7 @@ type Info struct {
 	Dead    bool
 	Exit    int
 	Created time.Time
-	Claude  string // working | asking | waiting, empty if the command does not report status
+	Claude  string // working | asking | waiting | background, empty if the command does not report status
 	PID     int    // the pane's process, 0 when unknown
 }
 
@@ -392,6 +392,8 @@ func (i Info) Badge() item.Badge {
 		return item.Badge{Text: fmt.Sprintf("✗ %s (%d)", i.Action, i.Exit), Kind: "bad"}
 	case i.Claude == "working":
 		return item.Badge{Text: "◐ " + i.Action + ": working", Kind: "info"}
+	case i.Claude == "background":
+		return item.Badge{Text: "◐ " + i.Action + ": background", Kind: "info"}
 	case i.Claude == "asking":
 		return item.Badge{Text: "? " + i.Action + ": asking", Kind: "warn"}
 	case i.Claude == "waiting":

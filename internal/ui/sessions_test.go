@@ -534,6 +534,7 @@ func TestNextAttention(t *testing.T) {
 		at("w-new", "waiting", 40, false),
 		at("a-new", "asking", 30, false),
 		at("busy", "working", 25, false),
+		at("bg", "background", 26, false),
 		at("dead", "asking", 15, true),
 		at("w-old", "waiting", 20, false),
 		at("a-old", "asking", 10, false),

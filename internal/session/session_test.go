@@ -80,6 +80,7 @@ func TestBadge(t *testing.T) {
 		{"working", Info{Action: "fix", Claude: "working"}, "◐ fix: working", "info"},
 		{"asking", Info{Action: "fix", Claude: "asking"}, "? fix: asking", "warn"},
 		{"waiting", Info{Action: "fix", Claude: "waiting"}, "● fix: waiting", "warn"},
+		{"background", Info{Action: "fix", Claude: "background"}, "◐ fix: background", "info"},
 		{"running", Info{Action: "fix"}, "▶ fix", "info"},
 		{"dead wins over claude", Info{Action: "fix", Dead: true, Claude: "working"}, "✓ fix", "ok"},
 	}
@@ -444,6 +445,7 @@ func TestCount(t *testing.T) {
 		{"working is running", []Info{{Claude: "working"}}, 1, 0, 0},
 		{"asking", []Info{{Claude: "asking"}, {Claude: "asking"}}, 0, 2, 0},
 		{"waiting", []Info{{Claude: "waiting"}}, 0, 0, 1},
+		{"background is not asking or waiting", []Info{{Claude: "background"}}, 1, 0, 0},
 		{"mixed", []Info{{Claude: "working"}, {Claude: "asking"}, {Claude: "waiting"}, {Claude: "waiting"}, {Dead: true}}, 1, 1, 2},
 	}
 	for _, tt := range tests {
@@ -470,6 +472,7 @@ func TestStatusLine(t *testing.T) {
 		{"dead asking ignored", "fix~1\t1\t0\t1\tclaude\t0\n", nil, map[string]string{"fix~1": "asking"}, ""},
 		{"asking only", "fix~1\t0\t0\t1\tclaude\t0\n", nil, map[string]string{"fix~1": "asking"}, "? 1"},
 		{"waiting only", "fix~1\t0\t0\t1\tclaude\t0\n", nil, map[string]string{"fix~1": "waiting"}, "● 1"},
+		{"background ignored", "fix~1\t0\t0\t1\tclaude\t0\n", nil, map[string]string{"fix~1": "background"}, ""},
 		{"both", "fix~1\t0\t0\t1\tclaude\t0\nfix~2\t0\t0\t2\tclaude\t0\nfix~3\t0\t0\t3\tclaude\t0\nfix~4\t0\t0\t4\tclaude\t0\n", nil,
 			map[string]string{"fix~1": "asking", "fix~2": "waiting", "fix~3": "waiting", "fix~4": "working"}, "? 1 ● 2"},
 	}

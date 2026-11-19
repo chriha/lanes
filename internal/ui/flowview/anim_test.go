@@ -392,6 +392,17 @@ func TestHookEventMovesTheCheckpoint(t *testing.T) {
 	}
 }
 
+func TestBackgroundHookIsShownAsTheLeadState(t *testing.T) {
+	m := liveModel()
+	m.Apply(HookEvent{"background"})
+	if got := m.frame().Hook; got != "background" {
+		t.Errorf("hook %q, want background", got)
+	}
+	if frame := ansi.Strip(m.View()); !strings.Contains(frame, "background") {
+		t.Errorf("frame lacks the background state:\n%s", frame)
+	}
+}
+
 func TestUsageEventSetsThe5hUsage(t *testing.T) {
 	tests := []struct {
 		name string

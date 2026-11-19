@@ -1095,6 +1095,7 @@ func TestHookBackgroundMarker(t *testing.T) {
 		{"subagent stop clears and keeps state", [][2]string{{"PreToolUse", bg}, {"SubagentStop", "{}"}}, "working", false},
 		{"idle notification keeps background", [][2]string{{"PreToolUse", bg}, {"Notification", `{"notification_type":"idle_prompt"}`}}, "background", true},
 		{"permission prompt asks", [][2]string{{"PreToolUse", bg}, {"Notification", `{"notification_type":"permission_prompt"}`}}, "asking", true},
+		{"subagent stop ends background", [][2]string{{"PreToolUse", bg}, {"Stop", "{}"}, {"SubagentStop", "{}"}}, "waiting", false},
 		{"subagent stop alone writes nothing", [][2]string{{"SubagentStop", "{}"}}, "", false},
 	}
 	for _, tt := range tests {

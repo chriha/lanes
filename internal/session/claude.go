@@ -141,6 +141,9 @@ func RunHook(event string) {
 	}
 	if event == "SubagentStop" {
 		state = prev.State // keep the state, drop the marker
+		if state == "background" {
+			state = "waiting" // Claude stays idle, but no job is pending any more
+		}
 	}
 	if state == "" {
 		return

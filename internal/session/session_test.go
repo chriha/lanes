@@ -935,6 +935,70 @@ func TestUsage5h(t *testing.T) {
 	}
 }
 
+// writeUsage writes the usage file with the given mtime and returns the dir.
+func writeUsage(t *testing.T, dir, content string, mtime time.Time) {
+	t.Helper()
+	p := filepath.Join(dir, UsageFile)
+	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(p, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUsageCachedByMtime(t *testing.T) {
+	now := time.Unix(10_000, 0)
+	at := now.Unix()
+	mtime := time.Unix(5_000, 0)
+	dir := t.TempDir()
+	writeUsage(t, dir, fmt.Sprintf(`{"text":"aaaa","session":11,"at":%d}`, at), mtime)
+
+	if got, _ := Usage(dir); got != "aaaa" {
+		t.Fatalf("Usage = %q, want aaaa", got)
+	}
+
+	// Same size and mtime: the file counts as unchanged, so the cached parse is served, not a re-read.
+	writeUsage(t, dir, fmt.Sprintf(`{"text":"bbbb","session":22,"at":%d}`, at), mtime)
+	if got, _ := Usage(dir); got != "aaaa" {
+		t.Errorf("Usage after unchanged mtime = %q, want the cached aaaa", got)
+	}
+	if got, ok := Usage5h(dir, now); got != 11 || !ok {
+		t.Errorf("Usage5h after unchanged mtime = %d, %v; want the cached 11, true", got, ok)
+	}
+
+	// A new mtime is re-read, by both readers.
+	writeUsage(t, dir, fmt.Sprintf(`{"text":"bbbb","session":22,"at":%d}`, at), mtime.Add(time.Second))
+	if got, _ := Usage(dir); got != "bbbb" {
+		t.Errorf("Usage after new mtime = %q, want bbbb", got)
+	}
+	if got, ok := Usage5h(dir, now); got != 22 || !ok {
+		t.Errorf("Usage5h after new mtime = %d, %v; want 22, true", got, ok)
+	}
+
+	// A new size is re-read even at the same mtime.
+	writeUsage(t, dir, fmt.Sprintf(`{"text":"cccccc","session":33,"at":%d}`, at), mtime.Add(time.Second))
+	if got, _ := Usage(dir); got != "cccccc" {
+		t.Errorf("Usage after new size = %q, want cccccc", got)
+	}
+
+	// The staleness rule applies to the cached value too.
+	if got, ok := Usage5h(dir, now.Add(UsageStale+time.Minute)); ok {
+		t.Errorf("Usage5h of a cached stale file = %d, true; want false", got)
+	}
+
+	// A removed file is no longer served from the cache.
+	if err := os.Remove(filepath.Join(dir, UsageFile)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := Usage(dir); got != "" {
+		t.Errorf("Usage of a removed file = %q, want empty", got)
+	}
+	if _, ok := Usage5h(dir, now); ok {
+		t.Error("Usage5h of a removed file is ok")
+	}
+}
+
 func TestPeek(t *testing.T) {
 	tests := []struct {
 		name    string

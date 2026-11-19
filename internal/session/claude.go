@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chriha/lanes/internal/app"
@@ -190,8 +191,22 @@ type usageLine struct {
 	At      int64           `json:"at"`
 }
 
+// usageEntry is a parsed usage file with the mtime and size it had when read.
+type usageEntry struct {
+	mtime time.Time
+	size  int64
+	line  usageLine
+	ok    bool
+}
+
+var (
+	usageMu    sync.Mutex
+	usageCache = map[string]usageEntry{} // by usage file path
+)
+
 // readUsage reads the usage file in the Claude config dir (a leading ~ is the home dir). ok is false when dir is
-// empty or the file is missing or unreadable.
+// empty or the file is missing or unreadable. The parsed file is cached by path, mtime and size, so an unchanged
+// file is read once however often readUsage is called.
 func readUsage(dir string) (u usageLine, ok bool) {
 	if dir == "" {
 		return u, false
@@ -200,11 +215,25 @@ func readUsage(dir string) (u usageLine, ok bool) {
 		home, _ := os.UserHomeDir()
 		dir = home + rest
 	}
-	b, err := os.ReadFile(filepath.Join(dir, UsageFile))
-	if err != nil || json.Unmarshal(b, &u) != nil {
+	p := filepath.Join(dir, UsageFile)
+	usageMu.Lock()
+	defer usageMu.Unlock()
+	fi, err := os.Stat(p)
+	if err != nil {
+		delete(usageCache, p)
 		return usageLine{}, false
 	}
-	return u, true
+	if e, hit := usageCache[p]; hit && e.mtime.Equal(fi.ModTime()) && e.size == fi.Size() {
+		return e.line, e.ok
+	}
+	e := usageEntry{mtime: fi.ModTime(), size: fi.Size()}
+	if b, err := os.ReadFile(p); err == nil && json.Unmarshal(b, &e.line) == nil {
+		e.ok = true
+	} else {
+		e.line = usageLine{}
+	}
+	usageCache[p] = e
+	return e.line, e.ok
 }
 
 // Usage reads the usage text written into the Claude config dir (a leading ~ is the home dir). It returns ""

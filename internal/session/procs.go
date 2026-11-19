@@ -1,6 +1,7 @@
 package session
 
 import (
+	"errors"
 	"os/exec"
 	"sort"
 	"strconv"
@@ -26,7 +27,6 @@ type Proc struct {
 // It is safe for one caller at a time from any goroutine.
 type Sampler struct {
 	// ps lists every process as "pid ppid time rss command" lines; now is the clock. Tests replace both.
-	ps  func() ([]byte, error)
 	now func() time.Time
 	// listPIDs lists every process as "pid ppid" lines, psPIDs the given ones as "pid ppid time rss command" lines.
 	listPIDs func() ([]byte, error)
@@ -46,8 +46,22 @@ type procTime struct {
 
 func NewSampler() *Sampler {
 	return &Sampler{
-		ps: func() ([]byte, error) {
-			return exec.Command("ps", "-A", "-o", "pid=,ppid=,time=,rss=,command=").Output()
+		// The cheap "pid ppid" listing finds the tree; only its processes are then read in full, as reading
+		// every process's command line is what makes ps -A costly.
+		listPIDs: func() ([]byte, error) {
+			return exec.Command("ps", "-A", "-o", "pid=,ppid=").Output()
+		},
+		psPIDs: func(pids []int) ([]byte, error) {
+			list := make([]string, len(pids))
+			for i, pid := range pids {
+				list[i] = strconv.Itoa(pid)
+			}
+			out, err := exec.Command("ps", "-p", strings.Join(list, ","), "-o", "pid=,ppid=,time=,rss=,command=").Output()
+			var exit *exec.ExitError
+			if errors.As(err, &exit) && len(out) > 0 {
+				err = nil // ps exits 1 when some pid exited since the listing; the others are in the output
+			}
+			return out, err
 		},
 		now: time.Now,
 	}
@@ -58,7 +72,15 @@ func NewSampler() *Sampler {
 func (s *Sampler) Sample(root int) []Proc {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out, err := s.ps()
+	list, err := s.listPIDs()
+	if err != nil {
+		return nil
+	}
+	pids := treePIDs(list, root)
+	if len(pids) == 0 {
+		return nil
+	}
+	out, err := s.psPIDs(pids)
 	if err != nil {
 		return nil
 	}
@@ -96,6 +118,40 @@ func (s *Sampler) Sample(root int) []Proc {
 	s.prev, s.prevAt = next, at
 	sort.Slice(tree, func(i, j int) bool { return tree[i].PID < tree[j].PID })
 	return tree
+}
+
+// treePIDs returns root and its descendants, ordered by pid, from "pid ppid" lines; none when root is not listed.
+func treePIDs(list []byte, root int) []int {
+	children := map[int][]int{}
+	found := false
+	for _, line := range strings.Split(string(list), "\n") {
+		f := strings.Fields(line)
+		if len(f) != 2 {
+			continue
+		}
+		pid, ok1 := digits(f[0])
+		ppid, ok2 := digits(f[1])
+		if !ok1 || !ok2 {
+			continue
+		}
+		found = found || pid == root
+		children[ppid] = append(children[ppid], pid)
+	}
+	if !found {
+		return nil
+	}
+	seen := map[int]bool{root: true}
+	pids := []int{root}
+	for i := 0; i < len(pids); i++ {
+		for _, c := range children[pids[i]] {
+			if !seen[c] {
+				seen[c] = true
+				pids = append(pids, c)
+			}
+		}
+	}
+	sort.Ints(pids)
+	return pids
 }
 
 // parsePsLine parses one "pid ppid time rss command" line; the command keeps its inner spacing.

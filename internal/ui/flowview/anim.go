@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	tickEvery  = 70 * time.Millisecond  // the animation tick
+	tickEvery  = 120 * time.Millisecond // the animation tick
 	maxStep    = 250 * time.Millisecond // the longest step one tick takes, after a stall or a pause
 	phaseEvery = 140 * time.Millisecond // one spinner frame
 	packetTime = 800 * time.Millisecond // a packet's trip along its connector

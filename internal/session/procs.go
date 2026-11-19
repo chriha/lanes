@@ -28,6 +28,9 @@ type Sampler struct {
 	// ps lists every process as "pid ppid time rss command" lines; now is the clock. Tests replace both.
 	ps  func() ([]byte, error)
 	now func() time.Time
+	// listPIDs lists every process as "pid ppid" lines, psPIDs the given ones as "pid ppid time rss command" lines.
+	listPIDs func() ([]byte, error)
+	psPIDs   func(pids []int) ([]byte, error)
 
 	mu     sync.Mutex
 	prev   map[int]procTime

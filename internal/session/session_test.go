@@ -1158,7 +1158,7 @@ func TestHookBackgroundMarker(t *testing.T) {
 		{"foreground bash does not", [][2]string{{"PreToolUse", `{"tool_name":"Bash","tool_input":{"run_in_background":false}}`}, {"Stop", "{}"}}, "waiting", false},
 		{"launch marks working until stop", [][2]string{{"PreToolUse", bg}}, "working", true},
 		{"prompt clears", [][2]string{{"PreToolUse", bg}, {"UserPromptSubmit", "{}"}, {"Stop", "{}"}}, "waiting", false},
-		{"later tool clears", [][2]string{{"PreToolUse", bg}, {"PreToolUse", `{"tool_input":{"command":"ls"}}`}, {"Stop", "{}"}}, "waiting", false},
+		{"later tool keeps", [][2]string{{"PreToolUse", bg}, {"PreToolUse", `{"tool_input":{"command":"ls"}}`}, {"Stop", "{}"}}, "background", true},
 		{"subagent stop clears and keeps state", [][2]string{{"PreToolUse", bg}, {"SubagentStop", "{}"}}, "working", false},
 		{"idle notification keeps background", [][2]string{{"PreToolUse", bg}, {"Notification", `{"notification_type":"idle_prompt"}`}}, "background", true},
 		{"permission prompt asks", [][2]string{{"PreToolUse", bg}, {"Notification", `{"notification_type":"permission_prompt"}`}}, "asking", true},

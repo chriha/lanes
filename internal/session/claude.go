@@ -124,12 +124,12 @@ func RunHook(event string) {
 		"Notification":     "asking",
 		"SubagentStop":     "", // only clears the marker; the state stays
 	}[event]
-	// A launch sets the marker; Claude acting again (a prompt, another tool, a finished subagent) clears it.
+	// A launch sets the marker; a prompt or a finished subagent clears it. Other tool calls leave it: the job outlives them.
 	prev := readHookState(name)
 	background := prev.Background
 	switch event {
 	case "PreToolUse":
-		background = in.ToolInput.RunInBackground
+		background = background || in.ToolInput.RunInBackground
 	case "UserPromptSubmit", "SubagentStop":
 		background = false
 	}

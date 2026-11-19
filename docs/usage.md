@@ -313,7 +313,7 @@ are dimmed too.
 
 `background` is its own state, not one that needs you: it is not counted in the top-right summary's `?` / `●`, not
 offered by `n`, not announced by a desktop notification and not in `lanes status`. lanes spots a launch from the
-`run_in_background` Bash option or a background subagent and clears it when Claude acts again. Limit: `background` can
+`run_in_background` Bash option or a background subagent and clears it on the next prompt or a finished subagent. Limit: `background` can
 show a little too long when a job ends without Claude reacting to it yet; a Claude version that renames that option
 falls back to `waiting`.
 

@@ -154,7 +154,7 @@ an env var).
   `internal/ui/theme.go`). Packets stream continuously: parent → child along a running agent's edge (~1.2 s,
   jittered per edge, ≤ 3 in flight), a burst of 3 child → parent on finish/fail, none when ended. Lives in `internal/ui/flowview`: a character-grid canvas with
   run-length styled output, a pure `State` changed by events (`Apply`) and stepped by `dt` (`Step`), panel
-  renderers and the tree layout; it has its own tick (~70 ms) that runs only while the view is open. Its data
+  renderers and the tree layout; it has its own tick (~120 ms) that runs only while the view is open. Its data
   comes from `session.Tailer` (`internal/session/transcript.go`), which reads only the new bytes of the
   transcript the hooks recorded (`transcript_path` in the session's sidecar) and of `<session>/subagents/
   agent-<id>.{jsonl,meta.json}`; `internal/ui/agents.go` polls it in a `tea.Cmd` every 500 ms and hands the

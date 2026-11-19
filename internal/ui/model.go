@@ -137,7 +137,7 @@ type Model struct {
 	sessions   []session.Info
 	sessByItem map[string][]session.Info
 	polling    bool
-	lastPoll   time.Time // when the last session poll started, for the idle interval
+	lastPoll   time.Time   // when the last session poll started, for the idle interval
 	peek       sessPeekMsg // working directory and last output lines of a session, for the sessions view preview
 	peeking    bool        // a pollPeek is in flight
 	confirm    *confirmState

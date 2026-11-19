@@ -137,6 +137,7 @@ type Model struct {
 	sessions   []session.Info
 	sessByItem map[string][]session.Info
 	polling    bool
+	lastPoll   time.Time // when the last session poll started, for the idle interval
 	peek       sessPeekMsg // working directory and last output lines of a session, for the sessions view preview
 	peeking    bool        // a pollPeek is in flight
 	confirm    *confirmState
@@ -534,6 +535,16 @@ func (m *Model) Init() tea.Cmd {
 	}
 	return tea.Batch(append(cmds, m.armSpin())...)
 }
+
+// sessPollFast is the session poll interval while session state is on screen (the sessions tab or the agent view);
+// sessPollIdle is the one otherwise. Ticks come every second, so a poll is due a little early rather than a tick late.
+const (
+	sessPollFast = time.Second
+	sessPollIdle = 3 * time.Second
+)
+
+// sessPollDue says whether the tick at now should poll the tmux sessions.
+func (m *Model) sessPollDue(now time.Time) bool { return true }
 
 func tick() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })

@@ -1668,3 +1668,120 @@ func TestProfilesReload(t *testing.T) {
 		}
 	}
 }
+
+func TestMarkers(t *testing.T) {
+	const global = `
+[provider.gl]
+type = "gitlab"
+[[view]]
+name = "a"
+provider = "gl"
+`
+	tests := []struct {
+		name    string
+		global  string // appended to the global config
+		project string // body of .lanes.toml; empty = no project file
+		want    []Marker
+		wantErr []string // substrings the error must contain; nil = valid
+	}{
+		{name: "none", want: nil},
+		{
+			name:   "global parses text, labels and color",
+			global: "[[marker]]\ntext = \"🤖\"\nlabels = [\"review::ai\", \"bot\"]\ncolor = \"#4ADE80\"\n[[marker]]\ntext = \"AI\"\nlabels = [\"x\"]\n",
+			want: []Marker{
+				{Text: "🤖", Labels: []string{"review::ai", "bot"}, Color: "#4ADE80"},
+				{Text: "AI", Labels: []string{"x"}},
+			},
+		},
+		{
+			name:    "project only",
+			project: "[[marker]]\ntext = \"🧑\"\nlabels = [\"review::human\"]\n",
+			want:    []Marker{{Text: "🧑", Labels: []string{"review::human"}}},
+		},
+		{
+			name:    "project replaces by text in place and appends new ones",
+			global:  "[[marker]]\ntext = \"A\"\nlabels = [\"a\"]\n[[marker]]\ntext = \"B\"\nlabels = [\"b\"]\n[[marker]]\ntext = \"C\"\nlabels = [\"c\"]\n",
+			project: "[[marker]]\ntext = \"D\"\nlabels = [\"d\"]\n[[marker]]\ntext = \"B\"\nlabels = [\"b2\"]\ncolor = \"#fff\"\n",
+			want: []Marker{
+				{Text: "A", Labels: []string{"a"}},
+				{Text: "B", Labels: []string{"b2"}, Color: "#fff"},
+				{Text: "C", Labels: []string{"c"}},
+				{Text: "D", Labels: []string{"d"}},
+			},
+		},
+		{
+			name:    "empty text",
+			global:  "[[marker]]\ntext = \"\"\nlabels = [\"a\"]\n",
+			wantErr: []string{"config.toml", "marker 1", "text"},
+		},
+		{
+			name:    "empty labels",
+			global:  "[[marker]]\ntext = \"A\"\n",
+			wantErr: []string{"config.toml", `marker "A"`, "labels"},
+		},
+		{
+			name:    "empty labels list",
+			global:  "[[marker]]\ntext = \"A\"\nlabels = []\n",
+			wantErr: []string{`marker "A"`, "labels"},
+		},
+		{
+			name:    "duplicate text in the global file",
+			global:  "[[marker]]\ntext = \"A\"\nlabels = [\"a\"]\n[[marker]]\ntext = \"A\"\nlabels = [\"b\"]\n",
+			wantErr: []string{"config.toml", `marker "A"`, "duplicate"},
+		},
+		{
+			name:    "duplicate text in the project file",
+			project: "[[marker]]\ntext = \"A\"\nlabels = [\"a\"]\n[[marker]]\ntext = \"A\"\nlabels = [\"b\"]\n",
+			wantErr: []string{".lanes.toml", `marker "A"`, "duplicate"},
+		},
+		{
+			name:    "invalid color",
+			global:  "[[marker]]\ntext = \"A\"\nlabels = [\"a\"]\ncolor = \"red\"\n",
+			wantErr: []string{"config.toml", `marker "A"`, "color", "#RGB or #RRGGBB"},
+		},
+		{
+			name:    "invalid color in the project file",
+			project: "[[marker]]\ntext = \"A\"\nlabels = [\"a\"]\ncolor = \"#12\"\n",
+			wantErr: []string{".lanes.toml", `marker "A"`, "color"},
+		},
+		{
+			name:    "empty text in the project file",
+			project: "[[marker]]\ntext = \"\"\nlabels = [\"a\"]\n",
+			wantErr: []string{".lanes.toml", "marker 1", "text"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "cfg"))
+			t.Setenv("HOME", tmp)
+			old, _ := os.Getwd()
+			defer os.Chdir(old)
+			if err := os.Chdir(tmp); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(tmp, "cfg", "lanes", "config.toml"), global+tt.global)
+			if tt.project != "" {
+				write(t, filepath.Join(tmp, ".lanes.toml"), tt.project)
+			}
+			c, err := Load()
+			if tt.wantErr != nil {
+				if err == nil {
+					t.Fatal("err = nil, want a config error")
+				}
+				for _, s := range tt.wantErr {
+					if !strings.Contains(err.Error(), s) {
+						t.Errorf("error %q does not contain %q", err, s)
+					}
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(c.Marker, tt.want) {
+				t.Errorf("Marker = %+v, want %+v", c.Marker, tt.want)
+			}
+		})
+	}
+}

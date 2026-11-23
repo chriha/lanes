@@ -437,6 +437,47 @@ func mergeViews(global, project []View) []View {
 	return out
 }
 
+// mergeMarkers lays the project's markers over the global ones: one with the same text replaces it in place, the
+// others are appended.
+func mergeMarkers(global, project []Marker) []Marker {
+	var out []Marker
+	out = append(out, global...)
+	for _, pm := range project {
+		replaced := false
+		for i := range out {
+			if out[i].Text == pm.Text {
+				out[i], replaced = pm, true
+			}
+		}
+		if !replaced {
+			out = append(out, pm)
+		}
+	}
+	return out
+}
+
+// validateMarkers checks the [[marker]] entries of one file: each needs text and labels, a valid color, and its
+// text must be unique within the file. path names the file in the error.
+func validateMarkers(markers []Marker, path string) error {
+	seen := map[string]bool{}
+	for i, m := range markers {
+		if m.Text == "" {
+			return fmt.Errorf("%s: marker %d: text must not be empty", path, i+1)
+		}
+		if len(m.Labels) == 0 {
+			return fmt.Errorf("%s: marker %q: labels must list at least one label", path, m.Text)
+		}
+		if m.Color != "" && !hexColor.MatchString(m.Color) {
+			return fmt.Errorf("%s: marker %q: color %q: want #RGB or #RRGGBB", path, m.Text, m.Color)
+		}
+		if seen[m.Text] {
+			return fmt.Errorf("%s: marker %q: duplicate text", path, m.Text)
+		}
+		seen[m.Text] = true
+	}
+	return nil
+}
+
 func (c Config) Poll() time.Duration {
 	d, err := time.ParseDuration(c.Settings.PollInterval)
 	if err != nil || d < 5*time.Second {
@@ -513,6 +554,9 @@ func Load() (*Config, error) {
 	if err := rejectBareRepeat(p); err != nil {
 		return nil, err
 	}
+	if err := validateMarkers(c.Marker, p); err != nil {
+		return nil, err
+	}
 	if len(c.Profiles) > 0 {
 		return nil, fmt.Errorf("%s: profiles: select profiles in a project's %s, not in the global config", p, ProjectFile)
 	}
@@ -523,6 +567,9 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("%s: %w", pp, err)
 		}
 		if err := rejectBareRepeat(pp); err != nil {
+			return nil, err
+		}
+		if err := validateMarkers(pc.Marker, pp); err != nil {
 			return nil, err
 		}
 		if len(pc.Profile) > 0 {
@@ -540,12 +587,19 @@ func Load() (*Config, error) {
 		if from, err = applyProfiles(&c, pc.Profiles, pp); err != nil {
 			return nil, err
 		}
+		// deep copy: decoding below reuses the slices' backing arrays, labels included
+		globalMarkers := make([]Marker, len(c.Marker))
+		for i, m := range c.Marker {
+			globalMarkers[i] = m
+			globalMarkers[i].Labels = append([]string(nil), m.Labels...)
+		}
 		global := append([]View(nil), c.View...) // copy: decoding below reuses the backing array
 		// decoding over c only touches the keys the file defines; slices are replaced, so views merge by hand
 		if _, err := toml.DecodeFile(pp, &c); err != nil {
 			return nil, fmt.Errorf("%s: %w", pp, err)
 		}
 		c.View = mergeViews(global, pc.View)
+		c.Marker = mergeMarkers(globalMarkers, pc.Marker)
 		// the project's own items win over the profiles, so their errors name the project file alone
 		for _, v := range pc.View {
 			delete(from.view, v.Name)

@@ -321,7 +321,9 @@ Limit: `background` can show a little too long when a job ends without Claude re
 that renames that option falls back to `waiting`.
 
 The top left of the header shows the project: the name of the directory holding the nearest `.lanes.toml`
-(also when lanes starts in a subfolder), else the name of the current directory. The top right of the screen summarizes live sessions (`◐ 2  ? 1  ● 1`) and when the list was last refreshed.
+(also when lanes starts in a subfolder), else the name of the current directory.
+
+The top right of the screen summarizes live sessions (`◐ 2  ? 1  ● 1`) and when the list was last refreshed.
 
 ## Preview pane and item history
 

@@ -630,6 +630,7 @@ func TestProjectLabel(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			t.Setenv("HOME", root) // the project-file search stops at home; not parallel-safe (chdir)
 			old, err := os.Getwd()
 			if err != nil {
 				t.Fatal(err)

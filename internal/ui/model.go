@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -254,7 +255,15 @@ func New(cfg *config.Config, opts ...Option) *Model {
 
 // projectLabel names the project for the header: the directory holding the nearest project config,
 // else the working directory, else the app name.
-func projectLabel(getwd func() (string, error)) string { return app.Name }
+func projectLabel(getwd func() (string, error)) string {
+	if pp := config.ProjectPath(); pp != "" {
+		return filepath.Base(filepath.Dir(pp))
+	}
+	if wd, err := getwd(); err == nil {
+		return filepath.Base(wd)
+	}
+	return app.Name
+}
 
 // buildProviders builds the providers of cfg; it returns the build error of each one that failed.
 func buildProviders(cfg *config.Config) (map[string]provider.Provider, map[string]error) {

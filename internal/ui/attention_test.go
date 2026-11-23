@@ -49,6 +49,7 @@ func TestHeaderAttentionCount(t *testing.T) {
 	for _, tt := range tests {
 		for _, active := range []int{0, 1} { // the count shows on the active tab too
 			m := &Model{
+				title:      "lanes",
 				width:      200,
 				cur:        active,
 				sessByItem: sess,
@@ -75,7 +76,7 @@ func TestHeaderDivider(t *testing.T) {
 		{"not before the first", []config.View{{Name: "a", Divider: true}, {Name: "b"}}, "a 0 b 0"},
 	}
 	for _, tt := range tests {
-		m := &Model{width: 200, fetchedAt: map[string]time.Time{}}
+		m := &Model{title: "lanes", width: 200, fetchedAt: map[string]time.Time{}}
 		for _, v := range tt.views {
 			m.views = append(m.views, &view{cfg: v})
 		}
@@ -99,7 +100,7 @@ func TestHeaderDividerBeforeQueue(t *testing.T) {
 		{"only tab", nil, "lanes queue", 0},
 	}
 	for _, tt := range tests {
-		m := &Model{width: 200, fetchedAt: map[string]time.Time{}}
+		m := &Model{title: "lanes", width: 200, fetchedAt: map[string]time.Time{}}
 		for _, v := range tt.views {
 			m.views = append(m.views, &view{cfg: v})
 		}
@@ -127,7 +128,7 @@ func TestHeaderBuiltinTabsAreOneGroup(t *testing.T) {
 		{"divider on a view", []config.View{{Name: "a"}, {Name: "b", Divider: true}}, "a 0 ¦ b 0 ¦ queue sessions 0", 2},
 	}
 	for _, tt := range tests {
-		m := &Model{width: 200, fetchedAt: map[string]time.Time{}}
+		m := &Model{title: "lanes", width: 200, fetchedAt: map[string]time.Time{}}
 		for _, v := range tt.views {
 			m.views = append(m.views, &view{cfg: v})
 		}

@@ -3,6 +3,8 @@ package ui
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/chriha/lanes/internal/app"
 	"github.com/chriha/lanes/internal/cache"
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/item"
@@ -598,5 +601,46 @@ func TestPrioStripColour(t *testing.T) {
 		if st.GetForeground() != want {
 			t.Errorf("priority %d colour = %v, want %v", p, st.GetForeground(), want)
 		}
+	}
+}
+
+func TestProjectLabel(t *testing.T) {
+	errWd := func() (string, error) { return "", errors.New("gone") }
+	tests := []struct {
+		name   string
+		layout string // directory to create under the temp root
+		file   string // project file's directory ("" = none)
+		start  string // directory to start in
+		getwd  func() (string, error)
+		want   string
+	}{
+		{"project in cwd", "proj", "proj", "proj", os.Getwd, "proj"},
+		{"project in parent, started in subfolder", "proj/internal", "proj", "proj/internal", os.Getwd, "proj"},
+		{"no project file uses cwd", "plain", "", "plain", os.Getwd, "plain"},
+		{"unreadable cwd falls back to app name", "plain", "", "plain", errWd, app.Name},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(root, tc.layout), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if tc.file != "" {
+				if err := os.WriteFile(filepath.Join(root, tc.file, config.ProjectFile), nil, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			old, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chdir(filepath.Join(root, tc.start)); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chdir(old) })
+			if got := projectLabel(tc.getwd); got != tc.want {
+				t.Errorf("projectLabel = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

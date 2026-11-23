@@ -74,7 +74,7 @@ func (m *Model) fetchStatus(name string, now time.Time) string {
 	switch {
 	case st != nil && st.running:
 		el := now.Sub(st.started)
-		s = name + " " + scanFrames[int(el/spinEvery)%len(scanFrames)] + " fetching " + el.Round(time.Second).String()
+		s = name + " " + pacmanFrames[int(el/spinEvery)%len(pacmanFrames)] + " fetching " + el.Round(time.Second).String()
 		if st.last > 0 {
 			return s + " · last " + fetchDur(st.last)
 		}
@@ -92,11 +92,11 @@ func (m *Model) fetchStatus(name string, now time.Time) string {
 	return s
 }
 
-// scanFrames animate a running fetch: a dot sweeping back and forth in a fixed-width track, one frame per spinEvery
+// pacmanFrames animate a running fetch: a dot sweeping back and forth in a fixed-width track, one frame per spinEvery
 // of the fetch.
-var scanFrames = []string{"[●    ]", "[ ●   ]", "[  ●  ]", "[   ● ]", "[    ●]", "[   ● ]", "[  ●  ]", "[ ●   ]"}
+var pacmanFrames = []string{"[●    ]", "[ ●   ]", "[  ●  ]", "[   ● ]", "[    ●]", "[   ● ]", "[  ●  ]", "[ ●   ]"}
 
-// spinEvery is how long a scanFrames frame shows, and the interval of the spinTickMsg loop that redraws it.
+// spinEvery is how long a pacmanFrames frame shows, and the interval of the spinTickMsg loop that redraws it.
 const spinEvery = 100 * time.Millisecond
 
 // armSpin starts the animation tick loop when a provider fetches and no loop runs yet; nil otherwise. The loop

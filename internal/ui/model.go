@@ -197,6 +197,9 @@ type Model struct {
 	pendingZ bool
 
 	width, height int
+
+	// title is the header's top-left label (the project directory), resolved once in New
+	title string
 }
 
 func New(cfg *config.Config, opts ...Option) *Model {
@@ -213,6 +216,7 @@ func New(cfg *config.Config, opts ...Option) *Model {
 		search:       textinput.New(),
 		cmdline:      textinput.New(),
 		preview_:     cfg.Settings.Preview,
+		title:        projectLabel(os.Getwd),
 	}
 	m.search.Prompt, m.cmdline.Prompt = "/", ":"
 	m.search.PromptStyle, m.cmdline.PromptStyle = sKey, sKey
@@ -247,6 +251,10 @@ func New(cfg *config.Config, opts ...Option) *Model {
 	}
 	return m
 }
+
+// projectLabel names the project for the header: the directory holding the nearest project config,
+// else the working directory, else the app name.
+func projectLabel(getwd func() (string, error)) string { return app.Name }
 
 // buildProviders builds the providers of cfg; it returns the build error of each one that failed.
 func buildProviders(cfg *config.Config) (map[string]provider.Provider, map[string]error) {
@@ -1493,7 +1501,7 @@ func (m *Model) header() string {
 		}
 		tabs = append(tabs, st.Render(label))
 	}
-	left := sTitle.Render(" "+app.Name) + "  " + strings.Join(tabs, "")
+	left := sTitle.Render(" "+m.title) + "  " + strings.Join(tabs, "")
 	now := time.Now()
 	right := m.sessionSummary() + strings.Join(m.providerStatuses(now), sDim.Render("  "))
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 1

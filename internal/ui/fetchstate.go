@@ -92,12 +92,12 @@ func (m *Model) fetchStatus(name string, now time.Time) string {
 	return s
 }
 
-// pacmanFrames animate a running fetch: a dot sweeping back and forth in a fixed-width track, one frame per spinEvery
-// of the fetch.
-var pacmanFrames = []string{"[●    ]", "[ ●   ]", "[  ●  ]", "[   ● ]", "[    ●]", "[   ● ]", "[  ●  ]", "[ ●   ]"}
+// pacmanFrames animate a running fetch: Pac-Man eating a row of dots, mouth alternating open and closed, 6 cells
+// wide in every frame; one frame per spinEvery of the fetch.
+var pacmanFrames = []string{"ᗧ·····", " ●····", "  ᗧ···", "   ●··", "    ᗧ·", "     ●"}
 
 // spinEvery is how long a pacmanFrames frame shows, and the interval of the spinTickMsg loop that redraws it.
-const spinEvery = 100 * time.Millisecond
+const spinEvery = 150 * time.Millisecond
 
 // armSpin starts the animation tick loop when a provider fetches and no loop runs yet; nil otherwise. The loop
 // ends at the first spinTickMsg that finds every provider idle, so at most one runs and none while all are idle.

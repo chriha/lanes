@@ -215,11 +215,11 @@ func TestFetchStatus(t *testing.T) {
 		{"cached: nothing fetched in this run", func(*Model) {}, "p cached"},
 		{"fetching: spinner and elapsed", func(m *Model) {
 			m.fetches = map[string]*fetchState{"p": {running: true, started: now.Add(-4 * time.Second)}}
-		}, "p [●    ] fetching 4s"},
+		}, "p   ᗧ··· fetching 4s"},
 		{"fetching again: also the last duration", func(m *Model) {
 			m.fetches = map[string]*fetchState{"p": {running: true, started: now.Add(-1 * time.Second), last: 12340 * time.Millisecond}}
 			m.fetchedAt["p"] = now.Add(-time.Minute)
-		}, "p [  ●  ] fetching 1s · last 12.3s"},
+		}, "p ᗧ····· fetching 1s · last 12.3s"},
 		{"failed: phase and last duration", func(m *Model) {
 			m.fetches = map[string]*fetchState{"p": {last: 2 * time.Second}}
 			m.provErr["p"] = errors.New("boom")
@@ -250,23 +250,22 @@ func TestFetchStatusAdvancesEachTick(t *testing.T) {
 	}
 }
 
-func TestFetchStatusScannerFrames(t *testing.T) {
+func TestFetchStatusPacmanFrames(t *testing.T) {
 	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
 	tests := []struct {
 		elapsed time.Duration
 		frame   string
 	}{
-		{0, "[●    ]"},
-		{100 * time.Millisecond, "[ ●   ]"},
-		{200 * time.Millisecond, "[  ●  ]"},
-		{300 * time.Millisecond, "[   ● ]"},
-		{400 * time.Millisecond, "[    ●]"},
-		{500 * time.Millisecond, "[   ● ]"},
-		{600 * time.Millisecond, "[  ●  ]"},
-		{700 * time.Millisecond, "[ ●   ]"},
-		{800 * time.Millisecond, "[●    ]"},                // the sweep repeats
-		{150 * time.Millisecond, "[ ●   ]"},                // a frame lasts 100ms
-		{10*time.Second + 100*time.Millisecond, "[   ● ]"}, // later in a long fetch
+		{0, "ᗧ·····"},
+		{150 * time.Millisecond, " ●····"},
+		{300 * time.Millisecond, "  ᗧ···"},
+		{450 * time.Millisecond, "   ●··"},
+		{600 * time.Millisecond, "    ᗧ·"},
+		{750 * time.Millisecond, "     ●"},
+		{900 * time.Millisecond, "ᗧ·····"},                // the row restarts
+		{149 * time.Millisecond, "ᗧ·····"},                // a frame lasts 150ms
+		{200 * time.Millisecond, " ●····"},                // mid-frame
+		{10*time.Second + 450*time.Millisecond, "   ●··"}, // later in a long fetch
 	}
 	for _, tt := range tests {
 		t.Run(tt.elapsed.String(), func(t *testing.T) {
@@ -279,13 +278,21 @@ func TestFetchStatusScannerFrames(t *testing.T) {
 	}
 }
 
+func TestPacmanFramesAreSixCellsWide(t *testing.T) {
+	for i, f := range pacmanFrames {
+		if w := ansi.StringWidth(f); w != 6 {
+			t.Errorf("frame %d %q is %d cells wide, want 6", i, f, w)
+		}
+	}
+}
+
 func TestFetchStatusWidthFixedAcrossFrames(t *testing.T) {
 	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
 	m := newBackoffModel(t)
 	m.fetches = map[string]*fetchState{"p": {running: true, started: now, last: 2 * time.Second}}
 	want := ansi.StringWidth(m.fetchStatus("p", now.Add(5*time.Second)))
-	for f := 1; f < 8; f++ {
-		at := now.Add(5*time.Second + time.Duration(f)*100*time.Millisecond)
+	for f := 1; f < 2*len(pacmanFrames); f++ {
+		at := now.Add(5*time.Second + time.Duration(f)*spinEvery)
 		if got := m.fetchStatus("p", at); ansi.StringWidth(got) != want {
 			t.Errorf("frame %d: %q is %d cells wide, want %d like frame 0", f, got, ansi.StringWidth(got), want)
 		}
@@ -395,7 +402,7 @@ func TestHeaderShowsEveryProviderStatus(t *testing.T) {
 	m.fetches["linear"].started = time.Now()
 	m.fetchedAt["gitlab"] = time.Now()
 	h := ansi.Strip(m.header())
-	for _, want := range []string{"gitlab updated", "linear [", "] fetching 0s"} {
+	for _, want := range []string{"gitlab updated", "linear ᗧ····· fetching 0s"} {
 		if !strings.Contains(h, want) {
 			t.Errorf("header %q lacks %q", h, want)
 		}
@@ -424,7 +431,7 @@ func TestEmptyListShowsFetchStatus(t *testing.T) {
 		{"fetching: status lines instead of loading…", func(m *Model) {
 			setFetching(m, "gitlab", true)
 			m.fetches["gitlab"].started = time.Now()
-		}, []string{"gitlab [", "] fetching 0s", "linear cached"}, []string{"loading…"}},
+		}, []string{"gitlab ᗧ····· fetching 0s", "linear cached"}, []string{"loading…"}},
 		{"idle and empty: nothing here", func(m *Model) {
 			m.fetchedAt["gitlab"] = time.Now()
 		}, []string{"nothing here"}, []string{"fetching"}},

@@ -469,18 +469,15 @@ func listName(it item.Item) string {
 type markerRule struct {
 	text   string
 	labels map[string]bool
-	style  lipgloss.Style
+	color  string // optional #RGB / #RRGGBB; empty = the current text style, resolved when the row renders
 }
 
 func compileMarkers(ms []config.Marker) []markerRule {
 	out := make([]markerRule, len(ms))
 	for i, mk := range ms {
-		r := markerRule{text: mk.Text, labels: make(map[string]bool, len(mk.Labels)), style: sText}
+		r := markerRule{text: mk.Text, labels: make(map[string]bool, len(mk.Labels)), color: mk.Color}
 		for _, l := range mk.Labels {
 			r.labels[strings.ToLower(l)] = true
-		}
-		if mk.Color != "" {
-			r.style = lipgloss.NewStyle().Foreground(lipgloss.Color(mk.Color))
 		}
 		out[i] = r
 	}
@@ -1741,7 +1738,11 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 		} else {
 			title += plain.Render("  ")
 		}
-		title += st(mk.style).Render(mk.text)
+		ms := sText
+		if mk.color != "" {
+			ms = lipgloss.NewStyle().Foreground(lipgloss.Color(mk.color))
+		}
+		title += st(ms).Render(mk.text)
 	}
 	if strip != "" {
 		if authText == "" && len(marks) == 0 {

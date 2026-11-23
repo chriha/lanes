@@ -243,7 +243,10 @@ To restart the server by hand instead (same effect, e.g. while lanes is not runn
 
 ## Searching
 
-Ticket rows end with a priority strip after the assignees: `▰▰▰` urgent (red), `▰▰▱` high (orange), `▰▱▱` medium
+A row reads `title  name markers strip`: configured [`[[marker]]`](configuration.md#markers) texts for the item's
+labels (such as `🤖` for `review::ai`) follow the name, so `bob 🧑 ▰▰▱`; the title truncates before they do.
+
+Ticket rows end with a priority strip after the assignees (and markers): `▰▰▰` urgent (red), `▰▰▱` high (orange), `▰▱▱` medium
 (yellow), `▱▱▱` low (dim); none for priority `0`.
 
 `/` opens an incremental search over the current view: it matches id, title, author, ticket and (for tickets) assignees, case
@@ -283,7 +286,7 @@ narrows the view; it does not change its filter.
 ## Row badges
 
 Each row ends with small status badges: the item's own (from the provider) followed by up to three of its
-sessions. A blue `✎` after the name (the author, or the assignees on tickets), or after the title when there is no name, is not a badge: it marks an
+sessions. A blue `✎` after the name and any [markers](configuration.md#markers) (the author, or the assignees on tickets), or after the title when there is no name, is not a badge: it marks an
 item you left a [note](#preview-pane-and-item-history) on.
 
 A **bold title** marks an unread item: it is new, or its title, draft state, badges or provider fields changed since

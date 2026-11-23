@@ -93,6 +93,7 @@ const usageStale = 10 * time.Minute
 
 type Model struct {
 	cfg       *config.Config
+	markers   []markerRule // cfg.Marker with lowercased label sets, rebuilt on every config apply
 	cfgMod    time.Time
 	providers map[string]provider.Provider
 	data      map[string][]item.Item
@@ -271,6 +272,7 @@ func (m *Model) applyConfig(cfg *config.Config) {
 // cfgMod alone: a reload set it when it started, so a change made while it ran is reloaded again.
 func (m *Model) applyBuilt(cfg *config.Config, provs map[string]provider.Provider, errs map[string]error) {
 	m.cfg = cfg
+	m.markers = compileMarkers(cfg.Marker)
 	applyTheme(cfg.Theme)
 	m.restyleAgents()
 	m.providers = map[string]provider.Provider{}
@@ -461,6 +463,56 @@ func listName(it item.Item) string {
 		}
 	}
 	return strings.Join(names, ", ")
+}
+
+// markerRule is a configured [[marker]] with its labels lowercased for the per-row lookup.
+type markerRule struct {
+	text   string
+	labels map[string]bool
+	style  lipgloss.Style
+}
+
+func compileMarkers(ms []config.Marker) []markerRule {
+	out := make([]markerRule, len(ms))
+	for i, mk := range ms {
+		r := markerRule{text: mk.Text, labels: make(map[string]bool, len(mk.Labels)), style: sText}
+		for _, l := range mk.Labels {
+			r.labels[strings.ToLower(l)] = true
+		}
+		if mk.Color != "" {
+			r.style = lipgloss.NewStyle().Foreground(lipgloss.Color(mk.Color))
+		}
+		out[i] = r
+	}
+	return out
+}
+
+// markersOf returns the markers whose labels match one of the item's labels, in config order.
+func (m *Model) markersOf(it item.Item) []markerRule {
+	if len(m.markers) == 0 {
+		return nil
+	}
+	var labels []string
+	switch v := it.Fields["labels"].(type) {
+	case []string:
+		labels = v
+	case []any: // decoded from the cache or a command provider's JSON
+		for _, a := range v {
+			if s, ok := a.(string); ok {
+				labels = append(labels, s)
+			}
+		}
+	}
+	var out []markerRule
+	for _, r := range m.markers {
+		for _, l := range labels {
+			if r.labels[strings.ToLower(l)] {
+				out = append(out, r)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // prioStrip is the ▰▱ strip of a ticket's priority (1 urgent .. 4 low) and its style; empty for 0 or other kinds.
@@ -1620,11 +1672,25 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	if authText != "" {
 		authCellW = 2 + ansi.StringWidth(authText) // two spaces, then the author
 	}
-	if strip != "" {
+	marks := m.markersOf(it)
+	if len(marks) > 0 {
 		if authText == "" {
 			authCellW = 2
 		} else {
-			authCellW++ // a space between the names and the strip
+			authCellW++ // a space between the names and the markers
+		}
+		for i, mk := range marks {
+			if i > 0 {
+				authCellW++
+			}
+			authCellW += ansi.StringWidth(mk.text)
+		}
+	}
+	if strip != "" {
+		if authText == "" && len(marks) == 0 {
+			authCellW = 2
+		} else {
+			authCellW++ // a space between the names or markers and the strip
 		}
 		authCellW += 3
 	}
@@ -1669,8 +1735,16 @@ func (m *Model) row(it item.Item, selected bool, idW int) string {
 	if authText != "" {
 		title += plain.Render("  ") + st(sDim).Render(authText)
 	}
+	for i, mk := range marks {
+		if i > 0 || authText != "" {
+			title += plain.Render(" ")
+		} else {
+			title += plain.Render("  ")
+		}
+		title += st(mk.style).Render(mk.text)
+	}
 	if strip != "" {
-		if authText == "" {
+		if authText == "" && len(marks) == 0 {
 			title += plain.Render("  ")
 		} else {
 			title += plain.Render(" ")

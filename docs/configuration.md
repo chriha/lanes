@@ -25,6 +25,7 @@ The project config **overlays** the global one — it does not replace it. You o
 | `[provider.<n>]`   | by name — a provider defined in the project replaces the global one of that name as a whole |
 | `[action.<n>]`     | by name, as a whole                                                    |
 | `[[view]]`         | by `name` — same name replaces the global view, new names are appended |
+| `[[marker]]`       | by `text` — same text replaces the global marker in place, new ones are appended |
 
 To share views, actions and keys between some projects (not all), define them once as a [profile](#profiles) in the
 global config and select it with `profiles = [...]` in each project.
@@ -193,6 +194,11 @@ groups   = [{ name = "<name>", filter = '<expression>' }]   # first match wins; 
 on_enter = "<action name>"   # start this action on items that newly enter the view (see Running on arrival)
 on_enter_repeat = "24h"      # optional: fire again on re-entry once the last auto-start is older than this
 
+[[marker]]
+text   = "<emoji or short text>"   # shown after the name in the list row
+labels = ["<label>"]               # any of them (case-insensitive) shows the marker
+color  = "#RRGGBB"                 # optional; #RGB or #RRGGBB, empty = text color
+
 [keymap]
 <key> = "<action name>"     # single character, e.g. r
 
@@ -215,6 +221,28 @@ accent = "#A78BFA"          # also: ok, warn, bad, info, text, dim, selection
 [theme.agent_view]
 opus = "#FF4FE3"            # also: sonnet, haiku, text, dim, accent, track, ok, bad, selection
 ```
+
+## Markers
+
+A `[[marker]]` flags list rows by label: when an item carries any of the marker's `labels` (exact name, compared
+case-insensitively, like `[theme.labels]`), its `text` shows right after the name in the row, before a ticket's
+priority strip. Several matching markers show in config order, separated by a space. Markers are never truncated; the
+title shrinks first. Items without a `labels` list get none.
+
+```toml
+[[marker]]
+text   = "🤖"
+labels = ["review::ai"]
+
+[[marker]]
+text   = "🧑"
+labels = ["review::human", "review::needed"]
+color  = "#F59E0B"          # optional
+```
+
+`text` and `labels` are required and `text` must be unique within a file; `color` must be `#RGB` or `#RRGGBB`. Anything
+else is a config error naming the file and the entry. A project marker with the same `text` replaces the global one;
+new ones are appended. Changes apply on reload. Markers are not part of [profiles](#profiles).
 
 ## Theme
 

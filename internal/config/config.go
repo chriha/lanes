@@ -294,10 +294,18 @@ const QueueView = "queue"
 // SessionsView is the name of the built-in sessions view (key S); configured views cannot use it.
 const SessionsView = "sessions"
 
+// Marker is a short text (an emoji, "AI") shown after the name in a list row when the item carries any of Labels.
+type Marker struct {
+	Text   string   `toml:"text"`
+	Labels []string `toml:"labels"` // matched against an item's labels, case-insensitively
+	Color  string   `toml:"color"`  // #RGB or #RRGGBB; empty = the row's text color
+}
+
 type Config struct {
 	Settings Settings            `toml:"settings"`
 	Provider map[string]Provider `toml:"provider"`
 	View     []View              `toml:"view"`
+	Marker   []Marker            `toml:"marker"`
 	Keymap   map[string]string   `toml:"keymap"`
 	Action   map[string]Action   `toml:"action"`
 	Theme    Theme               `toml:"theme"`

@@ -100,7 +100,8 @@ an env var).
   cached / fetching with spinner and elapsed / failed / updated, plus the last fetch duration, at the right of the
   header (only the current view's provider when it does not fit) and in place of an empty view's list while it
   fetches. The text is computed in `View` from the start times. The spinner is a fixed-width Pac-Man (`ᗧ·····`, eating
-  a row of dots with its mouth opening and closing, `pacmanFrames`) at one frame per 150 ms of the fetch; a `spinTickMsg` loop redraws it.
+  a row of dots with its mouth opening and closing, `pacmanFrames`) at one frame per 150 ms of the fetch; a
+  `spinTickMsg` loop redraws it.
   `Update` starts that loop (`armSpin`) when a fetch runs and none does, and the loop ends at the first tick that
   finds every provider idle, so at most one runs and none while idle. The 1 s tick advances the elapsed text.
 - Startup: the TUI's first model is the trust gate `ui.Startup`; `trust.Check` (the tree walk) runs in a `tea.Cmd`

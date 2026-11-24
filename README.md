@@ -125,7 +125,10 @@ At most once a day, `lanes` asks GitHub in the background whether a newer releas
 `lanes vX.Y.Z available` with the command that fits how you installed it (`brew upgrade lanes`, `go install
 github.com/chriha/lanes@latest`, or the releases page), and the header keeps a `↑ vX.Y.Z` badge left of the fetch status. `lanes version` prints the same hint from the last check,
 without asking the network; it needs a trusted project, since the result is cached per project. A failed check stays
-silent and is retried at the next start. `lanes` never replaces its own binary. Turn the check off with
+silent and is retried at the next start. `lanes update` upgrades a Homebrew install with `brew upgrade lanes`; if
+the tap is stale and the installed version still lags GitHub's latest release, it runs `brew update` and upgrades once
+more, and exits 1 if that doesn't help. Other installs and `dev` builds only get the command to run. `lanes` never
+replaces its own binary. Turn the check off with
 `no_update_check = true` under `[settings]`. Builds without a release version (`dev`) never check.
 
 ## Quick start
@@ -157,6 +160,7 @@ Besides the TUI, `lanes` has these commands:
 | `lanes doctor`   | check tmux, the forge CLIs, `claude` and the lanes binary (for hooks), the trust state, the global and project config, and the state dirs (see [Troubleshooting](docs/troubleshooting.md#troubleshooting)); asks for trust first, like the TUI |
 | `lanes filter test '<expr>' [--view <name>]` | run a filter expression against the cached items of a view (the first one, or `--view`), print `match` or `no match` per item and, for a non-match, the failed top-level `&&` / `\|\|` / `!` operand (see [Filters](docs/usage.md#filters)); never fetches; asks for trust first, like `doctor`; exits 2 when the expression does not compile |
 | `lanes status`   | print the current project's sessions that need input (see [tmux and lanes](docs/how-it-works.md#tmux-and-lanes)); prints nothing in an untrusted project and never asks |
+| `lanes update`   | upgrade a Homebrew install (see [Updates](#updates)); reads nothing from the project, so it never asks for trust |
 | `lanes --version`| print the version (also `lanes -v`); never asks for trust                                 |
 | `lanes --untrust`| forget the trust of the current project, so the next start asks again (see [Trusting a project](docs/configuration.md#trusting-a-project)); never asks, works without a terminal |
 

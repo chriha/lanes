@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -59,6 +61,8 @@ func TestUsageError(t *testing.T) {
 		{"--version", []string{"--version"}, false},
 		{"-v", []string{"-v"}, false},
 		{"--untrust", []string{"--untrust"}, false},
+		{"update", []string{"update"}, false},
+		{"update extra", []string{"update", "x"}, true},
 		{"hook with event", []string{"hook", "Stop"}, false},
 		{"doctor extra", []string{"doctor", "x"}, true},
 		{"status extra", []string{"status", "x"}, true},
@@ -703,6 +707,85 @@ func TestRunHookInWorktreeSession(t *testing.T) {
 			got := session.ClaudeTranscript("fix~1")
 			if want := "/t/abc.jsonl"; tt.wantRecord && got != want || !tt.wantRecord && got != "" {
 				t.Errorf("transcript = %q, want recorded %v", got, tt.wantRecord)
+			}
+		})
+	}
+}
+
+func TestRunUpdate(t *testing.T) {
+	brewErr := errors.New("boom")
+	tests := []struct {
+		name       string
+		version    string
+		hint       string
+		installed  []string // what `brew list --versions` prints on each call
+		latest     string
+		fetchErr   error
+		failOn     string // brew subcommand that fails
+		wantCode   int
+		wantCalls  string
+		wantStdout string
+		wantStderr string // substring
+	}{
+		{"up to date", "v1.2.0", update.Brew, []string{"lanes 1.2.0"}, "v1.2.0", nil, "", 0,
+			"upgrade list", "lanes v1.2.0 is up to date\n", ""},
+		{"upgraded first try", "v1.1.0", update.Brew, []string{"lanes 1.2.0"}, "v1.2.0", nil, "", 0,
+			"upgrade list", "lanes v1.2.0 is up to date\n", ""},
+		{"needs brew update", "v1.1.0", update.Brew, []string{"lanes 1.1.0", "lanes 1.2.0"}, "v1.2.0", nil, "", 0,
+			"upgrade list update upgrade list", "lanes v1.2.0 is up to date\n", ""},
+		{"still stale", "v1.1.0", update.Brew, []string{"lanes 1.1.0", "lanes 1.1.0"}, "v1.2.0", nil, "", 1,
+			"upgrade list update upgrade list", "", "still on v1.1.0 after brew update; the newest release is v1.2.0"},
+		{"brew upgrade fails", "v1.1.0", update.Brew, nil, "v1.2.0", nil, "upgrade", 1,
+			"upgrade", "", "brew upgrade: boom"},
+		{"brew update fails", "v1.1.0", update.Brew, []string{"lanes 1.1.0"}, "v1.2.0", nil, "update", 1,
+			"upgrade list update", "", "brew update: boom"},
+		{"fetch fails", "v1.1.0", update.Brew, []string{"lanes 1.1.0"}, "", errors.New("offline"), "", 1,
+			"upgrade list", "", "offline"},
+		{"not homebrew", "v1.1.0", update.GoInstall, nil, "v1.2.0", nil, "", 1,
+			"", "", update.GoInstall},
+		{"dev build", "dev", update.Brew, nil, "v1.2.0", nil, "", 1,
+			"", "", "a dev build can't be updated"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			var calls []string
+			e, stdout, stderr := fakeEnv(t.TempDir(), true, true, &calls) // an untrusted dir on a terminal
+			e.version = tt.version
+			e.upgrade = func() string { return tt.hint }
+			e.fetch = func(context.Context) (string, error) { return tt.latest, tt.fetchErr }
+			var brew []string
+			e.runCmd = func(out, _ io.Writer, name string, args ...string) error {
+				if name != "brew" {
+					t.Errorf("ran %q, want brew", name)
+				}
+				sub := args[0]
+				brew = append(brew, sub)
+				if sub == tt.failOn {
+					return brewErr
+				}
+				if sub == "list" {
+					fmt.Fprintln(out, tt.installed[0])
+					if len(tt.installed) > 1 {
+						tt.installed = tt.installed[1:]
+					}
+				}
+				return nil
+			}
+			if code := run([]string{"update"}, e); code != tt.wantCode {
+				t.Errorf("code = %d, want %d (stderr %q)", code, tt.wantCode, stderr)
+			}
+			if got := strings.Join(brew, " "); got != tt.wantCalls {
+				t.Errorf("brew calls = %q, want %q", got, tt.wantCalls)
+			}
+			if len(calls) != 0 {
+				t.Errorf("update touched the project: %q", calls) // no ask, no initApp
+			}
+			if stdout.String() != tt.wantStdout {
+				t.Errorf("stdout = %q, want %q", stdout, tt.wantStdout)
+			}
+			if !strings.Contains(stderr.String(), tt.wantStderr) {
+				t.Errorf("stderr = %q, want it to contain %q", stderr, tt.wantStderr)
 			}
 		})
 	}

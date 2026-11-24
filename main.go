@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -265,8 +266,55 @@ func execCmd(out, errOut io.Writer, name string, args ...string) error {
 // has a newer release, so when the installed version still lags the fresh latest it runs `brew update` and upgrades
 // once more; if it still lags, it gives up. Other installs and dev builds only get the hint.
 func runUpdate(e env) int {
-	fmt.Fprintln(e.stderr, app.Name+": update: not implemented")
-	return 1
+	fail := func(format string, a ...any) int {
+		fmt.Fprintf(e.stderr, app.Name+": "+format+"\n", a...)
+		return 1
+	}
+	if !update.Valid(e.version) {
+		return fail("a %s build can't be updated", e.version)
+	}
+	if hint := e.upgrade(); hint != update.Brew {
+		fmt.Fprintln(e.stderr, hint)
+		return 1
+	}
+	brew := func(args ...string) error { return e.runCmd(e.stdout, e.stderr, "brew", args...) }
+	upgrade := strings.Fields(update.Brew)[1:]
+	// lag returns the installed and the newest version, and whether the install is older.
+	lag := func() (installed, latest string, stale bool, err error) {
+		var out strings.Builder
+		if err = e.runCmd(&out, e.stderr, "brew", "list", "--versions", app.Name); err != nil {
+			return
+		}
+		if f := strings.Fields(out.String()); len(f) > 1 {
+			installed = "v" + strings.TrimPrefix(f[len(f)-1], "v") // brew prints "lanes 1.2.0"
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), update.Timeout)
+		defer cancel()
+		if latest, err = e.fetch(ctx); err != nil {
+			return
+		}
+		return installed, latest, update.Newer(latest, installed), nil
+	}
+	for attempt := 0; ; attempt++ {
+		if attempt == 1 { // the first upgrade left a stale install: refresh the tap and try once more
+			if err := brew("update"); err != nil {
+				return fail("brew update: %v", err)
+			}
+		}
+		if err := brew(upgrade...); err != nil {
+			return fail("brew upgrade: %v", err)
+		}
+		installed, latest, stale, err := lag()
+		switch {
+		case err != nil:
+			return fail("%v", err)
+		case !stale:
+			fmt.Fprintf(e.stdout, "%s %s is up to date\n", app.Name, installed)
+			return 0
+		case attempt == 1:
+			return fail("still on %s after brew update; the newest release is %s", installed, latest)
+		}
+	}
 }
 
 // untrust removes the cwd root's trust entry, hash or always, so the next start asks again.

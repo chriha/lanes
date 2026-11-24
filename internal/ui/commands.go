@@ -104,6 +104,12 @@ func (m *Model) runCommand(line string) (tea.Model, tea.Cmd) {
 		}
 	case "snooze":
 		m.snoozeTargets(arg)
+	case "changelog":
+		if m.clog != nil { // the pending or last shown notes
+			m.openChangelog()
+			return m, nil
+		}
+		return m, m.changelogOnDemand()
 	case "snoozed":
 		m.showSnoozed = !m.showSnoozed
 		m.say(lvInfo, "hiding snoozed items")

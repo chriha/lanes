@@ -183,6 +183,13 @@ type Model struct {
 	upgrade string // the upgrade command the update notice shows
 	newer   string // the newer release tag the header badge shows; "" = none
 
+	// notesFetch, version and lastPath drive the "What's new" screen (see WithChangelog)
+	notesFetch  func(context.Context) ([]update.Release, error)
+	version     string
+	lastPath    string
+	clog        *changelogDoc // the notes the changelog screen shows
+	clogPending bool          // clog is a start-up screen that is not shown yet
+
 	// reloadGen counts the started config reloads; a reloadedMsg of an older one is dropped
 	reloadGen int
 
@@ -598,7 +605,7 @@ func (m *Model) clamp() {
 }
 
 func (m *Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{tick(), m.pollSessions(), m.updateCheck()}
+	cmds := []tea.Cmd{tick(), m.pollSessions(), m.updateCheck(), m.changelogStart()}
 	for name := range m.providers {
 		cmds = append(cmds, m.fetch(name))
 	}
@@ -700,6 +707,7 @@ func (m *Model) refreshAll() tea.Cmd {
 // Update handles msg, then starts the fetch animation's tick loop if a fetch is running and no loop is.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	model, cmd := m.update(msg)
+	m.openPendingChangelog()
 	if spin := m.armSpin(); spin != nil {
 		cmd = tea.Batch(cmd, spin)
 	}
@@ -795,6 +803,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.syncUsage5h()
 	case updateMsg:
 		m.onUpdate(msg)
+	case changelogMsg:
+		m.onChangelog(msg)
 	case sessPeekMsg:
 		m.onPeek(msg)
 	case sessionsMsg:
@@ -1175,7 +1185,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyCommand(k)
 	case modeConfirm:
 		return m.keyConfirm(k)
-	case modeHelp:
+	case modeHelp, modeChangelog:
 		return m.keyHelp(k)
 	case modeDetail:
 		return m.keyDetail(k)
@@ -1433,6 +1443,8 @@ func (m *Model) View() string {
 	switch m.mode {
 	case modeHelp:
 		return m.scrollView(m.helpLines)
+	case modeChangelog:
+		return m.scrollView(m.changelogLines)
 	case modeDetail:
 		return m.scrollView(m.detailLines)
 	case modeHistory:
@@ -1946,6 +1958,7 @@ func (m *Model) helpLines() []string {
 		{":resume", "resume the cursor item's newest finished Claude session (same as gr)"},
 		{":sessions", "switch to the sessions tab (same as S)"},
 		{":prune [failed]", "kill every finished session (only failed ones)"},
+		{":changelog", "release notes of the newest versions (shown once after an upgrade)"},
 		{":refresh  :reload  :edit  :config  :quit", ""},
 	} {
 		b.WriteString(m.helpRow(c[0], c[1], 26))

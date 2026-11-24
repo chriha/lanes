@@ -87,7 +87,8 @@ func runTUI(root string, ready func() (update.Checker, string)) int {
 		if err != nil {
 			return nil, err
 		}
-		return ui.New(cfg, ui.WithUpdateCheck(updates, upgrade), ui.WithSyncOut(out)), nil
+		last := filepath.Join(app.StateRoot(), "last_version")
+		return ui.New(cfg, ui.WithUpdateCheck(updates, upgrade), ui.WithChangelog(update.GitHubNotes(), updates.Current, last), ui.WithSyncOut(out)), nil
 	})
 	defer s.Close() // cancels the fetches still running, which stops their provider subprocesses
 	_, err := tea.NewProgram(s, tea.WithOutput(out), tea.WithAltScreen(), tea.WithReportFocus()).Run()

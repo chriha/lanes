@@ -174,7 +174,7 @@ poll_interval = "30s"   # how often lists refresh (minimum 5s)
 poll_interval_blurred = "5m"  # how often lists refresh while the terminal is unfocused (never below poll_interval)
 preview       = false   # open the preview pane at startup
 no_notify     = false   # disable desktop notifications
-no_update_check = false # never check GitHub for a newer lanes release (see Updates under Install)
+no_update_check = false # never check GitHub for a newer lanes release or fetch its release notes (see Updates under Install); :changelog still works
 claude_dir    = "~/.claude"   # show this Claude profile's usage in the footer (see Claude Code integration)
 max_claude_sessions = 3 # live action sessions (waiting Claude ones excluded) before more starts queue; 0 = no limit (see Running on many items)
 

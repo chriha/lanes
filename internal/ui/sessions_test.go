@@ -285,7 +285,7 @@ func TestSessionsTabJump(t *testing.T) {
 
 // Item keys and configured actions do nothing on the sessions view, even with items marked in another view.
 func TestSessionsTabIgnoresItemKeys(t *testing.T) {
-	for _, key := range []string{"o", "y", "N", "f", "t", "d", "i", "z", "m", "F", "V", " "} {
+	for _, key := range []string{"o", "y", "Y", "N", "f", "t", "d", "i", "z", "m", "F", "V", " "} {
 		t.Run(key, func(t *testing.T) {
 			m := sessModel(t, session.Info{Name: "fix~1", Action: "fix", ItemKey: "1"})
 			m.cfg.Action = map[string]config.Action{"fix": {Run: "echo fix"}}

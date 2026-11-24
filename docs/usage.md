@@ -196,6 +196,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `enter`             | jump into the item's newest session (opens the URL if it has none) |
 | `o`                 | open the item's URL in the browser                 |
 | `y`                 | copy the item's ID to the clipboard (all marked IDs, space-separated, if any are marked) |
+| `Y`                 | copy the item's URL to the clipboard (all marked items' URLs, one per line, if any are marked; items without a URL are skipped) |
 | `Q`                 | switch to the [queue view](actions.md#running-on-many-items) (the tab before the sessions tab) |
 | `x`                 | close the item's sessions (asks first) and drop its queued starts, in every view (only queued starts: dropped at once; both: one prompt); in the queue view: drop the entry only; in the sessions view: close the marked sessions or the one under the cursor |
 | `r`                 | in the queue view: start the entry (all marked entries, if any are marked) now, past the [session limit](actions.md#running-on-many-items); elsewhere `r` is free for an action key |
@@ -203,7 +204,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](actions.md#shell-sessions)) |
 | `gr`                | resume the item's newest finished Claude session (see [Resuming a Claude session](claude.md#resuming-a-claude-session)) |
 | `i`                 | show the item's history                            |
-| `d`                 | item details: every field untruncated, description, pipeline, threads and comments (scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; `J`/`K` move between threads, `n`/`N` jump to the next/previous open thread, `enter`/`space` fold the one under the cursor, `za`/`zA` fold/unfold all, `o` opens it in the browser; close with `q`/`esc`) |
+| `d`                 | item details: every field untruncated, description, pipeline, threads and comments (scroll with `j`/`k`, `ctrl-d`/`ctrl-u`, `g`/`G`; `J`/`K` move between threads, `n`/`N` jump to the next/previous open thread, `enter`/`space` fold the one under the cursor, `za`/`zA` fold/unfold all, `o` opens it in the browser, `Y` copies its URL; close with `q`/`esc`) |
 | `N`                 | edit the item's note in `$VISUAL` / `$EDITOR` (save it empty to delete it) |
 | `m`                 | mark the item unread (all marked items, if any are marked); when all of them are unread: mark them read (see [Row badges](#row-badges)) |
 | `z`                 | [snooze](#snoozing) the item (all marked items, if any are marked); on a snoozed item: unsnooze it |
@@ -359,7 +360,7 @@ resolved ones collapsed to one line (`✓ resolved · file:line · author · n r
 (`›`), `n`/`N` jump to the next/previous open thread and unfold it (they stop at the last/first one),
 `enter`/`space` fold or unfold the thread under it, `za` folds all, `zA` unfolds all. `o` opens the thread under
 the cursor in the browser (GitLab and GitHub threads); a thread without a URL (`command` provider), or no thread,
-opens the item's URL. Folding is kept while lanes runs, also when the details are fetched again.
+opens the item's URL. `Y` copies that same URL instead. Folding is kept while lanes runs, also when the details are fetched again.
 
 `i` shows the item's **history**: every action started on it, and how it ended (`finished`, `failed (exit n)`,
 `killed`). History is stored per project and survives restarts.

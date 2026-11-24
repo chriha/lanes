@@ -123,7 +123,7 @@ lanes --version
 
 At most once a day, `lanes` asks GitHub in the background whether a newer release exists. If so, the footer shows
 `lanes vX.Y.Z available` with the command that fits how you installed it (`brew upgrade lanes`, `go install
-github.com/chriha/lanes@latest`, or the releases page). `lanes version` prints the same hint from the last check,
+github.com/chriha/lanes@latest`, or the releases page), and the header keeps a `↑ vX.Y.Z` badge left of the fetch status. `lanes version` prints the same hint from the last check,
 without asking the network; it needs a trusted project, since the result is cached per project. A failed check stays
 silent and is retried at the next start. `lanes` never replaces its own binary. Turn the check off with
 `no_update_check = true` under `[settings]`. Builds without a release version (`dev`) never check.

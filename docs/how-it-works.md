@@ -11,7 +11,7 @@
   with Pac-Man eating a row of dots, about seven frames a second; the previous one took 12.3s), `gitlab updated 12s ago · 1.4s` (the last fetch took 1.4s) or `gitlab ✗ failed · 2s` in
   the error colour. A slow provider shows up there without a profiler. When the terminal is too narrow for every
   provider, only the current view's one is shown. An empty view whose provider is still fetching lists the same
-  status lines in place of the items.
+  status lines in place of the items. While a newer release exists, a `↑ vX.Y.Z` badge sits left of the status.
 - **Filters** are compiled once per view and evaluated against each item's fields; a view with a broken filter
   shows its error instead of items.
 - **Sessions** are tmux sessions on a dedicated tmux server named `lanes-<project>` (`tmux -L …`). The session

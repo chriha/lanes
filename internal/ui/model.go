@@ -180,6 +180,7 @@ type Model struct {
 	// updates checks for a newer release at start; nil = no check (see WithUpdateCheck)
 	updates *update.Checker
 	upgrade string // the upgrade command the update notice shows
+	newer   string // the newer release tag the header badge shows; "" = none
 
 	// reloadGen counts the started config reloads; a reloadedMsg of an older one is dropped
 	reloadGen int
@@ -1512,11 +1513,11 @@ func (m *Model) header() string {
 	}
 	left := sTitle.Render(" "+m.title) + "  " + strings.Join(tabs, "")
 	now := time.Now()
-	right := m.sessionSummary() + strings.Join(m.providerStatuses(now), sDim.Render("  "))
+	right := m.sessionSummary() + m.updateBadge() + strings.Join(m.providerStatuses(now), sDim.Render("  "))
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 1
 	if gap < 1 {
 		// too narrow for every provider: only the one of the current view
-		right = m.sessionSummary()
+		right = m.sessionSummary() + m.updateBadge()
 		if !m.views[m.cur].builtin() {
 			right += m.styledStatus(m.views[m.cur].cfg.Provider, now)
 		}

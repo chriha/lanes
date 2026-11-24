@@ -43,10 +43,23 @@ func (m *Model) updateCheck() tea.Cmd {
 	}
 }
 
-// onUpdate shows a newer release as an info notice, unless another notice is showing: it never hides an error.
+// onUpdate keeps a newer release for the header badge and shows it as an info notice, unless another notice
+// is showing: the notice never hides an error.
 func (m *Model) onUpdate(msg updateMsg) {
-	if !msg.newer || m.notice != "" {
+	if !msg.newer {
+		return
+	}
+	m.newer = msg.tag
+	if m.notice != "" {
 		return
 	}
 	m.say(lvInfo, fmt.Sprintf("%s %s available · %s", app.Name, msg.tag, m.upgrade))
+}
+
+// updateBadge is the header marker for a newer release, or "" when there is none.
+func (m *Model) updateBadge() string {
+	if m.newer == "" {
+		return ""
+	}
+	return badgeStyle("info").Render("↑ "+m.newer) + "   "
 }

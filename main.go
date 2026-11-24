@@ -168,7 +168,7 @@ func run(args []string, e env) int {
 	}
 	trusted, hash, err := trust.Check(root)
 	switch cmd {
-	case "version", "--version": // never prompts; the update hint reads the project's cache, so only when trusted
+	case "version", "--version", "-v": // never prompts; the update hint reads the project's cache, so only when trusted
 		fmt.Fprintln(e.stdout, app.Name, e.version)
 		if trusted {
 			e.initApp(e.wd)
@@ -295,7 +295,7 @@ func usageError(args []string) string {
 	if len(args) == 0 {
 		return ""
 	}
-	want := map[string]int{"hook": 1, "doctor": 0, "init": 0, "status": 0, "version": 0, "--version": 0, "--untrust": 0}
+	want := map[string]int{"hook": 1, "doctor": 0, "init": 0, "status": 0, "version": 0, "--version": 0, "-v": 0, "--untrust": 0}
 	if args[0] == "filter" {
 		if _, _, ok := parseFilterTest(args[1:]); !ok {
 			return filterUsage

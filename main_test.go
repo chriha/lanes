@@ -57,6 +57,7 @@ func TestUsageError(t *testing.T) {
 		{"init", []string{"init"}, false},
 		{"version", []string{"version"}, false},
 		{"--version", []string{"--version"}, false},
+		{"-v", []string{"-v"}, false},
 		{"--untrust", []string{"--untrust"}, false},
 		{"hook with event", []string{"hook", "Stop"}, false},
 		{"doctor extra", []string{"doctor", "x"}, true},
@@ -64,6 +65,7 @@ func TestUsageError(t *testing.T) {
 		{"init extra", []string{"init", "x"}, true},
 		{"version extra", []string{"version", "x"}, true},
 		{"--version extra", []string{"--version", "x"}, true},
+		{"-v extra", []string{"-v", "x"}, true},
 		{"--untrust extra", []string{"--untrust", "x"}, true},
 		{"hook without event", []string{"hook"}, true},
 		{"hook two args", []string{"hook", "a", "b"}, true},
@@ -129,6 +131,8 @@ func TestRunGate(t *testing.T) {
 		{"hook trusted", []string{"hook", "Stop"}, true, false, true, 0, "hook", "", true},
 		{"version untrusted", []string{"--version"}, false, false, true, 0, "", "", false},
 		{"version word untrusted", []string{"version"}, false, false, true, 0, "", "", false},
+		{"version short untrusted", []string{"-v"}, false, false, true, 0, "", "", false},
+		{"version short untrusted, tty", []string{"-v"}, false, true, false, 0, "", "", false},
 		{"version trusted", []string{"version"}, true, false, true, 0, "initApp", "", true},
 	}
 	for _, tt := range tests {
@@ -164,7 +168,7 @@ func TestRunGate(t *testing.T) {
 			if want == "" && stderr.Len() > 0 || !strings.Contains(stderr.String(), want) {
 				t.Errorf("stderr = %q, want %q", stderr.String(), want)
 			}
-			isVersion := len(tt.args) > 0 && strings.Contains(tt.args[0], "version")
+			isVersion := len(tt.args) > 0 && (strings.Contains(tt.args[0], "version") || tt.args[0] == "-v")
 			if isVersion != (stdout.Len() > 0) {
 				t.Errorf("stdout = %q", stdout.String())
 			}
@@ -551,7 +555,7 @@ func TestRunVersionUpdateHint(t *testing.T) {
 			if tt.cached != "" {
 				before, _ = os.ReadFile(writeUpdateCache(t, tt.cached))
 			}
-			for _, args := range [][]string{{"version"}, {"--version"}} {
+			for _, args := range [][]string{{"version"}, {"--version"}, {"-v"}} {
 				var calls []string
 				e, stdout, stderr := fakeEnv(dir, false, true, &calls)
 				e.version = tt.version

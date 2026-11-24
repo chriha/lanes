@@ -157,7 +157,7 @@ Besides the TUI, `lanes` has these commands:
 | `lanes doctor`   | check tmux, the forge CLIs, `claude` and the lanes binary (for hooks), the trust state, the global and project config, and the state dirs (see [Troubleshooting](docs/troubleshooting.md#troubleshooting)); asks for trust first, like the TUI |
 | `lanes filter test '<expr>' [--view <name>]` | run a filter expression against the cached items of a view (the first one, or `--view`), print `match` or `no match` per item and, for a non-match, the failed top-level `&&` / `\|\|` / `!` operand (see [Filters](docs/usage.md#filters)); never fetches; asks for trust first, like `doctor`; exits 2 when the expression does not compile |
 | `lanes status`   | print the current project's sessions that need input (see [tmux and lanes](docs/how-it-works.md#tmux-and-lanes)); prints nothing in an untrusted project and never asks |
-| `lanes --version`| print the version; never asks for trust                                                   |
+| `lanes --version`| print the version (also `lanes -v`); never asks for trust                                 |
 | `lanes --untrust`| forget the trust of the current project, so the next start asks again (see [Trusting a project](docs/configuration.md#trusting-a-project)); never asks, works without a terminal |
 
 ## License

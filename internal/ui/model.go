@@ -1300,6 +1300,8 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "y":
 		m.copyIDs()
+	case "Y":
+		m.copyURLs()
 	case "enter":
 		if n > 0 && m.sess != nil {
 			return m, m.jump(m.items()[m.cursor])
@@ -1899,7 +1901,7 @@ func (m *Model) helpLines() []string {
 		{"t", "shell for the cursor item: jump into it (started, or restarted if finished)"},
 		{"gr", "resume the cursor item's newest finished Claude session (actions with resume)"},
 		{"i", "item history"},
-		{"d", "item details: fields, description, pipeline, threads, comments (j/k scroll, J/K thread, n/N next/prev open thread, enter/space fold it, za/zA fold/unfold all, o open in browser, q close)"},
+		{"d", "item details: fields, description, pipeline, threads, comments (j/k scroll, J/K thread, n/N next/prev open thread, enter/space fold it, za/zA fold/unfold all, o open in browser, Y copy its URL, q close)"},
 		{"N", "edit the item's note in $EDITOR (save empty to delete)"},
 		{"m", "mark item(s) unread; when all of them are unread: read"},
 		{"z", "snooze item(s): 2h, 3d, mon, 2026-11-03, empty = until it changes; on a snoozed one: unsnooze"},
@@ -1909,6 +1911,7 @@ func (m *Model) helpLines() []string {
 		{"p", "toggle preview pane"},
 		{"o / u", "open item in browser"},
 		{"y", "copy the ID of the cursor item / marked items to the clipboard"},
+		{"Y", "copy the URL of the cursor item / marked items to the clipboard"},
 		{"R / ctrl-r", "refresh data / reload config"},
 		{"q", "quit after confirming (sessions keep running)"},
 	}

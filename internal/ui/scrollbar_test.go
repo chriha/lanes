@@ -192,7 +192,7 @@ func TestHelpAndDetailScrollbar(t *testing.T) {
 }
 
 func TestHelpWrapsLongRowsWithScrollbar(t *testing.T) {
-	const qRow = "queue view: starts waiting for a free session (r starts entries now, past the limit; x drops them)"
+	const qRow = "close sessions of marked items / cursor item (after confirming); also drops their queued starts. In the queue tab: drop the entry only"
 	m := newBackoffModel(t)
 	m.width, m.height = 80, 20
 	m.Update(fetchedMsg{name: "p", items: manyItems(3)})
@@ -209,6 +209,6 @@ func TestHelpWrapsLongRowsWithScrollbar(t *testing.T) {
 		nav(m, "ctrl+d")
 	}
 	if got := strings.Join(strings.Fields(strings.Join(seen, " ")), " "); !strings.Contains(got, qRow) {
-		t.Errorf("the Q row's full text is not on the barred help screen:\n%s", got)
+		t.Errorf("the x row's full text is not on the barred help screen:\n%s", got)
 	}
 }

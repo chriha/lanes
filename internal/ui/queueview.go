@@ -81,8 +81,17 @@ func (m *Model) refreshQueue() {
 // dropQueued removes the queue entries of the marked items, or of the item under the cursor. It leaves
 // sessions alone and does not ask.
 func (m *Model) dropQueued() {
+	if n := m.dropEntries(m.targets()); n > 0 {
+		m.say(lvInfo, fmt.Sprintf("dropped %d from the queue", n))
+		return
+	}
+	m.say(lvWarn, "nothing to drop")
+}
+
+// dropEntries removes the queue entries of its and returns how many it removed. An on_enter item stays handled.
+func (m *Model) dropEntries(its []item.Item) int {
 	drop := map[string]bool{}
-	for _, it := range m.targets() {
+	for _, it := range its {
 		drop[it.ID] = true
 	}
 	keep := m.auto.queue[:0]
@@ -97,11 +106,7 @@ func (m *Model) dropQueued() {
 	}
 	m.auto.queue = keep
 	m.refreshQueue()
-	if n == 0 {
-		m.say(lvWarn, "nothing to drop")
-		return
-	}
-	m.say(lvInfo, fmt.Sprintf("dropped %d from the queue", n))
+	return n
 }
 
 // runQueued starts the queue entries of the marked items, or of the item under the cursor, now: past

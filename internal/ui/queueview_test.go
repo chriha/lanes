@@ -362,3 +362,84 @@ func TestQueueRunNow(t *testing.T) {
 		})
 	}
 }
+
+// withSession gives item id a live session, so x has something to close there.
+func withSession(id string) autoStep {
+	return func(_ *testing.T, m *Model, _ *time.Time) {
+		s := session.Info{Name: "review~" + id, Action: "review", ItemKey: session.Key(id)}
+		m.sessions = append(m.sessions, s)
+		m.sessByItem[s.ItemKey] = append(m.sessByItem[s.ItemKey], s)
+	}
+}
+
+// promptIs checks the open confirmation ("" = none).
+func promptIs(want string) autoStep {
+	return func(t *testing.T, m *Model, _ *time.Time) {
+		t.Helper()
+		got := ""
+		if m.mode == modeConfirm {
+			got = m.confirm.prompt
+		}
+		if got != want {
+			t.Errorf("prompt = %q, want %q", got, want)
+		}
+	}
+}
+
+// x outside the queue tab also drops queued starts: only entries are dropped at once, with sessions one prompt
+// covers both, and a dropped on_enter item is not queued again by the next fetch.
+func TestDropQueuedEverywhere(t *testing.T) {
+	tests := []struct {
+		name       string
+		steps      []autoStep
+		wantKilled bool
+	}{
+		{name: "queued item without sessions: dropped at once",
+			steps: []autoStep{full("1"), full("1", "2", "3", "4"), pressKeys("j", "x"), promptIs(""), queueIs("3", "4"),
+				footerHas("dropped 1 from the queue", true), listHas("queued review", true)}},
+		{name: "the row no longer shows queued",
+			steps: []autoStep{full("1"), full("1", "2"), listHas("queued review", true), pressKeys("j", "x"), listHas("queued review", false)}},
+		{name: "marked: queued and with sessions asks once; y does both",
+			steps: []autoStep{full("1"), full("1", "2", "3", "4"), withSession("1"), pressKeys(" ", " ", "x"),
+				promptIs("Close 1 session(s) (1 running) and drop 1 from the queue?"), queueIs("2", "3", "4"),
+				pressKeys("y"), promptIs(""), queueIs("3", "4"), footerHas("dropped 1 from the queue", true)},
+			wantKilled: true},
+		{name: "marked: n changes nothing",
+			steps: []autoStep{full("1"), full("1", "2", "3", "4"), withSession("1"), pressKeys(" ", " ", "x", "n"),
+				promptIs(""), queueIs("2", "3", "4")}},
+		{name: "sessions only: the prompt is unchanged",
+			steps: []autoStep{full("1"), full("1", "2"), withSession("1"), pressKeys("x"), promptIs("Close 1 session(s) (1 running)?")}},
+		{name: "neither: no sessions here",
+			steps: []autoStep{full("1"), full("1", "2"), pressKeys("x"), promptIs(""), queueIs("2"), footerHas("no sessions here", true)}},
+		{name: "a dropped on_enter entry is not queued again by the next fetch",
+			steps: []autoStep{full("1"), full("1", "2", "3"), pressKeys("j", "x"), queueIs("3"), full("1", "2", "3"), queueIs("3")}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, log := queueModel(t)
+			now := clock()
+			for _, step := range tt.steps {
+				step(t, m, &now)
+			}
+			raw, _ := os.ReadFile(log)
+			if got := strings.Contains(string(raw), "kill-session"); got != tt.wantKilled {
+				t.Errorf("session closed: %v, want %v (%s)", got, tt.wantKilled, raw)
+			}
+		})
+	}
+}
+
+// The queue tab's footer names the queue keys: r start now, x drop; the help has a row for each of Q, r and x.
+func TestQueueKeyHints(t *testing.T) {
+	m, _ := queueModel(t)
+	now := clock()
+	for _, step := range []autoStep{pressKeys("Q"), footerHas("r start now", true), footerHas("x drop", true), footerHas("x close", false)} {
+		step(t, m, &now)
+	}
+	help := strings.Join(strings.Fields(ansi.Strip(strings.Join(m.helpLines(), "\n"))), " ")
+	for _, want := range []string{"queue tab: starts waiting for a free session", "in the queue tab: start the entry", "also drops their queued starts", "In the queue tab: drop the entry only"} {
+		if !strings.Contains(help, want) {
+			t.Errorf("help lacks %q", want)
+		}
+	}
+}

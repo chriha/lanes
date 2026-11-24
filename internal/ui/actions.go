@@ -740,20 +740,34 @@ func lastLine(out string, err error) string {
 	return err.Error()
 }
 
+// killTargets closes the sessions of the marked items / the cursor item and drops their queue entries. Only
+// entries: dropped at once. Sessions: one prompt covers both.
 func (m *Model) killTargets() tea.Cmd {
 	var infos []session.Info
+	var queued []item.Item
 	for _, it := range m.targets() {
 		infos = append(infos, m.sessionsOf(it)...)
+		if m.queued(it.ID) != "" {
+			queued = append(queued, it)
+		}
 	}
-	if len(infos) == 0 {
+	switch {
+	case len(infos) == 0 && len(queued) == 0:
 		m.say(lvWarn, "no sessions here")
 		return nil
+	case len(infos) == 0:
+		m.dropQueued()
+		return nil
 	}
-	return m.killSessions(infos)
+	return m.closeAndDrop(infos, queued)
 }
 
 // killSessions closes infos after a y/n prompt: finished sessions still hold their output.
-func (m *Model) killSessions(infos []session.Info) tea.Cmd {
+func (m *Model) killSessions(infos []session.Info) tea.Cmd { return m.closeAndDrop(infos, nil) }
+
+// closeAndDrop closes infos and drops the queue entries of queued after one y/n prompt. The entries go in the
+// model when the answer is yes, not in the command.
+func (m *Model) closeAndDrop(infos []session.Info, queued []item.Item) tea.Cmd {
 	alive := 0
 	for _, s := range infos {
 		if !s.Dead {
@@ -762,6 +776,7 @@ func (m *Model) killSessions(infos []session.Info) tea.Cmd {
 	}
 	mgr := m.sess
 	kill := func() tea.Cmd {
+		dropped := m.dropEntries(queued)
 		return func() tea.Msg {
 			for _, s := range infos {
 				if !s.Dead {
@@ -769,12 +784,19 @@ func (m *Model) killSessions(infos []session.Info) tea.Cmd {
 				}
 				_ = mgr.Kill(s.Name)
 			}
-			return doneMsg{notice: fmt.Sprintf("closed %d session(s)", len(infos))}
+			notice := fmt.Sprintf("closed %d session(s)", len(infos))
+			if dropped > 0 {
+				notice += fmt.Sprintf(", dropped %d from the queue", dropped)
+			}
+			return doneMsg{notice: notice}
 		}
 	}
 	prompt := fmt.Sprintf("Close %d session(s)?", len(infos))
 	if alive > 0 {
 		prompt = fmt.Sprintf("Close %d session(s) (%d running)?", len(infos), alive)
+	}
+	if len(queued) > 0 {
+		prompt = strings.TrimSuffix(prompt, "?") + fmt.Sprintf(" and drop %d from the queue?", len(queued))
 	}
 	m.ask(prompt, kill)
 	return nil

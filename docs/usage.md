@@ -197,7 +197,7 @@ compile, is a config error. Groups are set in the config only (global or project
 | `o`                 | open the item's URL in the browser                 |
 | `y`                 | copy the item's ID to the clipboard (all marked IDs, space-separated, if any are marked) |
 | `Q`                 | switch to the [queue view](actions.md#running-on-many-items) (the tab before the sessions tab) |
-| `x`                 | close the item's sessions (asks first); in the queue view: drop the entry from the queue; in the sessions view: close the marked sessions or the one under the cursor |
+| `x`                 | close the item's sessions (asks first) and drop its queued starts, in every view (only queued starts: dropped at once; both: one prompt); in the queue view: drop the entry only; in the sessions view: close the marked sessions or the one under the cursor |
 | `r`                 | in the queue view: start the entry (all marked entries, if any are marked) now, past the [session limit](actions.md#running-on-many-items); elsewhere `r` is free for an action key |
 | `X`                 | interrupt the item's running sessions and keep their output (asks first; again: `SIGKILL`); in the sessions view: of the marked sessions or the one under the cursor |
 | `t`                 | open a shell for the item and jump into it (see [Shell sessions](actions.md#shell-sessions)) |

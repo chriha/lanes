@@ -1297,7 +1297,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		if m.onQueue() {
 			m.dropQueued()
-		} else if m.sess != nil {
+		} else if m.sess != nil || len(m.auto.queue) > 0 {
 			return m, m.killTargets()
 		}
 	case "X":
@@ -1827,6 +1827,9 @@ func (m *Model) footer() string {
 		left += sDim.Render(sep + fmt.Sprintf(seg.format, seg.n))
 	}
 	hint := sDim.Render("j/k move · h/l view · space mark · enter jump · x close · p preview · ? help")
+	if m.onQueue() {
+		hint = sDim.Render("j/k move · space mark · r start now · x drop · ? help")
+	}
 	if m.onSessionsTab() {
 		hint = sDim.Render("j/k move · h/l view · space mark · / search · enter jump · A agents · x close · X interrupt · ? help")
 	}
@@ -1869,14 +1872,15 @@ func (m *Model) helpLines() []string {
 		{"ctrl-d / ctrl-u", "half page down / up"},
 		{"h / l, tab", "previous / next view"},
 		{"1-9", "jump to a configured view (Q / S reach the queue and sessions tabs)"},
-		{"Q", "queue view: starts waiting for a free session (r starts entries now, past the limit; x drops them)"},
+		{"Q", "queue tab: starts waiting for a free session"},
+		{"r", "in the queue tab: start the entry (marked ones) now, past the limit"},
 		{"space", "mark item (and move down)"},
 		{"V", "mark / unmark all"},
 		{"esc", "clear marks and filter"},
 		{"/", "search items in view (enter keeps, esc clears)"},
 		{"F", "edit this view's filter expression (saved outside the config)"},
 		{"enter", "jump into the item's newest session"},
-		{"x", "close sessions of marked items / cursor item (after confirming)"},
+		{"x", "close sessions of marked items / cursor item (after confirming); also drops their queued starts. In the queue tab: drop the entry only"},
 		{"X", "interrupt the running commands of marked items / cursor item; keeps output (again: SIGKILL)"},
 		{"t", "shell for the cursor item: jump into it (started, or restarted if finished)"},
 		{"gr", "resume the cursor item's newest finished Claude session (actions with resume)"},

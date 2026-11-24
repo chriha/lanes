@@ -156,7 +156,9 @@ footer `queued N`. The multi-item prompt (and `confirm = "single"`) still asks f
 - **Once per item.** An item waits in the queue at most once; starting it again says `already queued` and does
   nothing.
 - **Queue view.** `Q` opens the [queue view](#running-on-arrival-on_enter): `r` starts the entry under the cursor
-  (or the marked ones) now, past the limit; `x` drops it without starting anything.
+  (or the marked ones) now, past the limit; `x` drops it without starting anything. In every other view `x` drops
+  the queued starts of the marked or cursor items too: with only queued starts it drops them at once, with
+  sessions as well one prompt (`Close 2 session(s) and drop 1 from the queue?`) covers both.
 - **Memory only.** The queue is lost on quit; start the action again after a restart.
 
 `t` never waits: a shell starts at once, whatever the count. [Chained](#chaining-actions-on_success-on_failure)
@@ -252,7 +254,7 @@ when = '"auto-review" in labels'   # optional gate: only items with this label a
   entry whose item is busy, already runs the action or no longer matches its `when` is reported and dropped. In
   this view `r` wins over an action bound to `r`. `x` drops the entry under the cursor (or the marked ones) from
   the queue, without asking and without touching any session; a dropped `on_enter` item stays handled and is not
-  queued again. Action keys and `:run` do nothing there. The list follows the queue live. It is built in: not in
+  queued again. (In the other views `x` also drops queued starts, see above.) Action keys and `:run` do nothing there. The list follows the queue live. It is built in: not in
   the config, and `:newview` / `:delview` do not touch it.
 - **Failures are not retried.** An auto-start that fails, or whose command exits non-zero, is recorded in the item
   history like any run; later fetches do not start it again. Run it by hand to retry.

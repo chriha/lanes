@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chriha/lanes/internal/config"
 	"github.com/chriha/lanes/internal/update"
@@ -125,5 +128,48 @@ func TestUpdateCheckOff(t *testing.T) {
 				t.Errorf("fetches = %d, want 0", *calls)
 			}
 		})
+	}
+}
+
+func TestUpdateBadge(t *testing.T) {
+	tests := []struct {
+		name    string
+		current string
+		off     bool
+		check   bool
+		want    string // "" = no badge
+	}{
+		{"newer release", "v1.0.0", false, true, "↑ v1.1.0"},
+		{"same release", "v1.1.0", false, true, ""},
+		{"older release", "v1.2.0", false, true, ""},
+		{"dev build", "dev", false, true, ""},
+		{"no_update_check", "v1.0.0", true, true, ""},
+		{"no checker", "v1.0.0", false, false, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, _ := newUpdateModel(t, tt.current, latest("v1.1.0"), tt.off, tt.check)
+			m.width = 120
+			if cmd := m.updateCheck(); cmd != nil {
+				m.Update(cmd())
+			}
+			h := ansi.Strip(m.header())
+			if got := strings.Contains(h, "↑"); got != (tt.want != "") {
+				t.Fatalf("header %q: badge present = %v, want %v", h, got, tt.want != "")
+			}
+			if tt.want != "" && !strings.Contains(h, tt.want) {
+				t.Errorf("header %q lacks %q", h, tt.want)
+			}
+		})
+	}
+}
+
+func TestUpdateBadgeSurvivesNotice(t *testing.T) {
+	m, _ := newUpdateModel(t, "v1.0.0", latest("v1.1.0"), false, true)
+	m.width = 120
+	m.say(lvErr, "config: boom")
+	m.Update(m.updateCheck()())
+	if h := ansi.Strip(m.header()); !strings.Contains(h, "↑ v1.1.0") {
+		t.Errorf("header %q lacks the badge while an error notice shows", h)
 	}
 }

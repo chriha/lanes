@@ -131,6 +131,11 @@ more, and exits 1 if that doesn't help. Other installs and `dev` builds only get
 replaces its own binary. Turn the check off with
 `no_update_check = true` under `[settings]`. Builds without a release version (`dev`) never check.
 
+The first start after the running version changed opens a full-screen "What's new" with the GitHub release notes
+of every release since the version that last ran (newest first, at most 10; j/k scroll, q/esc close). A fresh
+install shows nothing, and a failed fetch is retried at the next start. `:changelog` opens the notes again, or the
+3 newest ones.
+
 ## Quick start
 
 1. `cd` into a git repository whose `origin` is on GitHub or GitLab.

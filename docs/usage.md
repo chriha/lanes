@@ -270,6 +270,7 @@ narrows the view; it does not change its filter.
 | `:note`                   | delete the selected item's note                                       |
 | `:snooze [when]`          | snooze the selected / marked items until `when` (empty: until they change) |
 | `:snoozed`                | show / hide snoozed items                                             |
+| `:changelog`              | release notes of the newest versions (also shown once after an upgrade) |
 | `:run <action>`           | run an action by name, even if it has no key                          |
 | `:auto [on\|off]`         | pause / resume the views' [`on_enter`](actions.md#running-on-arrival-on_enter) actions; bare: show their state |
 | `:resume`                 | resume the selected item's newest finished Claude session (same as `gr`) |

@@ -41,6 +41,7 @@ const (
 	modeHistory
 	modeAgents
 	modeDetail
+	modeChangelog
 )
 
 type view struct {

@@ -35,7 +35,7 @@ jobs:
       run:
         shell: bash
     env:
-      BENCH_ARGS: -run '^$' -bench TimeToFirstList -count=6 ./internal/ui
+      BENCH_PKG: ./internal/ui
       BENCH_FILE: internal/ui/startup_bench_test.go
     steps:
       - uses: actions/checkout@v4
@@ -44,20 +44,28 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: benchmark head
-        run: eval "go test $BENCH_ARGS" | tee "$RUNNER_TEMP/head.txt"
-      - name: benchmark base
-        # The head's benchmark file runs against the base's code; when it does not compile or run there, the
+      - name: build benchmarks
+        # The head's benchmark file is built against the base's code too; when it does not compile there, the
         # check reports "no comparison" instead of failing.
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          go test -c -o "$RUNNER_TEMP/head.test" "$BENCH_PKG"
           git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
           cp "$BENCH_FILE" "$RUNNER_TEMP/base/$BENCH_FILE"
-          cd "$RUNNER_TEMP/base"
-          if ! eval "go test $BENCH_ARGS" > "$RUNNER_TEMP/base.txt" 2>&1; then
-            echo "the benchmark did not run on the base:"
-          fi
-          cat "$RUNNER_TEMP/base.txt"
+          (cd "$RUNNER_TEMP/base" && go test -c -o "$RUNNER_TEMP/base.test" "$BENCH_PKG") ||
+            echo "the benchmark did not build on the base"
+      - name: benchmark
+        # Head and base runs alternate, so runner noise and warm-up hit both alike instead of the one run first.
+        run: |
+          touch "$RUNNER_TEMP/head.txt" "$RUNNER_TEMP/base.txt"
+          for i in 1 2 3 4 5 6; do
+            for side in head base; do
+              [ -x "$RUNNER_TEMP/$side.test" ] || continue
+              "$RUNNER_TEMP/$side.test" -test.run '^$' -test.bench TimeToFirstList -test.count=1 \
+                >> "$RUNNER_TEMP/$side.txt" 2>&1 || echo "the benchmark did not run on the $side"
+            done
+          done
+          cat "$RUNNER_TEMP/head.txt" "$RUNNER_TEMP/base.txt"
       - name: compare
         run: scripts/bench-check.sh "$RUNNER_TEMP/base.txt" "$RUNNER_TEMP/head.txt" | tee -a "$GITHUB_STEP_SUMMARY"

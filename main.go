@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
@@ -55,6 +56,7 @@ func main() {
 		version:   resolveVersion(version, debug.ReadBuildInfo),
 		fetch:     update.GitHub(),
 		upgrade:   upgradeCommand,
+		runCmd:    execCmd,
 		updateOff: updateOff,
 		ask: func(root string) (bool, bool, error) {
 			termbg.Settle()
@@ -122,12 +124,13 @@ type env struct {
 	wd             string
 	isTTY          bool
 	stdout, stderr io.Writer
-	version        string                                          // the running release, e.g. "v1.2.0"; "dev" never checks
-	fetch          func(ctx context.Context) (string, error)       // asks GitHub for the newest release tag
-	upgrade        func() string                                   // the upgrade command for how lanes was installed
-	updateOff      func() bool                                     // settings.no_update_check (loads the config)
-	ask            func(root string) (yes, always bool, err error) // the trust dialog
-	initApp        func(dir string)                                // app.Init: runs git in the project
+	version        string                                                         // the running release, e.g. "v1.2.0"; "dev" never checks
+	fetch          func(ctx context.Context) (string, error)                      // asks GitHub for the newest release tag
+	upgrade        func() string                                                  // the upgrade command for how lanes was installed
+	runCmd         func(out, errOut io.Writer, name string, args ...string) error // runs a command (brew) for `lanes update`
+	updateOff      func() bool                                                    // settings.no_update_check (loads the config)
+	ask            func(root string) (yes, always bool, err error)                // the trust dialog
+	initApp        func(dir string)                                               // app.Init: runs git in the project
 	hook           func(event string)
 	status         func()
 	doctor         func() int
@@ -160,6 +163,9 @@ func run(args []string, e env) int {
 	}
 	if cmd == "--untrust" { // lowering trust is safe: no terminal needed, and nothing of the project runs
 		return untrust(e)
+	}
+	if cmd == "update" { // reads nothing from the project, so no trust is needed
+		return runUpdate(e)
 	}
 	// Nothing below may run git, load the config or start a provider before the project is trusted.
 	root := trust.Root(e.wd)
@@ -248,6 +254,21 @@ func printUpdateHint(e env) {
 	}
 }
 
+// execCmd runs name with args, streaming into out and errOut.
+func execCmd(out, errOut io.Writer, name string, args ...string) error {
+	c := exec.Command(name, args...)
+	c.Stdin, c.Stdout, c.Stderr = os.Stdin, out, errOut
+	return c.Run()
+}
+
+// runUpdate upgrades a Homebrew install. A stale tap makes `brew upgrade` report "already installed" though GitHub
+// has a newer release, so when the installed version still lags the fresh latest it runs `brew update` and upgrades
+// once more; if it still lags, it gives up. Other installs and dev builds only get the hint.
+func runUpdate(e env) int {
+	fmt.Fprintln(e.stderr, app.Name+": update: not implemented")
+	return 1
+}
+
 // untrust removes the cwd root's trust entry, hash or always, so the next start asks again.
 func untrust(e env) int {
 	root := trust.Root(e.wd)
@@ -295,7 +316,7 @@ func usageError(args []string) string {
 	if len(args) == 0 {
 		return ""
 	}
-	want := map[string]int{"hook": 1, "doctor": 0, "init": 0, "status": 0, "version": 0, "--version": 0, "-v": 0, "--untrust": 0}
+	want := map[string]int{"hook": 1, "doctor": 0, "init": 0, "status": 0, "version": 0, "--version": 0, "-v": 0, "--untrust": 0, "update": 0}
 	if args[0] == "filter" {
 		if _, _, ok := parseFilterTest(args[1:]); !ok {
 			return filterUsage

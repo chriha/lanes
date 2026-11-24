@@ -218,6 +218,9 @@ func valid(s string) bool {
 	return ok
 }
 
+// Valid reports whether s is a semver tag such as "v1.2.0"; "dev" is not.
+func Valid(s string) bool { return valid(s) }
+
 // identifier reports whether id is a valid prerelease identifier: [0-9A-Za-z-]+, numeric ones without
 // leading zeros.
 func identifier(id string) bool {

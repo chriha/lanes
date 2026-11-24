@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -55,6 +57,7 @@ func main() {
 		version:   resolveVersion(version, debug.ReadBuildInfo),
 		fetch:     update.GitHub(),
 		upgrade:   upgradeCommand,
+		runCmd:    execCmd,
 		updateOff: updateOff,
 		ask: func(root string) (bool, bool, error) {
 			termbg.Settle()
@@ -122,12 +125,13 @@ type env struct {
 	wd             string
 	isTTY          bool
 	stdout, stderr io.Writer
-	version        string                                          // the running release, e.g. "v1.2.0"; "dev" never checks
-	fetch          func(ctx context.Context) (string, error)       // asks GitHub for the newest release tag
-	upgrade        func() string                                   // the upgrade command for how lanes was installed
-	updateOff      func() bool                                     // settings.no_update_check (loads the config)
-	ask            func(root string) (yes, always bool, err error) // the trust dialog
-	initApp        func(dir string)                                // app.Init: runs git in the project
+	version        string                                                         // the running release, e.g. "v1.2.0"; "dev" never checks
+	fetch          func(ctx context.Context) (string, error)                      // asks GitHub for the newest release tag
+	upgrade        func() string                                                  // the upgrade command for how lanes was installed
+	runCmd         func(out, errOut io.Writer, name string, args ...string) error // runs a command (brew) for `lanes update`
+	updateOff      func() bool                                                    // settings.no_update_check (loads the config)
+	ask            func(root string) (yes, always bool, err error)                // the trust dialog
+	initApp        func(dir string)                                               // app.Init: runs git in the project
 	hook           func(event string)
 	status         func()
 	doctor         func() int
@@ -160,6 +164,9 @@ func run(args []string, e env) int {
 	}
 	if cmd == "--untrust" { // lowering trust is safe: no terminal needed, and nothing of the project runs
 		return untrust(e)
+	}
+	if cmd == "update" { // reads nothing from the project, so no trust is needed
+		return runUpdate(e)
 	}
 	// Nothing below may run git, load the config or start a provider before the project is trusted.
 	root := trust.Root(e.wd)
@@ -248,6 +255,68 @@ func printUpdateHint(e env) {
 	}
 }
 
+// execCmd runs name with args, streaming into out and errOut.
+func execCmd(out, errOut io.Writer, name string, args ...string) error {
+	c := exec.Command(name, args...)
+	c.Stdin, c.Stdout, c.Stderr = os.Stdin, out, errOut
+	return c.Run()
+}
+
+// runUpdate upgrades a Homebrew install. A stale tap makes `brew upgrade` report "already installed" though GitHub
+// has a newer release, so when the installed version still lags the fresh latest it runs `brew update` and upgrades
+// once more; if it still lags, it gives up. Other installs and dev builds only get the hint.
+func runUpdate(e env) int {
+	fail := func(format string, a ...any) int {
+		fmt.Fprintf(e.stderr, app.Name+": "+format+"\n", a...)
+		return 1
+	}
+	if !update.Valid(e.version) {
+		return fail("a %s build can't be updated", e.version)
+	}
+	if hint := e.upgrade(); hint != update.Brew {
+		fmt.Fprintln(e.stderr, hint)
+		return 1
+	}
+	brew := func(args ...string) error { return e.runCmd(e.stdout, e.stderr, "brew", args...) }
+	upgrade := strings.Fields(update.Brew)[1:]
+	// lag returns the installed and the newest version, and whether the install is older.
+	lag := func() (installed, latest string, stale bool, err error) {
+		var out strings.Builder
+		if err = e.runCmd(&out, e.stderr, "brew", "list", "--versions", app.Name); err != nil {
+			return
+		}
+		if f := strings.Fields(out.String()); len(f) > 1 {
+			installed = "v" + strings.TrimPrefix(f[len(f)-1], "v") // brew prints "lanes 1.2.0"
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), update.Timeout)
+		defer cancel()
+		if latest, err = e.fetch(ctx); err != nil {
+			return
+		}
+		return installed, latest, update.Newer(latest, installed), nil
+	}
+	for attempt := 0; ; attempt++ {
+		if attempt == 1 { // the first upgrade left a stale install: refresh the tap and try once more
+			if err := brew("update"); err != nil {
+				return fail("brew update: %v", err)
+			}
+		}
+		if err := brew(upgrade...); err != nil {
+			return fail("brew upgrade: %v", err)
+		}
+		installed, latest, stale, err := lag()
+		switch {
+		case err != nil:
+			return fail("%v", err)
+		case !stale:
+			fmt.Fprintf(e.stdout, "%s %s is up to date\n", app.Name, installed)
+			return 0
+		case attempt == 1:
+			return fail("still on %s after brew update; the newest release is %s", installed, latest)
+		}
+	}
+}
+
 // untrust removes the cwd root's trust entry, hash or always, so the next start asks again.
 func untrust(e env) int {
 	root := trust.Root(e.wd)
@@ -295,7 +364,7 @@ func usageError(args []string) string {
 	if len(args) == 0 {
 		return ""
 	}
-	want := map[string]int{"hook": 1, "doctor": 0, "init": 0, "status": 0, "version": 0, "--version": 0, "-v": 0, "--untrust": 0}
+	want := map[string]int{"hook": 1, "doctor": 0, "init": 0, "status": 0, "version": 0, "--version": 0, "-v": 0, "--untrust": 0, "update": 0}
 	if args[0] == "filter" {
 		if _, _, ok := parseFilterTest(args[1:]); !ok {
 			return filterUsage

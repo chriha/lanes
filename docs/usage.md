@@ -283,6 +283,9 @@ narrows the view; it does not change its filter.
 | `:edit project`           | open the project config, creating `.lanes.toml` if missing            |
 | `:quit`                   | quit                                                                  |
 
+Outside the TUI, `lanes update` upgrades a Homebrew install (`brew upgrade lanes`, plus `brew update` when the tap
+is stale; see the [README](../README.md#updates)). It never asks for trust.
+
 ## Row badges
 
 Each row ends with small status badges: the item's own (from the provider) followed by up to three of its

@@ -778,17 +778,36 @@ func (m *Model) closeAndDrop(infos []session.Info, queued []item.Item) tea.Cmd {
 	kill := func() tea.Cmd {
 		dropped := m.dropEntries(queued)
 		return func() tea.Msg {
+			closed, failed, lv := 0, 0, lvInfo
+			var firstErr error
 			for _, s := range infos {
+				// Kill forgets the Claude session ids the event carries: take them first, write the event only
+				// when the kill went through.
+				var record func()
 				if !s.Dead {
-					recordEnd(s, "killed", 0)
+					record = eventWriter(s, "killed", 0)
 				}
-				_ = mgr.Kill(s.Name)
+				if err := mgr.Kill(s.Name); err != nil {
+					failed++
+					if firstErr == nil {
+						firstErr = err
+					}
+					continue
+				}
+				closed++
+				if record != nil {
+					record()
+				}
 			}
-			notice := fmt.Sprintf("closed %d session(s)", len(infos))
+			notice := fmt.Sprintf("closed %d session(s)", closed)
+			if failed > 0 {
+				notice += fmt.Sprintf(", failed %d: %v", failed, firstErr)
+				lv = lvErr
+			}
 			if dropped > 0 {
 				notice += fmt.Sprintf(", dropped %d from the queue", dropped)
 			}
-			return doneMsg{notice: notice}
+			return doneMsg{notice: notice, level: lv}
 		}
 	}
 	prompt := fmt.Sprintf("Close %d session(s)?", len(infos))

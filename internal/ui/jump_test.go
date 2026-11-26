@@ -39,7 +39,10 @@ func fakeTmuxVersions(t *testing.T, client, server string) string {
 	t.Helper()
 	dir := t.TempDir()
 	log := filepath.Join(dir, "calls")
-	script := versionAnswers(client, server) + "echo \"$*\" >> " + shq(log) + "\n"
+	// list-panes answers with the file "panes" next to the log (empty: no sessions) and is not logged
+	script := versionAnswers(client, server) +
+		"case \"$*\" in *' list-panes '*) cat " + shq(filepath.Join(dir, "panes")) + "; exit 0;; esac\n" +
+		"echo \"$*\" >> " + shq(log) + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -47,6 +50,23 @@ func fakeTmuxVersions(t *testing.T, client, server string) string {
 	t.Setenv("TMUX", "fake")
 	return log
 }
+
+// setPanes sets what the fake tmux of fakeTmux (log is its log's path) lists as panes: one session per line as
+// name, dead flag (0 or 1), exit status, creation time, command and pid, tab-separated.
+func setPanes(t *testing.T, log string, lines ...string) {
+	t.Helper()
+	body := strings.Join(lines, "\n")
+	if body != "" {
+		body += "\n"
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(log), "panes"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// deadPane and alivePane are setPanes lines for session name.
+func deadPane(name string) string  { return name + "\t1\t0\t1\tclaude\t0" }
+func alivePane(name string) string { return name + "\t0\t0\t1\tclaude\t0" }
 
 // settle runs cmd and feeds every message it yields back into the model, until no command is left.
 func settle(m *Model, cmd tea.Cmd) {
@@ -98,6 +118,9 @@ func TestJumpAction(t *testing.T) {
 			if tt.sess != nil {
 				m.sessions = []session.Info{*tt.sess}
 				m.sessByItem["1"] = m.sessions
+				if tt.sess.Dead {
+					setPanes(t, log, deadPane(tt.sess.Name))
+				}
 			}
 			for _, id := range tt.marked {
 				m.marks[id] = true

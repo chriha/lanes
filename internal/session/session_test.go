@@ -1051,7 +1051,7 @@ func TestLaunch(t *testing.T) {
 	tests := []struct {
 		name     string
 		existing string // "" none, "dead" or "alive": the session tmux has before the launch
-		restart  bool   // the caller saw the session dead
+		restart  bool   // the caller saw the session dead; the session may have changed since
 		failKill bool   // kill-session fails
 		listErr  bool   // list-panes fails
 		wantErr  error  // errors.Is target; nil = success
@@ -1060,14 +1060,20 @@ func TestLaunch(t *testing.T) {
 	}{
 		{name: "no session starts", want: []string{"new-session"}},
 		{name: "seen dead: kill then start", existing: "dead", restart: true,
-			want: []string{"kill-session", "new-session"}},
+			want: []string{"list-panes", "kill-session", "new-session"}},
+		{name: "seen dead, since alive: not killed", existing: "alive", restart: true, wantErr: ErrRunning,
+			want: []string{"list-panes"}},
+		{name: "seen dead, since gone: start without kill", restart: true,
+			want: []string{"list-panes", "new-session"}},
 		{name: "stale listing, dead: kill and retry once", existing: "dead",
 			want: []string{"new-session", "list-panes", "kill-session", "new-session"}},
 		{name: "stale listing, alive: left running", existing: "alive", wantErr: ErrRunning,
 			want: []string{"new-session", "list-panes"}},
+		{name: "seen dead, listing fails: killed anyway", existing: "dead", restart: true, listErr: true,
+			want: []string{"list-panes", "kill-session", "new-session"}},
 		{name: "kill fails: start error carries the kill error", existing: "dead", restart: true, failKill: true,
 			wantMsg: []string{"tmux: duplicate session: fix~1", "tmux: can't kill fix~1"},
-			want:    []string{"kill-session", "new-session", "list-panes", "kill-session", "new-session"}},
+			want:    []string{"list-panes", "kill-session", "new-session", "list-panes", "kill-session", "new-session"}},
 		{name: "not listed: no kill, the start error stands", existing: "alive", listErr: true,
 			wantMsg: []string{"tmux: duplicate session: fix~1"},
 			want:    []string{"new-session", "list-panes"}},

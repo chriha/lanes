@@ -131,7 +131,8 @@ func TestList(t *testing.T) {
 		err  error
 		want []Info
 	}{
-		{"no server", "", errors.New("exit status 1"), nil},
+		{"no server", "no server running on /tmp/tmux-501/lanes\n", errors.New("exit status 1"), nil},
+		{"socket gone", "error connecting to /tmp/tmux-501/lanes (No such file or directory)\n", errors.New("exit status 1"), nil},
 		{"empty output", "", nil, nil},
 		{"malformed lines skipped", "garbage\nfix~1\t0\t0\n\nnotab\t0\t0\t5\nfix~2\t0\t0\t5\tclaude\t0\n", nil,
 			[]Info{{Name: "fix~2", Action: "fix", ItemKey: "2", Created: time.Unix(5, 0)}}},
@@ -310,6 +311,28 @@ func TestHookEmptyStateDirWritesNothing(t *testing.T) {
 	}
 }
 
+func TestListError(t *testing.T) {
+	tests := []struct {
+		name, out string
+		want      string
+	}{
+		{"tmux stderr is named", "lost server\n", "listing sessions: tmux: lost server"},
+		{"no stderr names the exit error", "", "listing sessions: exit status 1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := fakeRun(nil, func([]string) ([]byte, error) { return []byte(tt.out), errors.New("exit status 1") })
+			got, err := m.List()
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("err = %v, want it to contain %q", err, tt.want)
+			}
+			if got != nil {
+				t.Errorf("got %+v, want nil", got)
+			}
+		})
+	}
+}
+
 func TestListIgnoresStateOfDeadSession(t *testing.T) {
 	stateEnv(t)
 	t.Setenv("LANES_SESSION", "fix~1")
@@ -467,7 +490,7 @@ func TestStatusLine(t *testing.T) {
 		states map[string]string
 		want   string
 	}{
-		{"no server", "", errors.New("no server running"), nil, ""},
+		{"no server", "no server running on /tmp/tmux-501/lanes\n", errors.New("exit status 1"), nil, ""},
 		{"only running", "fix~1\t0\t0\t1\tclaude\t0\n", nil, map[string]string{"fix~1": "working"}, ""},
 		{"dead asking ignored", "fix~1\t1\t0\t1\tclaude\t0\n", nil, map[string]string{"fix~1": "asking"}, ""},
 		{"asking only", "fix~1\t0\t0\t1\tclaude\t0\n", nil, map[string]string{"fix~1": "asking"}, "? 1"},
@@ -513,7 +536,7 @@ func TestPrune(t *testing.T) {
 		{"failed only", panes, nil, true, "", []string{"review~4", "fix~3"}, 2, false},
 		{"failing kill does not stop the others", panes, nil, false, "fix~3", []string{"review~4", "fix~3", "fix~2"}, 2, true},
 		{"only running", "fix~1\t0\t0\t1\tclaude\t0\n", nil, false, "", nil, 0, false},
-		{"no server", "", errors.New("no server running"), false, "", nil, 0, false},
+		{"no server", "no server running on /tmp/tmux-501/lanes\n", errors.New("exit status 1"), false, "", nil, 0, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1075,7 +1098,7 @@ func TestLaunch(t *testing.T) {
 			wantMsg: []string{"tmux: duplicate session: fix~1", "tmux: can't kill fix~1"},
 			want:    []string{"list-panes", "kill-session", "new-session", "list-panes", "kill-session", "new-session"}},
 		{name: "not listed: no kill, the start error stands", existing: "alive", listErr: true,
-			wantMsg: []string{"tmux: duplicate session: fix~1"},
+			wantMsg: []string{"tmux: duplicate session: fix~1", "listing sessions: tmux: lost server"},
 			want:    []string{"new-session", "list-panes"}},
 	}
 	for _, tt := range tests {

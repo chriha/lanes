@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+// stallBound separates a loaded machine (seconds at worst) from the 5 s colour-query stall.
+const stallBound = 4 * time.Second
+
 // A terminal that never answers the colour query must not hold up the process before main: bubbletea's package init
 // asks for the background and, unless something settled it earlier, waits termenv's 5 s for the answer.
 func TestStartupDoesNotWaitForTheColourQuery(t *testing.T) {
@@ -39,7 +42,8 @@ func TestStartupDoesNotWaitForTheColourQuery(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if d := time.Since(start); d > time.Second {
-		t.Errorf("startup took %v with a silent terminal, want under 1s", d)
+	// The stall is termenv's 5 s query timeout, so the bound sits well below it yet far above any loaded startup.
+	if d := time.Since(start); d > stallBound {
+		t.Errorf("startup took %v with a silent terminal, want under %v", d, stallBound)
 	}
 }

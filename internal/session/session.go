@@ -86,18 +86,24 @@ func (m *Manager) tmux(args ...string) *exec.Cmd {
 	return exec.Command("tmux", append([]string{"-L", app.Socket(), "-f", m.conf}, args...)...)
 }
 
+// List returns the sessions, newest first. No tmux server running means no sessions; any other failure of
+// the listing is returned, so it is not mistaken for an empty list.
 func (m *Manager) List() ([]Info, error) {
-	infos, _ := m.list() // no server running = no sessions
-	return infos, nil
+	return m.list()
 }
 
-// list is List that reports a failed tmux listing instead of treating it as no sessions.
 func (m *Manager) list() ([]Info, error) {
 	const sep = "\t"
 	out, err := m.run("list-panes", "-a", "-F",
 		strings.Join([]string{"#{session_name}", "#{pane_dead}", deadStatus, "#{session_created}", "#{pane_current_command}", "#{pane_pid}"}, sep))
 	if err != nil {
-		return nil, err
+		if noServer(out) {
+			return nil, nil
+		}
+		if msg := strings.TrimSpace(string(out)); msg != "" {
+			return nil, fmt.Errorf("listing sessions: tmux: %s", msg)
+		}
+		return nil, fmt.Errorf("listing sessions: %w", err)
 	}
 	var infos []Info
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
@@ -207,7 +213,7 @@ func (m *Manager) Launch(name, cwd, command string, restart bool) error {
 	if dup := (duplicateError{}); errors.As(err, &dup) {
 		infos, lerr := m.List()
 		if lerr != nil {
-			return withKillErr(err, killErr)
+			return withKillErr(fmt.Errorf("%w (%v)", err, lerr), killErr)
 		}
 		found := false
 		for _, s := range infos {

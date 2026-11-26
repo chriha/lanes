@@ -63,6 +63,9 @@ func TestResume(t *testing.T) {
 			if tt.sess != nil {
 				m.sessions = []session.Info{*tt.sess}
 				m.sessByItem["1"] = m.sessions
+				if tt.sess.Dead {
+					setPanes(t, log, deadPane(tt.sess.Name))
+				}
 			}
 			for _, e := range tt.events {
 				history.Append(e)

@@ -1069,6 +1069,8 @@ func TestLaunch(t *testing.T) {
 			want: []string{"new-session", "list-panes", "kill-session", "new-session"}},
 		{name: "stale listing, alive: left running", existing: "alive", wantErr: ErrRunning,
 			want: []string{"new-session", "list-panes"}},
+		{name: "seen dead, listing fails: killed anyway", existing: "dead", restart: true, listErr: true,
+			want: []string{"list-panes", "kill-session", "new-session"}},
 		{name: "kill fails: start error carries the kill error", existing: "dead", restart: true, failKill: true,
 			wantMsg: []string{"tmux: duplicate session: fix~1", "tmux: can't kill fix~1"},
 			want:    []string{"list-panes", "kill-session", "new-session", "list-panes", "kill-session", "new-session"}},

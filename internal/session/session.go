@@ -87,11 +87,17 @@ func (m *Manager) tmux(args ...string) *exec.Cmd {
 }
 
 func (m *Manager) List() ([]Info, error) {
+	infos, _ := m.list() // no server running = no sessions
+	return infos, nil
+}
+
+// list is List that reports a failed tmux listing instead of treating it as no sessions.
+func (m *Manager) list() ([]Info, error) {
 	const sep = "\t"
 	out, err := m.run("list-panes", "-a", "-F",
 		strings.Join([]string{"#{session_name}", "#{pane_dead}", deadStatus, "#{session_created}", "#{pane_current_command}", "#{pane_pid}"}, sep))
 	if err != nil {
-		return nil, nil // no server running = no sessions
+		return nil, err
 	}
 	var infos []Info
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
@@ -183,7 +189,10 @@ var ErrRunning = errors.New("already running")
 func (m *Manager) Launch(name, cwd, command string, restart bool) error {
 	var killErr error
 	if restart {
-		infos, _ := m.List() // List reports no sessions when tmux is unreachable
+		infos, lerr := m.list()
+		if lerr != nil { // state unknown: kill like before, the start settles a live session by its own check
+			killErr = m.Kill(name)
+		}
 		for _, s := range infos {
 			if s.Name != name {
 				continue
